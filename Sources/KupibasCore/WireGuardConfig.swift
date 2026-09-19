@@ -48,6 +48,13 @@ public enum WireGuardConfig {
         if interface.isEmpty { throw ParseError.noInterfaceSection }
         if peer.isEmpty { throw ParseError.noPeerSection }
 
+        // Ключи Amnezia несут параметры маскировки. Обычный WireGuard их не
+        // знает, но терять нельзя: без них сервер не ответит.
+        var amnezia: [String: String] = [:]
+        for (key, _) in ServerConfig.amneziaFields {
+            if let value = interface[key], !value.isEmpty { amnezia[key] = value }
+        }
+
         guard let privateKey = interface["privatekey"], !privateKey.isEmpty else {
             throw ParseError.missing("PrivateKey")
         }
@@ -73,6 +80,7 @@ public enum WireGuardConfig {
         if let keepalive = peer["persistentkeepalive"], let value = Int(keepalive) {
             config.persistentKeepalive = value
         }
+        config.amneziaParams = amnezia
 
         if let error = config.validationError { throw ParseError.invalid(error) }
         return config
@@ -91,6 +99,11 @@ public enum WireGuardConfig {
         lines.append("MTU = \(server.mtu)")
         if includeDNS && !server.dns.isEmpty {
             lines.append("DNS = \(server.dns.joined(separator: ", "))")
+        }
+        for (key, name) in ServerConfig.amneziaFields {
+            if let value = server.amneziaParams[key] {
+                lines.append("\(name) = \(value)")
+            }
         }
         lines.append("")
         lines.append("[Peer]")

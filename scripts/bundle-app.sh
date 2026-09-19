@@ -3,7 +3,7 @@
 #
 #   scripts/bundle-app.sh --bin-dir .build/release [--tools КАТАЛОГ] [--out dist]
 #
-# --tools: каталог с wireguard-go, wg и wg-quick. Если указан, утилиты кладутся
+# --tools: каталог с утилитами туннеля (форк Amnezia). Если указан, они кладутся
 # внутрь приложения и Homebrew пользователю не нужен.
 set -euo pipefail
 
@@ -57,7 +57,7 @@ if [ -d "$ICONSET" ]; then
 fi
 
 if [ -n "$TOOLS_DIR" ]; then
-    for tool in wireguard-go wg wg-quick; do
+    for tool in amneziawg-go awg awg-quick wireguard-go wg wg-quick; do
         if [ ! -f "$TOOLS_DIR/$tool" ]; then
             echo "В каталоге утилит нет $tool" >&2
             exit 1

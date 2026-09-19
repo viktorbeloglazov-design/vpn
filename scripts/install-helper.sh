@@ -54,7 +54,7 @@ launchctl bootout "system/$LABEL" 2>/dev/null || true
 echo "Ставлю файлы службы"
 install -d -m 0755 "$HELPER_DIR"
 install -m 0755 "$HELPERS/kupibasvpnd" "$HELPER_DIR/kupibasvpnd"
-for tool in wireguard-go wg wg-quick; do
+for tool in amneziawg-go awg awg-quick wireguard-go wg wg-quick; do
     if [ -f "$HELPERS/$tool" ]; then
         install -m 0755 "$HELPERS/$tool" "$HELPER_DIR/$tool"
     fi
@@ -84,6 +84,14 @@ for tool in wireguard-go wg wg-quick; do
         MISSING+=("$tool")
     fi
 done
+
+# Ключи с маскировкой поднимает только форк Amnezia. Если рядом лежит он —
+# всё в порядке; если нет, обычные ключи работать будут, а AmneziaWG нет.
+if [ -x "$HELPER_DIR/amneziawg-go" ]; then
+    echo "Туннель: AmneziaWG (ключи с маскировкой поддерживаются)"
+else
+    echo "Внимание: рядом только обычный WireGuard — ключи AmneziaWG не поднимутся." >&2
+fi
 if [ ${#MISSING[@]} -gt 0 ]; then
     echo "Не хватает утилит WireGuard: ${MISSING[*]}" >&2
     echo "Установите их командой: brew install wireguard-tools wireguard-go" >&2

@@ -88,6 +88,34 @@ public struct ServerConfig: Codable, Hashable, Sendable {
     public var mtu: Int
     public var persistentKeepalive: Int
 
+    /// Параметры маскировки AmneziaWG, если они были в ключе.
+    ///
+    /// Ключи от Amnezia содержат размеры мусорных пакетов и подменённые
+    /// заголовки. Потеряется хоть один — сервер не ответит на рукопожатие.
+    public var amneziaParams: [String: String]
+
+    /// Имена параметров так, как их ждёт туннель.
+    public static let amneziaFields: [(key: String, name: String)] = [
+        ("jc", "Jc"), ("jmin", "Jmin"), ("jmax", "Jmax"),
+        ("s1", "S1"), ("s2", "S2"), ("s3", "S3"), ("s4", "S4"),
+        ("h1", "H1"), ("h2", "H2"), ("h3", "H3"), ("h4", "H4"),
+        ("i1", "I1"), ("i2", "I2"), ("i3", "I3"), ("i4", "I4"), ("i5", "I5"),
+        ("headerprotectionkey", "HeaderProtectionKey"),
+        ("contentpaddingaddition", "ContentPaddingAddition"),
+        ("rekeyaftertime", "RekeyAfterTime"),
+        ("rekeytimeout", "RekeyTimeout"),
+        ("rejectaftertime", "RejectAfterTime"),
+        ("keepalivetimeout", "KeepaliveTimeout"),
+        ("maxhandshakeattempts", "MaxHandshakeAttempts"),
+        ("randomtrailers", "RandomTrailers"),
+        ("disablecookies", "DisableCookies"),
+    ]
+
+    /// Ключ сделан под AmneziaWG — обычный WireGuard-сервер его не примет.
+    public var isAmnezia: Bool { !amneziaParams.isEmpty }
+
+    public var protocolName: String { isAmnezia ? "AmneziaWG" : "WireGuard" }
+
     public init(name: String = "KZ",
                 endpoint: String = "",
                 publicKey: String = "",
@@ -96,7 +124,8 @@ public struct ServerConfig: Codable, Hashable, Sendable {
                 addresses: [String] = [],
                 dns: [String] = [],
                 mtu: Int = 1420,
-                persistentKeepalive: Int = 25) {
+                persistentKeepalive: Int = 25,
+                amneziaParams: [String: String] = [:]) {
         self.name = name
         self.endpoint = endpoint
         self.publicKey = publicKey
@@ -106,6 +135,7 @@ public struct ServerConfig: Codable, Hashable, Sendable {
         self.dns = dns
         self.mtu = mtu
         self.persistentKeepalive = persistentKeepalive
+        self.amneziaParams = amneziaParams
     }
 
     public init(from decoder: Decoder) throws {
@@ -119,6 +149,7 @@ public struct ServerConfig: Codable, Hashable, Sendable {
         self.dns = (try? c.decode([String].self, forKey: .dns)) ?? []
         self.mtu = (try? c.decode(Int.self, forKey: .mtu)) ?? 1420
         self.persistentKeepalive = (try? c.decode(Int.self, forKey: .persistentKeepalive)) ?? 25
+        self.amneziaParams = (try? c.decode([String: String].self, forKey: .amneziaParams)) ?? [:]
     }
 
     /// Хост endpoint'а без порта (нужен для обходного маршрута).
@@ -261,6 +292,9 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
         parts.append(server.dns.joined(separator: ","))
         parts.append(String(server.mtu))
         parts.append(String(server.persistentKeepalive))
+        parts.append(server.amneziaParams.sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: ";"))
         parts.append(options.useTunnelDNS ? "dns1" : "dns0")
         parts.append(options.disableIPv6 ? "v6off" : "v6on")
         return parts.joined(separator: "|")
