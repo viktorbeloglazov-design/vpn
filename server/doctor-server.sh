@@ -6,6 +6,7 @@
 set -uo pipefail
 
 WG_IF="wg0"
+WG_DIR="/etc/wireguard"
 WG_NET="10.8.0.0/24"
 FIX=0
 WATCH=0
@@ -16,6 +17,38 @@ ok()   { printf "  \033[32m✓\033[0m %s\n" "$1"; }
 bad()  { printf "  \033[31m✗\033[0m %s\n" "$1"; PROBLEMS=$((PROBLEMS + 1)); }
 warn() { printf "  \033[33m!\033[0m %s\n" "$1"; }
 PROBLEMS=0
+
+# Клиенты по именам: сопоставляем публичные ключи с каталогами в clients/.
+peers_table() {
+    local dump name line pub hs rx tx now age
+    now="$(date +%s)"
+    printf "  %s\t%s\t%s\t%s\n" "КЛИЕНТ" "РУКОПОЖАТИЕ" "ПРИНЯТО" "ОТДАНО"
+    wg show "$WG_IF" dump | tail -n +2 | while read -r pub _psk _ep _aips hs rx tx _ka; do
+        name="?"
+        for d in "$WG_DIR"/clients/*/; do
+            [ -f "$d/public.key" ] || continue
+            if [ "$(cat "$d/public.key")" = "$pub" ]; then
+                name="$(basename "$d")"
+                break
+            fi
+        done
+        if [ "$hs" = "0" ]; then
+            age="никогда"
+        else
+            age="$(( (now - hs) )) с назад"
+        fi
+        # Показываем только тех, кто хоть раз подключался.
+        [ "$hs" = "0" ] && continue
+        printf "  %s\t%s\t%s\t%s\n" "$name" "$age" "$(human "$rx")" "$(human "$tx")"
+    done
+}
+
+human() {
+    local b="$1"
+    if   [ "$b" -ge 1048576 ]; then echo "$((b / 1048576)) МБ"
+    elif [ "$b" -ge 1024 ];    then echo "$((b / 1024)) КБ"
+    else echo "$b Б"; fi
+}
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Запустите с правами root: sudo bash $0 ${1:-}" >&2
@@ -75,6 +108,15 @@ if wg show "$WG_IF" >/dev/null 2>&1; then
     fi
 else
     bad "$WG_IF не поднят (systemctl status wg-quick@$WG_IF)"
+fi
+
+echo
+echo "Кто подключался и сколько прокачал:"
+if wg show "$WG_IF" >/dev/null 2>&1; then
+    peers_table
+    echo "  (принято — от клиента на сервер, отдано — с сервера клиенту)"
+    echo "  Если у клиента принято есть, а отдано почти ноль — трафик не выходит наружу."
+    echo "  Если обе колонки пустые при свежем рукопожатии — пакеты теряются по дороге, смотрите MTU."
 fi
 
 echo
