@@ -49,6 +49,8 @@ jobs:
           test -x "$APP/Contents/Resources/install-helper.sh"
           test -f "$APP/Contents/Resources/AppIcon.icns"
           test -f "$APP/Contents/PkgInfo"
+          test -f "$APP/Contents/Resources/kupibas-logo-on-light.png"
+          test -f "$APP/Contents/Resources/kupibas-logo-on-dark.png"
           # Приложение должно хотя бы стартовать: проверяем, что бинарник
           # запускается и отвечает системе, а не падает сразу.
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist"

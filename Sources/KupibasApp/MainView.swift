@@ -13,8 +13,11 @@ struct MainView: View {
                 InstallBanner(text: "Служба не отвечает. Переустановите её или проверьте журнал.")
             }
 
+            BrandHeader()
+
             PowerHeader()
-                .padding(18)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 18)
 
             Divider()
 
@@ -41,6 +44,43 @@ struct MainView: View {
         } message: {
             Text(model.saveError ?? "")
         }
+    }
+}
+
+/// Фирменная шапка: знак Kupibas и название продукта.
+struct BrandHeader: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(spacing: 4) {
+            if let logo {
+                Image(nsImage: logo)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 44)
+            } else {
+                Text("KUPIBAS")
+                    .font(.title2.weight(.bold))
+                    .kerning(4)
+            }
+
+            Text("Premium VPN")
+                .font(.headline)
+
+            Text("Special for Kupibas Group")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 16)
+        .padding(.bottom, 10)
+    }
+
+    /// На тёмной теме знак нужен светлый, иначе тёмно-синий сливается с фоном.
+    private var logo: NSImage? {
+        let name = colorScheme == .dark ? "kupibas-logo-on-dark" : "kupibas-logo-on-light"
+        guard let url = Bundle.main.url(forResource: name, withExtension: "png") else { return nil }
+        return NSImage(contentsOf: url)
     }
 }
 

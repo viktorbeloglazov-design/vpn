@@ -63,11 +63,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kz.qpvpn.R
 import kz.qpvpn.model.AppConfig
 import kz.qpvpn.model.AppsMode
 import kz.qpvpn.model.ConnectionState
@@ -216,15 +219,8 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                 .padding(top = 28.dp, bottom = 22.dp),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "QP VPN",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = colors.onHero,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (state.hasProfile) {
+                if (state.hasProfile) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         Surface(color = Color.White.copy(alpha = 0.16f), shape = RoundedCornerShape(8.dp)) {
                             Text(
                                 state.profileProtocol,
@@ -235,6 +231,29 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                         }
                     }
                 }
+
+                Image(
+                    painter = painterResource(R.drawable.kupibas_logo),
+                    contentDescription = "Kupibas",
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier.fillMaxWidth(0.66f).padding(top = 2.dp),
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                Text(
+                    "Premium VPN",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = colors.onHero,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "Special for Kupibas Group",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.heroMuted,
+                )
+
+                Spacer(Modifier.height(14.dp))
 
                 PowerButton(state = status.state, onClick = actions.onToggle)
 

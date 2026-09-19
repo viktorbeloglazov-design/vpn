@@ -39,6 +39,11 @@ install -m 0755 "$BIN_DIR/kupibasvpnd" "$APP/Contents/Library/Helpers/kupibasvpn
 install -m 0755 "$ROOT/scripts/install-helper.sh" "$APP/Contents/Resources/install-helper.sh"
 install -m 0644 "$ROOT/launchd/com.kupibas.vpn.helper.plist" "$APP/Contents/Resources/com.kupibas.vpn.helper.plist"
 
+# Фирменный знак для шапки окна: отдельный файл под светлую и тёмную темы.
+for logo in "$ROOT/Resources/brand"/kupibas-logo-on-*.png; do
+    [ -f "$logo" ] && install -m 0644 "$logo" "$APP/Contents/Resources/$(basename "$logo")"
+done
+
 # Иконка: на macOS собираем .icns из готового iconset.
 ICONSET="$ROOT/Resources/AppIcon.iconset"
 if [ -d "$ICONSET" ]; then
