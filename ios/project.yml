@@ -18,9 +18,10 @@ settings:
 
 packages:
   # Библиотека AmneziaWG: тот же туннель, что в приложении Amnezia.
+  # Лежит рядом подмодулем, чтобы путь к её части на Go был известен
+  # заранее — иначе цель со сборкой этой части не знает, где её искать.
   WireGuardKit:
-    url: https://github.com/amnezia-vpn/amneziawg-apple.git
-    revision: 9d5ee60edefa95b933a738dd7cda671dd18021fc
+    path: vendor/amneziawg-apple
 
 targets:
 
@@ -73,9 +74,9 @@ targets:
     type: ""
     platform: iOS
     legacy:
-      toolPath: /usr/bin/make
+      toolPath: "$(DEVELOPER_DIR)/usr/bin/make"
       passSettings: true
-      workingDirectory: "${BUILD_DIR%Build/*}SourcePackages/checkouts/amneziawg-apple/Sources/WireGuardKitGo"
+      workingDirectory: "$(SRCROOT)/vendor/amneziawg-apple/Sources/WireGuardKitGo"
 
 schemes:
   QPVPN:
