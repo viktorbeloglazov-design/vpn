@@ -16,11 +16,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,6 +60,9 @@ class PanelActions(
     val onRows: (Int) -> Unit,
     val onKeepScreenOn: (Boolean) -> Unit,
     val onMiles: (Boolean) -> Unit,
+    val onRussifyLabels: (Boolean) -> Unit,
+    val onForceRussian: (Boolean) -> Unit,
+    val onRename: (Long, String) -> Unit,
     val onHomeScreen: (Boolean) -> Unit,
     val onResetBoard: () -> Unit,
 )
@@ -74,6 +80,7 @@ fun PanelScreen(
 ) {
     var editing by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf(Overlay.NONE) }
+    var renaming by remember { mutableStateOf<Tile?>(null) }
 
     // Одни часы на всю панель: по ним живут часы, спидометр и проигрыватель.
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -99,6 +106,7 @@ fun PanelScreen(
             Overlay.ADD -> AddTileScreen(
                 catalog = catalog,
                 widgets = widgets,
+                russify = config.settings.russifyLabels,
                 onAddApp = { entry ->
                     actions.onAddApp(entry)
                     overlay = Overlay.NONE
@@ -141,6 +149,7 @@ fun PanelScreen(
                     onMove = actions.onMove,
                     onResize = actions.onResize,
                     onRemove = actions.onRemove,
+                    onRename = { tile -> renaming = tile },
                 ) { tile ->
                     TileContent(
                         tile = tile,
@@ -158,7 +167,51 @@ fun PanelScreen(
                 }
             }
         }
+
+        renaming?.let { tile ->
+            RenameDialog(
+                initial = catalog.label(tile, config.settings.russifyLabels),
+                onDismiss = { renaming = null },
+                onConfirm = { name ->
+                    actions.onRename(tile.id, name)
+                    renaming = null
+                },
+            )
+        }
     }
+}
+
+/** Своя подпись плитки — самый прямой способ перевести чужое название. */
+@Composable
+private fun RenameDialog(
+    initial: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Название плитки") },
+        text = {
+            Column {
+                Text(
+                    "Подпись можно заменить русской — например, вместо 设置 написать «Настройки».",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.size(12.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                    label = { Text("Подпись") },
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text("Сохранить") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }
 
 @Composable
@@ -224,6 +277,7 @@ private fun TileContent(
         TileKind.APP -> AppTile(
             tile = tile,
             catalog = catalog,
+            russify = config.settings.russifyLabels,
             modifier = modifier,
             enabled = !editing,
             onClick = { actions.onLaunch(tile) },

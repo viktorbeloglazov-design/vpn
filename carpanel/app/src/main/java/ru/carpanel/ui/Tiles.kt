@@ -92,13 +92,14 @@ fun TileFrame(
 fun AppTile(
     tile: Tile,
     catalog: AppCatalog,
+    russify: Boolean = true,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
     val installed = remember(tile.packageName) { catalog.isInstalled(tile.packageName) }
-    val label = remember(tile.packageName, tile.label) { catalog.label(tile) }
+    val label = remember(tile.packageName, tile.label, russify) { catalog.label(tile, russify) }
     val icon = remember(tile.packageName, installed) {
         catalog.icon(tile.packageName)
             ?.let { drawable -> runCatching { drawable.toBitmap(168, 168) }.getOrNull() }

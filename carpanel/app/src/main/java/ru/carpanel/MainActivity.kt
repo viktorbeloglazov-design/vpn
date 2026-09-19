@@ -4,6 +4,7 @@ import android.Manifest
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -16,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.carpanel.apps.AppCatalog
 import ru.carpanel.apps.AppEntry
+import ru.carpanel.data.Locales
 import ru.carpanel.data.Store
 import ru.carpanel.drive.SpeedTracker
 import ru.carpanel.media.MediaHub
@@ -47,6 +49,10 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
         speed.start()
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(Locales.wrap(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -121,6 +127,21 @@ class MainActivity : ComponentActivity() {
             applyKeepScreenOn(on)
         },
         onMiles = { miles -> store.updateSettings { it.copy(miles = miles) } },
+        onRussifyLabels = { on -> store.updateSettings { it.copy(russifyLabels = on) } },
+        onForceRussian = { on ->
+            store.updateSettings { it.copy(forceRussian = on) }
+            // Язык окружения задаётся при создании экрана — пересоздаём его.
+            recreate()
+        },
+        onRename = { id, name ->
+            store.updateBoard { board ->
+                board.copy(
+                    tiles = board.tiles.map { tile ->
+                        if (tile.id == id) tile.copy(label = name.trim().takeIf { it.isNotBlank() }) else tile
+                    }
+                )
+            }
+        },
         onHomeScreen = ::setHomeScreen,
         onResetBoard = ::resetBoard,
     )

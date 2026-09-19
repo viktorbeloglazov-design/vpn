@@ -71,6 +71,10 @@ data class Settings(
     val miles: Boolean = false,
     /** Панель предложена системе как домашний экран. */
     val homeScreen: Boolean = false,
+    /** Китайские и английские названия программ заменяются русскими. */
+    val russifyLabels: Boolean = true,
+    /** Интерфейс всегда по-русски, даже если система машины на другом языке. */
+    val forceRussian: Boolean = true,
 )
 
 /** Всё, что хранится между запусками. */

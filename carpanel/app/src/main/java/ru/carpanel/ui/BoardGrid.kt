@@ -38,6 +38,7 @@ import androidx.compose.ui.zIndex
 import ru.carpanel.model.Board
 import ru.carpanel.model.Grid
 import ru.carpanel.model.Tile
+import ru.carpanel.model.TileKind
 import kotlin.math.roundToInt
 
 /**
@@ -56,6 +57,7 @@ fun BoardGrid(
     onMove: (Long, Int, Int) -> Unit,
     onResize: (Long, Int, Int) -> Unit,
     onRemove: (Long) -> Unit,
+    onRename: (Tile) -> Unit = {},
     content: @Composable (Tile) -> Unit,
 ) {
     val rows = Grid.visibleRows(board)
@@ -128,6 +130,7 @@ fun BoardGrid(
                             columns = columns,
                             onResize = onResize,
                             onRemove = onRemove,
+                            onRename = onRename,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -144,9 +147,30 @@ private fun EditControls(
     columns: Int,
     onResize: (Long, Int, Int) -> Unit,
     onRemove: (Long) -> Unit,
+    onRename: (Tile) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.padding(6.dp)) {
+        // Переименовать имеет смысл там, где подпись приходит от чужой
+        // программы: её можно заменить русской.
+        if (tile.kind == TileKind.APP) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .clickable { onRename(tile) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "Аа",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)

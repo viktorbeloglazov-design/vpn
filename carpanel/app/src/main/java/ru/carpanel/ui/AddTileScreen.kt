@@ -65,6 +65,7 @@ private val builtins = listOf(
 fun AddTileScreen(
     catalog: AppCatalog,
     widgets: WidgetHostController,
+    russify: Boolean = true,
     onAddApp: (AppEntry) -> Unit,
     onAddBuiltin: (TileKind) -> Unit,
     onAddWidget: (AppWidgetProviderInfo) -> Unit,
@@ -72,9 +73,9 @@ fun AddTileScreen(
 ) {
     var tab by remember { mutableStateOf(AddTab.BUILTIN) }
 
-    val apps by produceState(initialValue = emptyList<Pair<AppEntry, Boolean>>()) {
+    val apps by produceState(initialValue = emptyList<Pair<AppEntry, Boolean>>(), russify) {
         value = withContext(Dispatchers.IO) {
-            catalog.installed().map { it to true } + catalog.suggestions().map { it to false }
+            catalog.installed(russify).map { it to true } + catalog.suggestions().map { it to false }
         }
     }
     val providers by produceState(initialValue = emptyList<AppWidgetProviderInfo>()) {
@@ -175,7 +176,7 @@ fun AddTileScreen(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                     Text(
-                                        catalog.labelOf(info.provider.packageName),
+                                        catalog.labelOf(info.provider.packageName, russify),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,

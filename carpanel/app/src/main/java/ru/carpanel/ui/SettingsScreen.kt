@@ -90,6 +90,27 @@ fun SettingsScreen(
             )
         }
 
+        Section("Язык") {
+            Toggle(
+                title = "Русские названия программ",
+                hint = "Китайские и английские подписи заменяются русскими по словарю",
+                checked = config.settings.russifyLabels,
+                onChange = actions.onRussifyLabels,
+            )
+            Toggle(
+                title = "Интерфейс всегда по-русски",
+                hint = "Даже если система машины говорит по-китайски или по-английски",
+                checked = config.settings.forceRussian,
+                onChange = actions.onForceRussian,
+            )
+            Text(
+                "Подпись любой плитки меняется вручную: «Править» → кнопка «Аа» на плитке. " +
+                    "Меню самой машины программа переписать не может — только то, что показывает сама.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         Section("Разрешения") {
             Permission(
                 title = "Местоположение",

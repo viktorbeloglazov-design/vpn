@@ -19,8 +19,13 @@ class AppCatalog(private val context: Context) {
 
     private val pm: PackageManager get() = context.packageManager
 
-    /** Всё, что показывает система в своём меню программ, по алфавиту. */
-    fun installed(): List<AppEntry> {
+    /**
+     * Всё, что показывает система в своём меню программ, по алфавиту.
+     *
+     * При [russify] китайские и английские названия заменяются русскими из
+     * словаря — прошивка машины сама этого не делает.
+     */
+    fun installed(russify: Boolean = true): List<AppEntry> {
         val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         return runCatching { pm.queryIntentActivities(launcher, 0) }
             .getOrDefault(emptyList())
@@ -30,10 +35,7 @@ class AppCatalog(private val context: Context) {
                 AppEntry(
                     packageName = activity.packageName,
                     className = activity.name,
-                    label = runCatching { resolved.loadLabel(pm).toString() }
-                        .getOrNull()
-                        ?.takeIf { it.isNotBlank() }
-                        ?: activity.packageName,
+                    label = label(activity.packageName, runCatching { resolved.loadLabel(pm).toString() }.getOrNull(), russify),
                 )
             }
             .distinctBy { it.packageName }
@@ -42,7 +44,7 @@ class AppCatalog(private val context: Context) {
 
     /** Известные программы для машины, которых ещё нет в системе. */
     fun suggestions(): List<AppEntry> {
-        val present = installed().map { it.packageName }.toSet()
+        val present = installed(russify = false).map { it.packageName }.toSet()
         return KnownApps.list
             .filterNot { present.contains(it.packageName) }
             .map { AppEntry(it.packageName, null, it.label) }
@@ -58,17 +60,23 @@ class AppCatalog(private val context: Context) {
         return runCatching { pm.getApplicationIcon(name) }.getOrNull()
     }
 
-    /** Подпись плитки: своя, затем системная, затем из списка известных. */
-    fun label(tile: Tile): String {
+    /** Подпись плитки: переименованная хозяином, затем системная или из словаря. */
+    fun label(tile: Tile, russify: Boolean = true): String {
         tile.label?.takeIf { it.isNotBlank() }?.let { return it }
         val name = tile.packageName ?: return "Программа"
-        return labelOf(name)
+        return labelOf(name, russify)
     }
 
     /** Название программы по имени пакета. */
-    fun labelOf(packageName: String): String {
+    fun labelOf(packageName: String, russify: Boolean = true): String {
         val fromSystem = runCatching { pm.getApplicationInfo(packageName, 0).loadLabel(pm).toString() }.getOrNull()
-        return fromSystem?.takeIf { it.isNotBlank() } ?: KnownApps.label(packageName) ?: packageName
+        return label(packageName, fromSystem, russify)
+    }
+
+    private fun label(packageName: String, fromSystem: String?, russify: Boolean): String {
+        val system = fromSystem?.takeIf { it.isNotBlank() }
+        if (russify) return Russify.label(packageName, system ?: packageName)
+        return system ?: KnownApps.label(packageName) ?: packageName
     }
 
     /**
