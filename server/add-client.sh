@@ -10,7 +10,11 @@ NAME="${1:-mac}"
 PORT="${PORT:-$(awk -F'= *' '/ListenPort/ {print $2; exit}' "$WG_DIR/wg0.conf")}"
 DNS="${DNS:-1.1.1.1, 8.8.8.8}"
 # 1420 подходит для обычной сети; за роутером с VPN или PPPoE ставьте MTU=1280.
+# MTU=0 — не писать строку вовсе, тогда клиент подберёт размер сам.
 MTU="${MTU:-1420}"
+# Маска адреса клиента: 32 — только свой адрес, 24 — вся подсеть туннеля.
+MASK="${MASK:-32}"
+KEEPALIVE="${KEEPALIVE:-25}"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Запустите с правами root: sudo bash $0 $NAME" >&2
@@ -65,20 +69,20 @@ PEER
 fi
 
 CONFIG="$CLIENT_DIR/$NAME.conf"
-cat > "$CONFIG" <<CONF
-[Interface]
-PrivateKey = $CLIENT_PRIVATE
-Address = $CLIENT_IP/32
-DNS = $DNS
-MTU = $MTU
-
-[Peer]
-PublicKey = $SERVER_PUBLIC
-PresharedKey = $CLIENT_PSK
-Endpoint = $PUBLIC_IP:$PORT
-AllowedIPs = 0.0.0.0/0
-PersistentKeepalive = 25
-CONF
+{
+    echo "[Interface]"
+    echo "PrivateKey = $CLIENT_PRIVATE"
+    echo "Address = $CLIENT_IP/$MASK"
+    echo "DNS = $DNS"
+    [ "$MTU" != "0" ] && echo "MTU = $MTU"
+    echo
+    echo "[Peer]"
+    echo "PublicKey = $SERVER_PUBLIC"
+    echo "PresharedKey = $CLIENT_PSK"
+    echo "Endpoint = $PUBLIC_IP:$PORT"
+    echo "AllowedIPs = 0.0.0.0/0"
+    echo "PersistentKeepalive = $KEEPALIVE"
+} > "$CONFIG"
 chmod 0600 "$CONFIG"
 
 echo
