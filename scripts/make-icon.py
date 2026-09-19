@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 ROOT = Path(__file__).resolve().parent.parent
 ICONSET = ROOT / "Resources" / "AppIcon.iconset"
 PREVIEW = ROOT / "Resources" / "icon-preview.png"
+ANDROID_RES = ROOT / "android" / "app" / "src" / "main" / "res"
 
 SIZE = 1024
 MARGIN = 88                       # поле вокруг плашки, как в системных иконках
@@ -99,6 +100,59 @@ def build_icon() -> Image.Image:
     return canvas
 
 
+def build_android_foreground() -> Image.Image:
+    """Слой для адаптивной иконки Android: монограмма на прозрачном фоне.
+
+    Android обрезает иконку маской разной формы, поэтому содержимое должно
+    умещаться в центральные две трети холста.
+    """
+    canvas = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+
+    mark_font = load_font(int(SIZE * 0.225))
+    draw.text((SIZE / 2, SIZE * 0.455), "QP", font=mark_font, fill=(255, 255, 255, 255), anchor="mm")
+
+    word_font = load_font(int(SIZE * 0.068))
+    draw.text((SIZE / 2, SIZE * 0.60), "V P N", font=word_font, fill=(255, 255, 255, 224), anchor="mm")
+    return canvas
+
+
+def write_android(icon: Image.Image) -> None:
+    if not ANDROID_RES.exists():
+        return
+
+    # Обычная иконка по плотностям экрана.
+    densities = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
+    for suffix, pixels in densities.items():
+        folder = ANDROID_RES / f"mipmap-{suffix}"
+        folder.mkdir(parents=True, exist_ok=True)
+        square = icon.resize((pixels, pixels), Image.LANCZOS)
+        square.save(folder / "ic_launcher.png")
+
+        round_icon = square.copy()
+        mask = Image.new("L", (pixels, pixels), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, pixels - 1, pixels - 1), fill=255)
+        round_icon.putalpha(mask)
+        round_icon.save(folder / "ic_launcher_round.png")
+
+    # Адаптивная иконка: отдельно фон, отдельно монограмма.
+    foreground = build_android_foreground()
+    for suffix, pixels in {"mdpi": 108, "hdpi": 162, "xhdpi": 216, "xxhdpi": 324, "xxxhdpi": 432}.items():
+        folder = ANDROID_RES / f"mipmap-{suffix}"
+        folder.mkdir(parents=True, exist_ok=True)
+        foreground.resize((pixels, pixels), Image.LANCZOS).save(folder / "ic_launcher_foreground.png")
+
+    background = ImageOps.colorize(
+        Image.linear_gradient("L").resize((432, 432)),
+        black=TOP_COLOR,
+        white=BOTTOM_COLOR,
+    ).convert("RGBA")
+    drawable = ANDROID_RES / "drawable"
+    drawable.mkdir(parents=True, exist_ok=True)
+    background.save(drawable / "ic_launcher_background.png")
+    print(f"Иконки Android разложены в {ANDROID_RES}")
+
+
 def main() -> None:
     icon = build_icon()
     ICONSET.mkdir(parents=True, exist_ok=True)
@@ -108,6 +162,8 @@ def main() -> None:
             pixels = base * scale
             name = f"icon_{base}x{base}.png" if scale == 1 else f"icon_{base}x{base}@2x.png"
             icon.resize((pixels, pixels), Image.LANCZOS).save(ICONSET / name)
+
+    write_android(icon)
 
     icon.save(PREVIEW)
     print(f"Иконка разложена в {ICONSET}")

@@ -1,0 +1,90 @@
+name: android
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия, например 1.0.0"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: Сборка APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Компоненты Android SDK
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Определить версию
+        id: version
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="dev"
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Тесты
+        working-directory: android
+        run: gradle test --no-daemon --stacktrace
+
+      - name: Сборка релизного APK
+        working-directory: android
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Подготовить файл
+        id: apk
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          SOURCE="android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$SOURCE"
+          mkdir -p dist
+          cp "$SOURCE" "dist/QPVPN-$VERSION.apk"
+          echo "path=dist/QPVPN-$VERSION.apk" >> "$GITHUB_OUTPUT"
+          ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QPVPN-${{ steps.version.outputs.value }}-apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Опубликовать в релизе
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${{ steps.apk.outputs.path }}" --clobber
+          else
+            gh release create "$TAG" "${{ steps.apk.outputs.path }}" \
+              --target "$GITHUB_SHA" \
+              --title "QP VPN $VERSION" \
+              --notes-file .github/release-notes.md
+          fi
+          echo "Ссылка: $(gh release view "$TAG" --json url --jq .url)"
