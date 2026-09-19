@@ -36,9 +36,12 @@ import kz.qpvpn.net.Cidr
 import kz.qpvpn.net.IpCheck
 import kz.qpvpn.net.RuZone
 import kz.qpvpn.ui.AppEntry
+import kz.qpvpn.ui.QrScannerScreen
+import kz.qpvpn.ui.decodeQrFromImage
 import kz.qpvpn.ui.QpVpnTheme
 import kz.qpvpn.ui.ScreenActions
 import kz.qpvpn.ui.ScreenState
+import kz.qpvpn.vpn.AmneziaLink
 import kz.qpvpn.vpn.WgProfile
 
 class MainActivity : ComponentActivity() {
@@ -51,6 +54,7 @@ class MainActivity : ComponentActivity() {
     private var checkingIp by mutableStateOf(false)
     private var installedApps by mutableStateOf<List<AppEntry>>(emptyList())
     private var ruZoneCount by mutableStateOf(0)
+    private var showScanner by mutableStateOf(false)
 
     /** Системное окно «разрешить VPN» — без него туннель поднять нельзя. */
     private val vpnConsent = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -65,6 +69,19 @@ class MainActivity : ComponentActivity() {
         if (uri != null) importProfile(uri)
     }
 
+    /** Снимок экрана с QR-кодом: Amnezia на этом же телефоне не отсканировать. */
+    private val pickQrImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val text = withContext(Dispatchers.IO) { decodeQrFromImage(this@MainActivity, uri) }
+            if (text.isNullOrBlank()) {
+                showProfileError("На картинке не нашёлся QR-код.")
+            } else {
+                importFromText(text)
+            }
+        }
+    }
+
     private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,6 +92,8 @@ class MainActivity : ComponentActivity() {
         ) {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+
+        handleSharedIntent(intent)
 
         setContent {
             QpVpnTheme {
@@ -92,6 +111,17 @@ class MainActivity : ComponentActivity() {
                 val profileSummary = remember(profileVersion) { summarizeProfile() }
                 val profileProtocol = remember(profileVersion) { profileProtocol() }
                 val hasProfile = remember(profileVersion) { app.store.hasProfile }
+
+                if (showScanner) {
+                    QrScannerScreen(
+                        onResult = { text ->
+                            showScanner = false
+                            importFromText(text)
+                        },
+                        onClose = { showScanner = false },
+                    )
+                    return@QpVpnTheme
+                }
 
                 kz.qpvpn.ui.QpVpnRoot(
                     state = ScreenState(
@@ -119,6 +149,9 @@ class MainActivity : ComponentActivity() {
                         onClearProfile = ::clearProfile,
                         onOptionsChange = ::changeOptions,
                         onCheckIp = ::checkIp,
+                        onScanQr = { showScanner = true },
+                        onPickQrImage = { pickQrImage.launch("image/*") },
+                        onImportText = ::importFromText,
                     ),
                 )
             }
@@ -227,12 +260,63 @@ class MainActivity : ComponentActivity() {
 
     // MARK: - Профиль
 
+    /** Приём того, чем поделились: ссылка vpn://, текст настроек или файл. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleSharedIntent(intent)
+    }
+
+    private fun handleSharedIntent(intent: Intent?) {
+        if (intent == null) return
+
+        val fromLink = intent.data?.toString()
+        val fromText = intent.getStringExtra(Intent.EXTRA_TEXT)
+        val fromFile = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        }
+
+        when {
+            !fromLink.isNullOrBlank() && fromLink.startsWith("vpn://") -> importFromText(fromLink)
+            !fromText.isNullOrBlank() -> importFromText(fromText)
+            fromFile != null -> importProfile(fromFile)
+            intent.action == Intent.ACTION_VIEW && intent.data != null -> importProfile(intent.data!!)
+        }
+    }
+
+    /** Общий путь для ссылки, QR-кода и вставленного текста. */
+    private fun importFromText(text: String) {
+        val config = AmneziaLink.extractConfig(text)
+        if (config == null) {
+            showProfileError("В этом тексте нет настроек WireGuard или AmneziaWG.")
+            return
+        }
+        try {
+            val profile = WgProfile.parse(config)
+            app.store.saveProfile(config)
+            profileVersion++
+            val kind = if (profile.isAmnezia) "AmneziaWG" else "WireGuard"
+            android.widget.Toast.makeText(
+                this,
+                "Профиль $kind загружен: ${profile.endpointHost}",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        } catch (error: Exception) {
+            showProfileError(error.message ?: "Настройки не подошли.")
+        }
+    }
+
     private fun importProfile(uri: Uri) {
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val text = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    val raw = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                         ?: throw IllegalStateException("Файл не открылся.")
+                    val text = AmneziaLink.extractConfig(raw)
+                        ?: throw IllegalStateException("В файле нет настроек WireGuard.")
                     WgProfile.parse(text)
                     text
                 }

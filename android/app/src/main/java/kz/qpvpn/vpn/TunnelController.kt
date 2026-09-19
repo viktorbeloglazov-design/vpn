@@ -1,10 +1,10 @@
 package kz.qpvpn.vpn
 
 import android.content.Context
-import com.wireguard.android.backend.Backend
-import com.wireguard.android.backend.GoBackend
-import com.wireguard.android.backend.Tunnel
-import com.wireguard.config.Config
+import org.amnezia.awg.backend.Backend
+import org.amnezia.awg.backend.GoBackend
+import org.amnezia.awg.backend.Tunnel
+import org.amnezia.awg.config.Config
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,6 +31,9 @@ import java.io.StringReader
 
 /**
  * Поднимает и перестраивает туннель.
+ *
+ * Работает через библиотеку AmneziaWG: она понимает и обычный WireGuard,
+ * и его версию с маскировкой, поэтому оба вида профилей поднимаются одинаково.
  *
  * Вся маршрутизация на Android задаётся одним списком AllowedIPs: туда попадает
  * то, что должно идти через VPN. Для режима «всё кроме правил» список считается

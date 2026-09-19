@@ -45,6 +45,10 @@ data class WgProfile(
         if (includeDns && dns.isNotEmpty()) {
             appendLine("DNS = ${dns.joinToString(", ")}")
         }
+        // Параметры маскировки AmneziaWG: без них сервер Amnezia не ответит.
+        for ((key, name) in AMNEZIA_FIELDS) {
+            amneziaParams[key]?.let { appendLine("$name = $it") }
+        }
         if (apps.isNotEmpty()) {
             when (appsMode) {
                 AppsMode.ONLY_SELECTED -> appendLine("IncludedApplications = ${apps.joinToString(", ")}")
@@ -68,6 +72,13 @@ data class WgProfile(
     companion object {
 
         class ParseError(message: String) : Exception(message)
+
+        /** Имена параметров маскировки так, как их ждёт библиотека AmneziaWG. */
+        private val AMNEZIA_FIELDS = listOf(
+            "jc" to "Jc", "jmin" to "Jmin", "jmax" to "Jmax",
+            "s1" to "S1", "s2" to "S2",
+            "h1" to "H1", "h2" to "H2", "h3" to "H3", "h4" to "H4",
+        )
 
         private fun isKey(value: String): Boolean =
             value.length == 44 && value.endsWith("=")
@@ -121,8 +132,7 @@ data class WgProfile(
             // Amnezia добавляет в [Interface] параметры маскировки: размеры
             // мусорных пакетов и подменённые заголовки. Обычный WireGuard их
             // не понимает, поэтому запоминаем отдельно.
-            val amneziaKeys = listOf("jc", "jmin", "jmax", "s1", "s2", "h1", "h2", "h3", "h4")
-            val amnezia = amneziaKeys.mapNotNull { key ->
+            val amnezia = AMNEZIA_FIELDS.map { it.first }.mapNotNull { key ->
                 iface[key]?.let { key to it }
             }.toMap()
 

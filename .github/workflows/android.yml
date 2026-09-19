@@ -38,9 +38,36 @@ jobs:
           "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
+
+      - name: Версия библиотеки AmneziaWG
+        id: awg
+        run: |
+          SHA="$(git ls-remote https://github.com/amnezia-vpn/amneziawg-android HEAD | cut -f1)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "AmneziaWG: $SHA"
+
+      - name: Библиотека AmneziaWG из кэша
+        id: awg-cache
+        uses: actions/cache@v4
+        with:
+          path: android/app/libs/awg-tunnel.aar
+          key: awg-aar-${{ steps.awg.outputs.sha }}
+
+      - name: Собираю библиотеку AmneziaWG
+        if: steps.awg-cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-awg.sh android/app/libs/awg-tunnel.aar
+
+      - name: Проверяю библиотеку
+        run: |
+          ls -lh android/app/libs/awg-tunnel.aar
+          unzip -l android/app/libs/awg-tunnel.aar | grep -E "classes.jar|\.so$" | head -8
 
       - name: Определить версию
         id: version

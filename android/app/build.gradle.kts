@@ -61,7 +61,18 @@ android {
 }
 
 dependencies {
-    implementation("com.wireguard.android:tunnel:1.0.20230706")
+    // Библиотека AmneziaWG: тот же WireGuard, но понимает параметры маскировки.
+    // Собирается из исходников скриптом scripts/build-awg.sh.
+    implementation(files("libs/awg-tunnel.aar"))
+    implementation("androidx.annotation:annotation:1.9.1")
+    implementation("androidx.collection:collection:1.4.5")
+
+    // Чтение QR-кодов без сервисов Google — они есть не на каждом телефоне.
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("androidx.camera:camera-core:1.4.0")
+    implementation("androidx.camera:camera-camera2:1.4.0")
+    implementation("androidx.camera:camera-lifecycle:1.4.0")
+    implementation("androidx.camera:camera-view:1.4.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
