@@ -69,3 +69,15 @@ jobs:
               --notes-file .github/release-notes-kit.md
           fi
           echo "Ссылка: $(gh release view "$TAG" --json url --jq .url)"
+
+          # Постоянная ссылка на комплект — имя файла без версии.
+          cp "$ARCHIVE" dist/QP-VPN.zip
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest dist/QP-VPN.zip --clobber
+            gh release edit latest --notes-file .github/latest-notes.md
+          else
+            gh release create latest dist/QP-VPN.zip \
+              --target "${{ github.ref_name }}" \
+              --title "QP VPN — свежие сборки" \
+              --notes-file .github/latest-notes.md
+          fi

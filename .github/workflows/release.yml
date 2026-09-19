@@ -111,3 +111,19 @@ jobs:
               --notes-file .github/release-notes.md
           fi
           echo "Ссылка на релиз: $(gh release view "$TAG" --json url --jq .url)"
+
+      # Постоянная ссылка: имя файла без версии, выпуск с меткой latest.
+      - name: Обновить постоянную ссылку
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp dist/QPVPN-"${{ steps.version.outputs.value }}".dmg dist/QPVPN-mac.dmg
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest dist/QPVPN-mac.dmg --clobber
+            gh release edit latest --notes-file .github/latest-notes.md
+          else
+            gh release create latest dist/QPVPN-mac.dmg \
+              --target "$GITHUB_SHA" \
+              --title "QP VPN — свежие сборки" \
+              --notes-file .github/latest-notes.md
+          fi

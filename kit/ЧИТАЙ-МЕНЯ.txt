@@ -17,4 +17,11 @@ Premium VPN · Special for Kupibas Group
 Ключ личный: не пересылайте его дальше. Если ключ ушёл не тому —
 напишите нам, мы выпустим новый, а старый отключим.
 
+Постоянные ссылки на загрузку (всегда свежая версия):
+
+  Android  https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-android.apk
+  Mac      https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-mac.dmg
+  iPhone   https://apps.apple.com/app/defaultvpn/id6744725017
+  Windows  https://amnezia.org/ru/downloads
+
 Вопросы: пишите тому, кто прислал вам этот архив.

@@ -4,7 +4,7 @@
 Человек наводит камеру телефона на код в инструкции и скачивает программу,
 не перепечатывая ссылку руками. К ключу доступа эти коды отношения не имеют.
 
-    scripts/make-download-qr.py <папка-комплекта> <ссылка-на-apk>
+    scripts/make-download-qr.py <папка-комплекта>
 """
 import sys
 
@@ -14,7 +14,8 @@ except ImportError:
     print("  библиотеки segno нет — QR-коды на загрузку пропущены")
     raise SystemExit(0)
 
-stage, apk = sys.argv[1], sys.argv[2]
+stage = sys.argv[1]
+apk = "https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-android.apk"
 
 links = {
     "Android/QR-скачать-приложение.png": apk,

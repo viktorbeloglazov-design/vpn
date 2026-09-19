@@ -58,8 +58,7 @@ download "https://github.com/$REPO/releases/download/v$MAC_VERSION/QPVPN-$MAC_VE
 
 echo "→ QR-коды на загрузку"
 python3 -c "import segno" 2>/dev/null || pip install --quiet segno 2>/dev/null || true
-python3 "$ROOT/scripts/make-download-qr.py" "$STAGE" \
-    "https://github.com/$REPO/releases/download/android-v$ANDROID_VERSION/QPVPN-$ANDROID_VERSION.apk"
+python3 "$ROOT/scripts/make-download-qr.py" "$STAGE"
 
 # Версии видно прямо в архиве: человек по телефону скажет, что у него стоит.
 cat > "$STAGE/ВЕРСИИ.txt" <<TXT
