@@ -1,5 +1,5 @@
 #!/bin/bash
-# Собирает KupibasVPN.app из уже скомпилированных бинарников.
+# Собирает QPVPN.app из уже скомпилированных бинарников.
 #
 #   scripts/bundle-app.sh --bin-dir .build/release [--tools КАТАЛОГ] [--out dist]
 #

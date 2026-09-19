@@ -24,7 +24,7 @@ jobs:
       - name: Сборка бандла приложения
         run: |
           ./scripts/build.sh
-          test -x "dist/QPVPN.app/Contents/MacOS/KupibasVPN"
+          test -x "dist/QPVPN.app/Contents/MacOS/QPVPN"
           test -x "dist/QPVPN.app/Contents/Library/Helpers/kupibasvpnd"
           test -x "dist/QPVPN.app/Contents/Resources/install-helper.sh"
 
@@ -56,7 +56,7 @@ jobs:
           echo "--- журнал запуска ---"
           cat "$HOME/Library/Logs/QPVPN.log" 2>/dev/null || echo "(журнала нет)"
           echo "--- прямой запуск бинарника ---"
-          /Applications/QPVPN.app/Contents/MacOS/KupibasVPN 2>&1 &
+          /Applications/QPVPN.app/Contents/MacOS/QPVPN 2>&1 &
           BINPID=$!
           sleep 6
           if kill -0 $BINPID 2>/dev/null; then
