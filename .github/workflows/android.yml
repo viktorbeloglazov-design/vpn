@@ -94,6 +94,21 @@ jobs:
         working-directory: android
         run: gradle assembleRelease --no-daemon --stacktrace
 
+      - name: Проверяю манифест пакета
+        run: |
+          # Без объявленной службы VPN туннель не поднимется — проверяем,
+          # что библиотека AmneziaWG принесла её в собранный манифест.
+          MANIFEST="$(find android/app/build/intermediates -name AndroidManifest.xml -path "*merged*" | head -1)"
+          echo "манифест: $MANIFEST"
+          echo "--- службы VPN ---"
+          grep -o 'android:name="[^"]*VpnService"' "$MANIFEST" | sort -u
+          if ! grep -q "BIND_VPN_SERVICE" "$MANIFEST"; then
+            echo "В манифесте нет разрешения BIND_VPN_SERVICE — туннель не заработает." >&2
+            exit 1
+          fi
+          echo "--- приём ссылок vpn:// ---"
+          grep -o 'android:scheme="vpn"' "$MANIFEST" | head -1
+
       - name: Подготовить файл
         id: apk
         run: |
