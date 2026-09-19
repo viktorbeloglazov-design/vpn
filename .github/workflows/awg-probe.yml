@@ -1,0 +1,54 @@
+name: awg-probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Сборка библиотеки AmneziaWG
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Клонирую amneziawg-android
+        run: |
+          git clone --depth 1 https://github.com/amnezia-vpn/amneziawg-android.git "$RUNNER_TEMP/awg"
+          cd "$RUNNER_TEMP/awg"
+          echo "--- состав репозитория ---"
+          ls
+          echo "--- модули ---"
+          cat settings.gradle* 2>/dev/null || true
+          echo "--- версия из gradle.properties ---"
+          cat gradle.properties 2>/dev/null | head -20 || true
+          echo "--- зависимости tunnel ---"
+          cat tunnel/build.gradle* 2>/dev/null | head -60 || true
+
+      - name: Компоненты Android SDK и NDK
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973" "cmake;3.22.1" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
+
+      - name: Собираю AAR
+        run: |
+          cd "$RUNNER_TEMP/awg"
+          chmod +x gradlew 2>/dev/null || true
+          ./gradlew :tunnel:assembleRelease --no-daemon --stacktrace 2>&1 | tail -60
+
+      - name: Что получилось
+        run: |
+          find "$RUNNER_TEMP/awg" -name "*.aar" -exec ls -lh {} \;
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: awg-tunnel-aar
+          path: ${{ runner.temp }}/awg/tunnel/build/outputs/aar/*.aar
+          if-no-files-found: warn
