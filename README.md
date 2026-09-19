@@ -1,4 +1,4 @@
-# KZTunnel — VPN для Mac с выходом в Казахстане
+# Kupibas VPN — VPN для Mac с выходом в Казахстане
 
 Приложение для macOS: одна кнопка «включить/выключить» и настраиваемые маршруты —
 вы сами решаете, что идёт через казахстанский VPN, а что напрямую.
@@ -36,12 +36,12 @@
 
 | Компонент | Назначение |
 |---|---|
-| `KZTunnel.app` | интерфейс: кнопка, маршруты, настройки. Работает от пользователя |
-| `kztunneld` | служба под root (launchd): поднимает туннель, правит маршруты |
+| `KupibasVPN.app` | интерфейс: кнопка, маршруты, настройки. Работает от пользователя |
+| `kupibasvpnd` | служба под root (launchd): поднимает туннель, правит маршруты |
 | `server/*.sh` | разворачивают WireGuard на вашем VPS в Казахстане |
 
 Обмен между приложением и службой — через два файла в
-`/Library/Application Support/KZTunnel`: приложение пишет `config.json`,
+`/Library/Application Support/KupibasVPN`: приложение пишет `config.json`,
 служба исполняет его и публикует `status.json`. Никаких сетевых портов
 и привилегированных XPC-сервисов.
 
@@ -74,9 +74,9 @@ brew install wireguard-tools wireguard-go
 ```bash
 git clone https://github.com/viktorbeloglazov-design/vpn.git
 cd vpn
-./scripts/build.sh          # соберёт dist/KZTunnel.app
-sudo ./scripts/install.sh   # поставит службу kztunneld
-open dist/KZTunnel.app
+./scripts/build.sh          # соберёт dist/KupibasVPN.app
+sudo ./scripts/install.sh   # поставит службу kupibasvpnd
+open dist/KupibasVPN.app
 ```
 
 Подробности: [docs/BUILD.md](docs/BUILD.md).
@@ -104,7 +104,7 @@ open dist/KZTunnel.app
 Смотрите [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) и журнал:
 
 ```bash
-tail -f /var/log/kztunnel.log
+tail -f /var/log/kupibas-vpn.log
 ```
 
 ## Ограничения

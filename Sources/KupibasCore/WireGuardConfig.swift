@@ -84,7 +84,7 @@ public enum WireGuardConfig {
                               allowedIPs: [String],
                               includeDNS: Bool) -> String {
         var lines: [String] = []
-        lines.append("# Сгенерировано kztunneld. Правки будут перезаписаны.")
+        lines.append("# Сгенерировано kupibasvpnd. Правки будут перезаписаны.")
         lines.append("[Interface]")
         lines.append("PrivateKey = \(server.privateKey)")
         lines.append("Address = \(server.addresses.joined(separator: ", "))")

@@ -1,5 +1,5 @@
 import SwiftUI
-import KZTunnelCore
+import KupibasCore
 
 /// Вкладка «Маршруты»: режим сплит-туннеля и список правил.
 struct RoutesView: View {

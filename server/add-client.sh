@@ -1,5 +1,5 @@
 #!/bin/bash
-# Добавляет клиента к серверу WireGuard и печатает готовый конфиг для KZTunnel.
+# Добавляет клиента к серверу WireGuard и печатает готовый конфиг для Kupibas VPN.
 #
 #   sudo bash add-client.sh mac
 set -euo pipefail
@@ -84,7 +84,7 @@ echo "================ конфиг клиента «$NAME» ================"
 cat "$CONFIG"
 echo "========================================================"
 echo
-echo "Скопируйте текст выше и вставьте в KZTunnel: вкладка «Сервер» → «Вставить конфиг WireGuard…»."
+echo "Скопируйте текст выше и вставьте в Kupibas VPN: вкладка «Сервер» → «Вставить конфиг WireGuard…»."
 echo "Файл также сохранён на сервере: $CONFIG"
 if command -v qrencode >/dev/null 2>&1; then
     echo

@@ -1,5 +1,5 @@
 import XCTest
-@testable import KZTunnelCore
+@testable import KupibasCore
 
 final class WireGuardConfigTests: XCTestCase {
 

@@ -1,5 +1,5 @@
 import SwiftUI
-import KZTunnelCore
+import KupibasCore
 
 /// Вкладка «Сервер»: параметры выходного узла в Казахстане.
 struct ServerView: View {

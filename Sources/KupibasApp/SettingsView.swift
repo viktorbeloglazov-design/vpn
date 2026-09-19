@@ -1,5 +1,5 @@
 import SwiftUI
-import KZTunnelCore
+import KupibasCore
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel

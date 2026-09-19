@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 import ServiceManagement
-import KZTunnelCore
+import KupibasCore
 
 /// Состояние интерфейса. Всё выполняется на главном потоке:
 /// таймер обновляет статус, правки конфигурации сохраняются с небольшой задержкой.

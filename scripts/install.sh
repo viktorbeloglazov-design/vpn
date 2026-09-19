@@ -1,11 +1,11 @@
 #!/bin/bash
-# Установка службы kztunneld (нужны права root) и подготовка каталога настроек.
+# Установка службы kupibasvpnd (нужны права root) и подготовка каталога настроек.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LABEL="com.kztunnel.helper"
-HELPER_DIR="/usr/local/libexec/kztunnel"
-STATE_DIR="/Library/Application Support/KZTunnel"
+LABEL="com.kupibas.vpn.helper"
+HELPER_DIR="/usr/local/libexec/kupibas-vpn"
+STATE_DIR="/Library/Application Support/KupibasVPN"
 PLIST="/Library/LaunchDaemons/$LABEL.plist"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -31,11 +31,11 @@ if [ ${#MISSING[@]} -gt 0 ]; then
 fi
 
 BINARY=""
-for candidate in "$ROOT/dist/kztunneld" "$ROOT/.build/release/kztunneld" "$ROOT/.build/arm64-apple-macosx/release/kztunneld" "$ROOT/.build/x86_64-apple-macosx/release/kztunneld"; do
+for candidate in "$ROOT/dist/kupibasvpnd" "$ROOT/.build/release/kupibasvpnd" "$ROOT/.build/arm64-apple-macosx/release/kupibasvpnd" "$ROOT/.build/x86_64-apple-macosx/release/kupibasvpnd"; do
     if [ -x "$candidate" ]; then BINARY="$candidate"; break; fi
 done
 if [ -z "$BINARY" ]; then
-    echo "Не найден собранный kztunneld. Сначала выполните: ./scripts/build.sh" >&2
+    echo "Не найден собранный kupibasvpnd. Сначала выполните: ./scripts/build.sh" >&2
     exit 1
 fi
 
@@ -44,7 +44,7 @@ launchctl bootout "system/$LABEL" 2>/dev/null || true
 
 echo "==> Ставлю демон в $HELPER_DIR"
 install -d -m 0755 "$HELPER_DIR"
-install -m 0755 "$BINARY" "$HELPER_DIR/kztunneld"
+install -m 0755 "$BINARY" "$HELPER_DIR/kupibasvpnd"
 
 echo "==> Готовлю каталог настроек $STATE_DIR"
 install -d -m 0770 -o root -g staff "$STATE_DIR"
@@ -89,6 +89,6 @@ echo
 if launchctl print "system/$LABEL" >/dev/null 2>&1; then
     echo "Служба установлена и запущена (пользователь $ADMIN_USER может править настройки)."
 else
-    echo "Служба установлена, но не отвечает. Смотрите /var/log/kztunnel.log" >&2
+    echo "Служба установлена, но не отвечает. Смотрите /var/log/kupibas-vpn.log" >&2
 fi
-echo "Журнал: /var/log/kztunnel.log"
+echo "Журнал: /var/log/kupibas-vpn.log"

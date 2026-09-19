@@ -65,7 +65,7 @@ Wildberries/Ozon и китайские площадки — напрямую, ч
 netstat -rn -f inet | head -30          # таблица маршрутов
 route -n get ozon.ru                    # каким путём пойдёт запрос
 sudo wg show                            # состояние туннеля, handshake, трафик
-tail -f /var/log/kztunnel.log           # что делает служба
+tail -f /var/log/kupibas-vpn.log           # что делает служба
 ```
 
 Если в выводе `route -n get` интерфейс `utunN` — трафик идёт через VPN,

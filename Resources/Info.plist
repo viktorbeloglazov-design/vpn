@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>KZTunnel</string>
+    <string>Kupibas VPN</string>
     <key>CFBundleDisplayName</key>
-    <string>KZTunnel</string>
+    <string>Kupibas VPN</string>
     <key>CFBundleExecutable</key>
-    <string>KZTunnel</string>
+    <string>KupibasVPN</string>
     <key>CFBundleIdentifier</key>
-    <string>com.kztunnel.app</string>
+    <string>com.kupibas.vpn</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -21,7 +21,7 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>KZTunnel</string>
+    <string>Kupibas VPN</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>

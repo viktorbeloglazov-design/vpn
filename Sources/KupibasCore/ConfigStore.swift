@@ -8,7 +8,7 @@ public enum ConfigStoreError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .directoryMissing:
-            return "Каталог \(Paths.stateDir) не найден — служба kztunneld ещё не установлена."
+            return "Каталог \(Paths.stateDir) не найден — служба kupibasvpnd ещё не установлена."
         case .notWritable(let path):
             return "Нет прав на запись в \(path). Выполните: sudo scripts/install.sh"
         case .io(let message):

@@ -1,13 +1,13 @@
 import SwiftUI
 import AppKit
-import KZTunnelCore
+import KupibasCore
 
 struct MenuBarContent: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Text("KZTunnel — \(model.stateText)")
+        Text("Kupibas VPN — \(model.stateText)")
 
         Button(model.isOn ? "Выключить VPN" : "Включить VPN") {
             model.toggle()

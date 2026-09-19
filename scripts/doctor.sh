@@ -3,15 +3,15 @@
 #   ./scripts/doctor.sh
 set -uo pipefail
 
-LABEL="com.kztunnel.helper"
-STATE_DIR="/Library/Application Support/KZTunnel"
+LABEL="com.kupibas.vpn.helper"
+STATE_DIR="/Library/Application Support/KupibasVPN"
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:$PATH"
 
 ok()   { printf "  \033[32m✓\033[0m %s\n" "$1"; }
 bad()  { printf "  \033[31m✗\033[0m %s\n" "$1"; }
 warn() { printf "  \033[33m!\033[0m %s\n" "$1"; }
 
-echo "KZTunnel — диагностика"
+echo "Kupibas VPN — диагностика"
 echo
 echo "Зависимости:"
 for tool in wg wg-quick wireguard-go; do
@@ -63,11 +63,11 @@ fi
 
 echo
 echo "Туннель:"
-if ifconfig kz0 >/dev/null 2>&1 || [ -f /var/run/wireguard/kz0.name ]; then
-    REAL="$(cat /var/run/wireguard/kz0.name 2>/dev/null || echo kz0)"
+if ifconfig kb0 >/dev/null 2>&1 || [ -f /var/run/wireguard/kb0.name ]; then
+    REAL="$(cat /var/run/wireguard/kb0.name 2>/dev/null || echo kb0)"
     ok "интерфейс: $REAL"
     if [ "$(id -u)" -eq 0 ]; then
-        wg show kz0 2>/dev/null | sed 's/^/    /'
+        wg show kb0 2>/dev/null | sed 's/^/    /'
     else
         warn "для вывода wg show запустите: sudo ./scripts/doctor.sh"
     fi
@@ -95,4 +95,4 @@ fi
 
 echo
 echo "Последние записи журнала:"
-tail -5 /var/log/kztunnel.log 2>/dev/null | sed 's/^/  /' || warn "журнал пуст"
+tail -5 /var/log/kupibas-vpn.log 2>/dev/null | sed 's/^/  /' || warn "журнал пуст"

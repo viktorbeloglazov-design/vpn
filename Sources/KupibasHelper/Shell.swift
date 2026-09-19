@@ -60,7 +60,7 @@ enum Shell {
         var outData = Data()
         var errData = Data()
         let group = DispatchGroup()
-        let queue = DispatchQueue(label: "kztunnel.shell.read", attributes: .concurrent)
+        let queue = DispatchQueue(label: "kupibas.shell.read", attributes: .concurrent)
         queue.async(group: group) { outData = outPipe.fileHandleForReading.readDataToEndOfFile() }
         queue.async(group: group) { errData = errPipe.fileHandleForReading.readDataToEndOfFile() }
 

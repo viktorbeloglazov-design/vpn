@@ -1,5 +1,5 @@
 import XCTest
-@testable import KZTunnelCore
+@testable import KupibasCore
 
 final class ConfigTests: XCTestCase {
 
@@ -75,7 +75,7 @@ final class ConfigTests: XCTestCase {
     }
 
     func testAtomicWriteRoundTrip() throws {
-        let directory = NSTemporaryDirectory() + "kztunnel-tests-\(UUID().uuidString)"
+        let directory = NSTemporaryDirectory() + "kupibas-vpn-tests-\(UUID().uuidString)"
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: directory) }
 

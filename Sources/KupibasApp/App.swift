@@ -1,14 +1,14 @@
 import SwiftUI
 import AppKit
-import KZTunnelCore
+import KupibasCore
 
 @main
-struct KZTunnelApp: App {
+struct KupibasVPNApp: App {
     @StateObject private var model = AppModel()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        Window("KZTunnel", id: "main") {
+        Window("Kupibas VPN", id: "main") {
             MainView()
                 .environmentObject(model)
                 .frame(minWidth: 720, minHeight: 560)

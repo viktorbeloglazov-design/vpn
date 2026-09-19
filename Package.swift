@@ -2,27 +2,27 @@
 import PackageDescription
 
 let package = Package(
-    name: "KZTunnel",
+    name: "KupibasVPN",
     platforms: [.macOS(.v13)],
     targets: [
         .target(
-            name: "KZTunnelCore",
-            path: "Sources/KZTunnelCore"
+            name: "KupibasCore",
+            path: "Sources/KupibasCore"
         ),
         .executableTarget(
-            name: "kztunneld",
-            dependencies: ["KZTunnelCore"],
-            path: "Sources/KZTunnelHelper"
+            name: "kupibasvpnd",
+            dependencies: ["KupibasCore"],
+            path: "Sources/KupibasHelper"
         ),
         .executableTarget(
-            name: "KZTunnelApp",
-            dependencies: ["KZTunnelCore"],
-            path: "Sources/KZTunnelApp"
+            name: "KupibasVPNApp",
+            dependencies: ["KupibasCore"],
+            path: "Sources/KupibasApp"
         ),
         .testTarget(
-            name: "KZTunnelCoreTests",
-            dependencies: ["KZTunnelCore"],
-            path: "Tests/KZTunnelCoreTests"
+            name: "KupibasCoreTests",
+            dependencies: ["KupibasCore"],
+            path: "Tests/KupibasCoreTests"
         ),
     ]
 )

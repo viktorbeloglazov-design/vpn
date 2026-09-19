@@ -2,7 +2,7 @@ import Foundation
 
 final class Logger {
     private let path: String
-    private let queue = DispatchQueue(label: "kztunnel.logger")
+    private let queue = DispatchQueue(label: "kupibas-vpn.logger")
     private let maxSize = 2 * 1024 * 1024
     private let formatter: DateFormatter
 

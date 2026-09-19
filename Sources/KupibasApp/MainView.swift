@@ -1,5 +1,5 @@
 import SwiftUI
-import KZTunnelCore
+import KupibasCore
 
 struct MainView: View {
     @EnvironmentObject private var model: AppModel
@@ -8,9 +8,9 @@ struct MainView: View {
     var body: some View {
         VStack(spacing: 0) {
             if !model.isHelperInstalled {
-                InstallBanner(text: "Служба kztunneld не установлена. Без неё переключатель не сработает.")
+                InstallBanner(text: "Служба kupibasvpnd не установлена. Без неё переключатель не сработает.")
             } else if !model.isDaemonRunning {
-                InstallBanner(text: "Служба kztunneld не отвечает. Проверьте: sudo launchctl print system/\(Paths.daemonLabel)")
+                InstallBanner(text: "Служба kupibasvpnd не отвечает. Проверьте: sudo launchctl print system/\(Paths.daemonLabel)")
             }
 
             PowerHeader()

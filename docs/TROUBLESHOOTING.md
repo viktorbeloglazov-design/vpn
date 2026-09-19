@@ -11,8 +11,8 @@ sudo ./scripts/doctor.sh
 
 ```bash
 sudo ./scripts/install.sh
-sudo launchctl print system/com.kztunnel.helper | head -20
-tail -20 /var/log/kztunnel.log
+sudo launchctl print system/com.kupibas.vpn.helper | head -20
+tail -20 /var/log/kupibas-vpn.log
 ```
 
 Частая причина — не установлены зависимости: `brew install wireguard-tools wireguard-go`.
@@ -61,8 +61,8 @@ sudo wg show
 ## После выключения VPN пропал интернет
 
 ```bash
-sudo wg-quick down /var/run/kztunnel/kz0.conf
-sudo launchctl kickstart -k system/com.kztunnel.helper
+sudo wg-quick down /var/run/kupibas-vpn/kb0.conf
+sudo launchctl kickstart -k system/com.kupibas.vpn.helper
 networksetup -setv6automatic Wi-Fi
 ```
 
@@ -71,11 +71,11 @@ networksetup -setv6automatic Wi-Fi
 
 ## Не сохраняются настройки
 
-Приложение пишет в `/Library/Application Support/KZTunnel/config.json`.
+Приложение пишет в `/Library/Application Support/KupibasVPN/config.json`.
 Права должны быть такими:
 
 ```bash
-ls -ld "/Library/Application Support/KZTunnel"
+ls -ld "/Library/Application Support/KupibasVPN"
 # drwxrwx---  root  staff
 ```
 

@@ -1,7 +1,7 @@
 import Foundation
-import KZTunnelCore
+import KupibasCore
 
-// kztunneld — привилегированная служба KZTunnel.
+// kupibasvpnd — привилегированная служба Kupibas VPN.
 // Запускается launchd от root, раз в секунду сверяет config.json с реальным
 // состоянием сети и публикует status.json для интерфейса.
 
@@ -10,7 +10,7 @@ setvbuf(stdout, nil, _IOLBF, 0)
 let log = Logger(path: Paths.logFile)
 
 guard getuid() == 0 else {
-    FileHandle.standardError.write(Data("kztunneld должен запускаться от root (через launchd).\n".utf8))
+    FileHandle.standardError.write(Data("kupibasvpnd должен запускаться от root (через launchd).\n".utf8))
     exit(1)
 }
 
@@ -25,7 +25,7 @@ if !fileManager.fileExists(atPath: Paths.stateDir) {
 let manager = TunnelManager(log: log)
 manager.recoverOnStartup()
 
-let signalQueue = DispatchQueue(label: "kztunnel.signals")
+let signalQueue = DispatchQueue(label: "kupibas.signals")
 var sources: [DispatchSourceSignal] = []
 for number in [SIGTERM, SIGINT] {
     signal(number, SIG_IGN)
@@ -39,7 +39,7 @@ for number in [SIGTERM, SIGINT] {
     sources.append(source)
 }
 
-log.info("kztunneld запущен.")
+log.info("kupibasvpnd запущен.")
 
 while true {
     manager.tick()

@@ -1,5 +1,5 @@
 import Foundation
-import KZTunnelCore
+import KupibasCore
 
 /// Приводит фактическое состояние сети к тому, что записано в config.json.
 ///
