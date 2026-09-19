@@ -54,6 +54,9 @@ class Session(
     @Volatile
     private var running = true
 
+    @Volatile
+    private var heardFromCar = false
+
     private var ssl: SslLink? = null
     private var secure = false
     private var discovery: Discovery? = null
@@ -67,9 +70,11 @@ class Session(
 
     override fun run() {
         onStage(Stage.VERSION, "жду запрос версии от машины")
+        watchSilence()
         try {
             while (running) {
                 val message = codec.readMessage()
+                heardFromCar = true
                 if (message.channel == Control.CHANNEL) handleControl(message) else handleChannel(message)
             }
         } catch (e: Exception) {
@@ -78,6 +83,24 @@ class Session(
             stopStreams()
             onStage(Stage.CLOSED, "соединение закрыто")
         }
+    }
+
+    /**
+     * Разговор всегда начинает машина: запрос версии идёт от неё. Если она
+     * молчит, дело не в очерёдности, а в том, что до протокола не дошло —
+     * и об этом лучше сказать прямо, а не ждать вечно.
+     */
+    private fun watchSilence() {
+        Thread({
+            Thread.sleep(SILENCE_TIMEOUT_MS)
+            if (running && !heardFromCar) {
+                log(
+                    "машина молчит ${SILENCE_TIMEOUT_MS / 1000} с. Обычно это значит одно из трёх: " +
+                        "кабель без передачи данных, порт USB только для зарядки " +
+                        "или в настройках машины выключена проекция смартфона."
+                )
+            }
+        }, "carlink-watchdog").apply { isDaemon = true }.start()
     }
 
     fun stop() {
@@ -347,6 +370,8 @@ class Session(
     fun statistics(): String = "кадров отправлено $frames, подтверждено $acks"
 
     companion object {
+        private const val SILENCE_TIMEOUT_MS = 8_000L
+
         const val PROTOCOL_MAJOR = 1
         const val PROTOCOL_MINOR = 1
 
