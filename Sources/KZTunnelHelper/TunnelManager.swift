@@ -214,9 +214,11 @@ final class TunnelManager {
     /// Разворачивает правила в набор подсетей, которые можно скормить маршрутизатору.
     private func resolveRules(_ config: TunnelConfig) -> Set<String> {
         var result: Set<String> = []
+        // В режиме include адрес должен быть достижим через туннель, в остальных —
+        // через физический канал, которого при отключённом IPv6 просто нет.
         let allowIPv6 = config.mode == .include
             ? config.server.hasIPv6Address
-            : (savedDefaultRouteV6 != nil)
+            : (savedDefaultRouteV6 != nil && !config.options.disableIPv6)
 
         for rule in config.activeRules {
             switch rule.kind {

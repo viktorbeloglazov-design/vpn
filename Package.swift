@@ -19,5 +19,10 @@ let package = Package(
             dependencies: ["KZTunnelCore"],
             path: "Sources/KZTunnelApp"
         ),
+        .testTarget(
+            name: "KZTunnelCoreTests",
+            dependencies: ["KZTunnelCore"],
+            path: "Tests/KZTunnelCoreTests"
+        ),
     ]
 )

@@ -18,6 +18,9 @@ jobs:
       - name: Сборка (release)
         run: swift build -c release
 
+      - name: Тесты ядра
+        run: swift test
+
       - name: Проверка синтаксиса скриптов
         run: |
           for f in scripts/*.sh server/*.sh; do
