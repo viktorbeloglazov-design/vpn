@@ -7,6 +7,14 @@ on:
       - "carlink/**"
       - ".github/workflows/carlink.yml"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия, например 0.1.0"
+        required: true
+        default: "0.1.0"
+
+permissions:
+  contents: write
 
 jobs:
   apk:
@@ -39,7 +47,24 @@ jobs:
 
       - name: Сборка APK и стенда
         working-directory: carlink
-        run: gradle :app:assembleDebug :headunit:installDist --no-daemon --stacktrace
+        run: gradle :app:assembleRelease :headunit:installDist --no-daemon --stacktrace
+
+      - name: Подготовить файлы
+        id: files
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="dev"
+          fi
+          APK="carlink/app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK"
+          mkdir -p dist
+          cp "$APK" "dist/CarLink-$VERSION.apk"
+          # Стенд кладём рядом одним архивом: распаковал и запустил.
+          (cd carlink/headunit/build/install && zip -qr "$GITHUB_WORKSPACE/dist/CarLink-headunit-$VERSION.zip" headunit)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          ls -lh dist/
 
       - name: Проверяю манифест
         run: |
@@ -56,11 +81,31 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: CarLink-apk
-          path: carlink/app/build/outputs/apk/debug/*.apk
+          path: dist/*.apk
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         with:
           name: CarLink-headunit
-          path: carlink/headunit/build/install/headunit
+          path: dist/*.zip
           if-no-files-found: error
+
+      - name: Опубликовать в релизе
+        # Релиз нужен ради прямой ссылки: артефакт сборки качается архивом и
+        # только из-под входа, а с телефона так не поставишь.
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.files.outputs.version }}"
+          TAG="carlink-v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+            gh release edit "$TAG" --notes-file .github/release-notes-carlink.md
+          else
+            gh release create "$TAG" dist/* \
+              --target "$GITHUB_SHA" \
+              --title "CarLink $VERSION" \
+              --notes-file .github/release-notes-carlink.md
+          fi
+          echo "Ссылка: $(gh release view "$TAG" --json url --jq .url)"

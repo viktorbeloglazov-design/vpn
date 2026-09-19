@@ -17,10 +17,27 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        create("sideload") {
+            // Тот же ключ, что у приложения VPN: он лежит в репозитории
+            // осознанно, потому что программа ставится файлом, а не из магазина.
+            // Нужен, чтобы обновление вставало поверх прошлой версии, а не
+            // упиралось в «подписи не совпадают».
+            storeFile = file("../../android/app/qpvpn-sideload.jks")
+            storePassword = "qpvpn-sideload"
+            keyAlias = "qpvpn"
+            keyPassword = "qpvpn-sideload"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("sideload")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("sideload")
         }
     }
 
