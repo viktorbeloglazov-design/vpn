@@ -66,8 +66,15 @@ jobs:
 
       - name: Проверяю библиотеку
         run: |
-          ls -lh android/app/libs/awg-tunnel.aar
-          unzip -l android/app/libs/awg-tunnel.aar | grep -E "classes.jar|\.so$" | head -8
+          AAR="android/app/libs/awg-tunnel.aar"
+          if [ ! -f "$AAR" ]; then
+            echo "Библиотека не появилась по пути $AAR" >&2
+            find . -name "*.aar" | head >&2
+            exit 1
+          fi
+          ls -lh "$AAR"
+          echo "--- содержимое ---"
+          unzip -l "$AAR" | grep -E "classes|\.so" | head -10 || true
 
       - name: Определить версию
         id: version

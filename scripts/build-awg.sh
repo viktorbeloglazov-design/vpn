@@ -9,6 +9,11 @@
 set -euo pipefail
 
 OUT="${1:?укажите, куда положить .aar}"
+# Путь разворачиваем сразу: дальше скрипт уходит в каталог сборки,
+# и относительный путь указывал бы уже не туда.
+mkdir -p "$(dirname "$OUT")"
+OUT="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -27,6 +32,5 @@ if [ -z "$AAR" ]; then
     exit 1
 fi
 
-mkdir -p "$(dirname "$OUT")"
 cp "$AAR" "$OUT"
 echo "Готово: $OUT ($(du -h "$OUT" | cut -f1))"
