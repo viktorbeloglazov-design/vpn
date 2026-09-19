@@ -6,3 +6,7 @@ dist/
 .DS_Store
 *.conf.local
 secrets/
+keenetic-*.conf
+keenetic-*.cli.txt
+peer-*.conf
+peer-*.png
