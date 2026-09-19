@@ -8,7 +8,7 @@
 |---|---|
 | Android | QP VPN, файл `.apk` внутри архива |
 | Mac | QP VPN, файл `.dmg` внутри архива |
-| Windows | AmneziaVPN — бесплатный клиент, ставится с amnezia.org |
+| Windows | QP VPN, архив качается по ссылке из инструкции |
 | iPhone | DefaultVPN — бесплатный клиент из App Store (AmneziaVPN в российском магазине скрыт) |
 
 В папках Android, iPhone и Windows лежит ещё и QR-код на саму загрузку
