@@ -26,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kz.qpvpn.model.AppsMode
+import kz.qpvpn.model.MasterFilter
 import kz.qpvpn.model.ConnectionState
 import kz.qpvpn.model.RoutingRule
 import kz.qpvpn.model.RuleKind
@@ -132,6 +133,8 @@ class MainActivity : ComponentActivity() {
                         profileProtocol = profileProtocol,
                         apps = installedApps,
                         ruZoneCount = ruZoneCount,
+                        masterCount = MasterFilter.count,
+                        masterSections = MasterFilter.sections.map { it.title to it.domains.size },
                         ipText = ipText,
                         ipIsKazakhstan = ipIsKazakhstan,
                         checkingIp = checkingIp,
@@ -139,6 +142,7 @@ class MainActivity : ComponentActivity() {
                     actions = ScreenActions(
                         onToggle = ::toggleTunnel,
                         onModeChange = ::changeMode,
+                        onMainFilterChange = ::changeMainFilter,
                         onAddRule = ::addRule,
                         onToggleRule = ::toggleRule,
                         onDeleteRule = ::deleteRule,
@@ -186,6 +190,12 @@ class MainActivity : ComponentActivity() {
     }
 
     // MARK: - Правила
+
+    /** Главный фильтр сам задаёт маршруты, поэтому туннель пересобирается. */
+    private fun changeMainFilter(enabled: Boolean) {
+        app.store.update { it.copy(mainFilter = enabled) }
+        reapplyRoutes()
+    }
 
     private fun changeMode(mode: TunnelMode) {
         app.store.update { it.copy(mode = mode) }

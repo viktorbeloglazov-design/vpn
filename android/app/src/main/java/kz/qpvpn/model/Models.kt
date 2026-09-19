@@ -93,6 +93,15 @@ data class TunnelOptions(
 data class AppConfig(
     val version: Int = 1,
     val enabled: Boolean = false,
+
+    /**
+     * Главный фильтр: через VPN идёт только то, что не работает из России.
+     *
+     * Включён по умолчанию и перекрывает режим маршрутизации — всё остальное
+     * настраивается в расширенных настройках.
+     */
+    val mainFilter: Boolean = true,
+
     val mode: TunnelMode = TunnelMode.FULL,
     val rules: List<RoutingRule> = emptyList(),
     val appsMode: AppsMode = AppsMode.OFF,
@@ -101,6 +110,10 @@ data class AppConfig(
 ) {
     val activeRules: List<RoutingRule>
         get() = rules.filter { it.enabled && it.value.isNotBlank() }
+
+    /** Режим, который действительно применяется с учётом главного фильтра. */
+    val effectiveMode: TunnelMode
+        get() = if (mainFilter) TunnelMode.INCLUDE else mode
 }
 
 enum class ConnectionState {

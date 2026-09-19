@@ -20,6 +20,7 @@ import kz.qpvpn.data.Store
 import kz.qpvpn.model.AppConfig
 import kz.qpvpn.model.ConnectionState
 import kz.qpvpn.model.RuleKind
+import kz.qpvpn.model.MasterFilter
 import kz.qpvpn.model.TunnelMode
 import kz.qpvpn.model.TunnelStatus
 import kz.qpvpn.net.Cidr
@@ -81,7 +82,7 @@ class TunnelController(
         }
 
         val config = store.config.value
-        val wantsRuZone = config.options.bypassRuZone && config.mode == TunnelMode.EXCLUDE
+        val wantsRuZone = config.options.bypassRuZone && config.effectiveMode == TunnelMode.EXCLUDE
         val wantsIpv6 = config.options.blockIpv6 || profile.hasIpv6Address
 
         // Попытки от полной к упрощённой. Российский список — это тысячи
@@ -144,7 +145,7 @@ class TunnelController(
         }
 
         val config = store.config.value
-        val useRuZone = config.options.bypassRuZone && config.mode == TunnelMode.EXCLUDE
+        val useRuZone = config.options.bypassRuZone && config.effectiveMode == TunnelMode.EXCLUDE
         val routes = routesFor(config, profile, useRuZone)
         if (routes == appliedRoutes) return
 
@@ -166,13 +167,13 @@ class TunnelController(
         withIpv6: Boolean,
     ) {
         val allowed = routes.toMutableList()
-        if (withIpv6 && config.mode != TunnelMode.INCLUDE) {
+        if (withIpv6 && config.effectiveMode != TunnelMode.INCLUDE) {
             allowed += "::/0"
         }
 
         val text = profile.toConfigText(
             allowedIps = allowed,
-            includeDns = config.options.useTunnelDns && config.mode != TunnelMode.INCLUDE,
+            includeDns = config.options.useTunnelDns && config.effectiveMode != TunnelMode.INCLUDE,
             appsMode = config.appsMode,
             apps = config.selectedApps,
         )
@@ -184,10 +185,10 @@ class TunnelController(
     }
 
     /** Считает список подсетей, которые должны уходить в туннель. */
-    private fun routesFor(config: AppConfig, profile: WgProfile, useRuZone: Boolean): List<String> {
+    private suspend fun routesFor(config: AppConfig, profile: WgProfile, useRuZone: Boolean): List<String> {
         val nets = resolveRules(config)
 
-        return when (config.mode) {
+        return when (config.effectiveMode) {
             TunnelMode.FULL -> listOf("0.0.0.0/0")
 
             TunnelMode.INCLUDE -> if (nets.isEmpty()) {
@@ -215,13 +216,29 @@ class TunnelController(
         }
     }
 
-    private fun resolveRules(config: AppConfig): List<Ipv4Net> {
+    /**
+     * Разворачивает правила в адреса.
+     *
+     * Когда включён главный фильтр, к правилам пользователя добавляется
+     * встроенный список сервисов, которые не работают с российского адреса.
+     */
+    private suspend fun resolveRules(config: AppConfig): List<Ipv4Net> {
         val result = mutableListOf<Ipv4Net>()
+        val domains = mutableListOf<String>()
+
         for (rule in config.activeRules) {
             when (rule.kind) {
                 RuleKind.CIDR -> Cidr.parse(rule.value)?.let { result += it }
-                RuleKind.DOMAIN -> result += DomainResolver.resolveWithWww(rule.value.trim().lowercase())
+                RuleKind.DOMAIN -> domains += rule.value.trim().lowercase()
             }
+        }
+
+        if (config.mainFilter) {
+            domains += MasterFilter.domains
+        }
+
+        if (domains.isNotEmpty()) {
+            result += DomainResolver.resolveAll(domains)
         }
         return result.distinct()
     }

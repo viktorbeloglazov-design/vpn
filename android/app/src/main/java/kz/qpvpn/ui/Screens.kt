@@ -101,6 +101,8 @@ data class ScreenState(
     val profileProtocol: String,
     val apps: List<AppEntry>,
     val ruZoneCount: Int,
+    val masterCount: Int,
+    val masterSections: List<Pair<String, Int>>,
     val ipText: String,
     val ipIsKazakhstan: Boolean,
     val checkingIp: Boolean,
@@ -109,6 +111,7 @@ data class ScreenState(
 data class ScreenActions(
     val onToggle: () -> Unit,
     val onModeChange: (TunnelMode) -> Unit,
+    val onMainFilterChange: (Boolean) -> Unit,
     val onAddRule: (RuleKind, String) -> String?,
     val onToggleRule: (String, Boolean) -> Unit,
     val onDeleteRule: (String) -> Unit,
@@ -321,16 +324,28 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(state.config.mode.title, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            state.config.mode.subtitle,
+                            if (state.config.mainFilter) "Обход блокировок" else state.config.mode.title,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            if (state.config.mainFilter)
+                                "${state.masterCount} сервисов через VPN, остальное напрямую"
+                            else
+                                state.config.mode.subtitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    Switch(
+                        checked = state.config.mainFilter,
+                        onCheckedChange = { actions.onMainFilterChange(it) },
+                    )
                 }
-                if (state.config.mode != TunnelMode.FULL) {
-                    KeyValueRow("Активных правил", state.config.activeRules.size.toString())
+                if (state.config.effectiveMode != TunnelMode.FULL) {
+                    if (!state.config.mainFilter) {
+                        KeyValueRow("Активных правил", state.config.activeRules.size.toString())
+                    }
                     KeyValueRow("Маршрутов в туннеле", status.routeCount.toString())
                 }
                 if (state.config.appsMode != AppsMode.OFF) {
@@ -381,136 +396,221 @@ private fun RoutesSection(state: ScreenState, actions: ScreenActions) {
     var newValue by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var kindMenu by remember { mutableStateOf(false) }
+    var advanced by remember { mutableStateOf(false) }
+    var whatsInside by remember { mutableStateOf(false) }
 
     val existing = remember(state.config.rules) {
         state.config.rules.map { "${it.kind}:${it.value.lowercase()}" }.toSet()
     }
+    val colors = LocalAppColors.current
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        // ——— Главный фильтр ———
         item {
-            SectionHeader("Что идёт через VPN", "Выберите, как делится трафик")
-        }
+            SectionHeader("Главное", "Один переключатель на все заблокированные сервисы")
 
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ModeCard(
-                    selected = state.config.mode == TunnelMode.FULL,
-                    icon = Icons.Filled.Shield,
-                    title = TunnelMode.FULL.title,
-                    subtitle = TunnelMode.FULL.subtitle,
-                    onClick = { actions.onModeChange(TunnelMode.FULL) },
-                )
-                ModeCard(
-                    selected = state.config.mode == TunnelMode.INCLUDE,
-                    icon = Icons.Filled.CallSplit,
-                    title = TunnelMode.INCLUDE.title,
-                    subtitle = TunnelMode.INCLUDE.subtitle,
-                    onClick = { actions.onModeChange(TunnelMode.INCLUDE) },
-                )
-                ModeCard(
-                    selected = state.config.mode == TunnelMode.EXCLUDE,
-                    icon = Icons.Filled.AltRoute,
-                    title = TunnelMode.EXCLUDE.title,
-                    subtitle = TunnelMode.EXCLUDE.subtitle,
-                    onClick = { actions.onModeChange(TunnelMode.EXCLUDE) },
-                )
-            }
-        }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (state.config.mainFilter) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surface
+                ),
+                border = BorderStroke(
+                    if (state.config.mainFilter) 1.5.dp else 1.dp,
+                    if (state.config.mainFilter) MaterialTheme.colorScheme.primary else colors.cardBorder,
+                ),
+                shape = RoundedCornerShape(18.dp),
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Обход блокировок", style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                "${state.masterCount} ${plural(state.masterCount, "сервис", "сервиса", "сервисов")} · " +
+                                    "нейросети, соцсети, мессенджеры, видео, работа",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Switch(
+                            checked = state.config.mainFilter,
+                            onCheckedChange = { actions.onMainFilterChange(it) },
+                        )
+                    }
 
-        item {
-            SectionHeader("Российская зона", "Встроенный список адресов России")
-            RuZoneCard(state, actions)
-        }
+                    Text(
+                        if (state.config.mainFilter)
+                            "Через VPN идут только эти сервисы. Всё остальное — банки, госуслуги, маркетплейсы, любой российский сайт — работает напрямую, как без VPN."
+                        else
+                            "Выключен: маршруты задаются вручную в расширенных настройках.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (state.config.mainFilter) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
 
-        item {
-            SectionHeader("Готовые наборы", "Собраны под работу из России через зарубежный сервер")
-        }
+                    TextButton(onClick = { whatsInside = !whatsInside }) {
+                        Text(if (whatsInside) "Свернуть список" else "Что внутри")
+                    }
 
-        item {
-            Text(
-                "В туннель — то, что не открывается с российского адреса",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-
-        items(Presets.throughVpn, key = { "p-" + it.id }) { preset ->
-            PresetCard(
-                title = preset.title,
-                subtitle = preset.subtitle,
-                count = preset.count,
-                directionLabel = preset.direction.title,
-                throughVpn = true,
-                added = preset.values.all { "${it.first}:${it.second.lowercase()}" in existing },
-                onAdd = { actions.onAddPreset(preset) },
-            )
-        }
-
-        item {
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "Мимо туннеля — то, чему нужен российский адрес",
-                style = MaterialTheme.typography.labelMedium,
-                color = LocalAppColors.current.waiting,
-            )
-        }
-
-        items(Presets.direct, key = { "d-" + it.id }) { preset ->
-            PresetCard(
-                title = preset.title,
-                subtitle = preset.subtitle,
-                count = preset.count,
-                directionLabel = preset.direction.title,
-                throughVpn = false,
-                added = preset.values.all { "${it.first}:${it.second.lowercase()}" in existing },
-                onAdd = { actions.onAddPreset(preset) },
-            )
-        }
-
-        item {
-            SectionHeader("Своё правило", "Домен или подсеть")
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box {
-                    OutlinedButton(onClick = { kindMenu = true }) { Text(newKind.title) }
-                    DropdownMenu(expanded = kindMenu, onDismissRequest = { kindMenu = false }) {
-                        RuleKind.entries.forEach { kind ->
-                            DropdownMenuItem(text = { Text(kind.title) }, onClick = {
-                                newKind = kind
-                                kindMenu = false
-                            })
+                    if (whatsInside) {
+                        state.masterSections.forEach { section ->
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    section.first,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    section.second.toString(),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
-                OutlinedTextField(
-                    value = newValue,
-                    onValueChange = { newValue = it },
-                    singleLine = true,
-                    placeholder = { Text(if (newKind == RuleKind.DOMAIN) "kaspi.kz" else "92.46.0.0/16") },
-                    modifier = Modifier.weight(1f),
-                )
-                Button(onClick = {
-                    error = actions.onAddRule(newKind, newValue)
-                    if (error == null) newValue = ""
-                }) { Text("+") }
-            }
-            error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
 
-        if (state.config.rules.isNotEmpty()) {
-            item {
-                SectionHeader(
-                    "Правила",
-                    "${state.config.rules.size} ${plural(state.config.rules.size, "штука", "штуки", "штук")}",
+        // ——— Расширенные настройки ———
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable { advanced = !advanced }
+                    .padding(vertical = 14.dp, horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Расширенные настройки", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Режимы, зона .ru, свои правила и наборы",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    if (advanced) "▲" else "▼",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            items(state.config.rules, key = { it.id }) { rule ->
-                RuleRow(rule, state.config.mode, actions)
+        }
+
+        if (advanced) {
+            item {
+                if (state.config.mainFilter) {
+                    Text(
+                        "Главный фильтр включён — он задаёт маршруты сам. Настройки ниже начнут действовать, когда вы его выключите.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.waiting,
+                    )
+                }
+            }
+
+            item {
+                SectionHeader("Режим маршрутизации")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ModeCard(
+                        selected = state.config.mode == TunnelMode.FULL,
+                        icon = Icons.Filled.Shield,
+                        title = TunnelMode.FULL.title,
+                        subtitle = TunnelMode.FULL.subtitle,
+                        onClick = { actions.onModeChange(TunnelMode.FULL) },
+                    )
+                    ModeCard(
+                        selected = state.config.mode == TunnelMode.INCLUDE,
+                        icon = Icons.Filled.CallSplit,
+                        title = TunnelMode.INCLUDE.title,
+                        subtitle = TunnelMode.INCLUDE.subtitle,
+                        onClick = { actions.onModeChange(TunnelMode.INCLUDE) },
+                    )
+                    ModeCard(
+                        selected = state.config.mode == TunnelMode.EXCLUDE,
+                        icon = Icons.Filled.AltRoute,
+                        title = TunnelMode.EXCLUDE.title,
+                        subtitle = TunnelMode.EXCLUDE.subtitle,
+                        onClick = { actions.onModeChange(TunnelMode.EXCLUDE) },
+                    )
+                }
+            }
+
+            item {
+                SectionHeader("Российская зона", "Встроенный список адресов России")
+                RuZoneCard(state, actions)
+            }
+
+            item {
+                SectionHeader("Наборы для прямого канала", "Пригодятся в режиме «всё через VPN, кроме правил»")
+            }
+
+            items(Presets.direct, key = { "d-" + it.id }) { preset ->
+                PresetCard(
+                    title = preset.title,
+                    subtitle = preset.subtitle,
+                    count = preset.count,
+                    directionLabel = preset.direction.title,
+                    throughVpn = false,
+                    added = preset.values.all { "${it.first}:${it.second.lowercase()}" in existing },
+                    onAdd = { actions.onAddPreset(preset) },
+                )
+            }
+
+            item {
+                SectionHeader("Своё правило", "Домен или подсеть")
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box {
+                        OutlinedButton(onClick = { kindMenu = true }) { Text(newKind.title) }
+                        DropdownMenu(expanded = kindMenu, onDismissRequest = { kindMenu = false }) {
+                            RuleKind.entries.forEach { kind ->
+                                DropdownMenuItem(text = { Text(kind.title) }, onClick = {
+                                    newKind = kind
+                                    kindMenu = false
+                                })
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = newValue,
+                        onValueChange = { newValue = it },
+                        singleLine = true,
+                        placeholder = { Text(if (newKind == RuleKind.DOMAIN) "kaspi.kz" else "92.46.0.0/16") },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Button(onClick = {
+                        error = actions.onAddRule(newKind, newValue)
+                        if (error == null) newValue = ""
+                    }) { Text("+") }
+                }
+                error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            if (state.config.rules.isNotEmpty()) {
+                item {
+                    SectionHeader(
+                        "Свои правила",
+                        "${state.config.rules.size} ${plural(state.config.rules.size, "штука", "штуки", "штук")}",
+                    )
+                }
+                items(state.config.rules, key = { it.id }) { rule ->
+                    RuleRow(rule, state.config.mode, actions)
+                }
             }
         }
     }
