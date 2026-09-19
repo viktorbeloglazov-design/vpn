@@ -57,7 +57,8 @@ bash "$SCRIPT_DIR/set-server-mtu.sh" "$MTU" >/dev/null
 HOME_USER="${SUDO_USER:-ubuntu}"
 HOME_DIR="$(getent passwd "$HOME_USER" | cut -d: -f6)"
 if [ -n "$HOME_DIR" ] && [ -d "$HOME_DIR" ]; then
-    rm -f "$HOME_DIR/${PREFIX}"*.conf
+    # Убираем все прежние конфиги: их ключей на сервере больше нет, а перепутать легко.
+    rm -f "$HOME_DIR"/*.conf
     for f in /etc/wireguard/clients/*/*.conf; do
         cp "$f" "$HOME_DIR/"
     done
