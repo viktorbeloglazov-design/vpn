@@ -8,7 +8,9 @@ set -uo pipefail
 WG_IF="wg0"
 WG_NET="10.8.0.0/24"
 FIX=0
+WATCH=0
 [ "${1:-}" = "--fix" ] && FIX=1
+[ "${1:-}" = "--watch" ] && WATCH=1
 
 ok()   { printf "  \033[32m✓\033[0m %s\n" "$1"; }
 bad()  { printf "  \033[31m✗\033[0m %s\n" "$1"; PROBLEMS=$((PROBLEMS + 1)); }
@@ -18,6 +20,41 @@ PROBLEMS=0
 if [ "$(id -u)" -ne 0 ]; then
     echo "Запустите с правами root: sudo bash $0 ${1:-}" >&2
     exit 1
+fi
+
+
+if [ "$WATCH" = "1" ]; then
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "Запустите с правами root: sudo bash $0 --watch" >&2
+        exit 1
+    fi
+    command -v tcpdump >/dev/null 2>&1 || apt-get install -y tcpdump >/dev/null 2>&1
+
+    echo "Наблюдение за туннелем — 20 секунд."
+    echo "ПРЯМО СЕЙЧАС включите VPN на устройстве и откройте любой сайт."
+    echo
+
+    BEFORE="$(wg show "$WG_IF" transfer)"
+    timeout 20 tcpdump -ni "$WG_IF" -c 15 2>/dev/null | sed 's/^/  /' > /tmp/wgdump.txt
+    AFTER="$(wg show "$WG_IF" transfer)"
+
+    echo "Пакеты внутри туннеля (что сервер расшифровал):"
+    if [ -s /tmp/wgdump.txt ]; then
+        cat /tmp/wgdump.txt
+    else
+        echo "  ПУСТО — ни одного пакета от клиента не дошло."
+    fi
+
+    echo
+    echo "Счётчики до наблюдения:"; printf '%s\n' "$BEFORE" | sed 's/^/  /'
+    echo "Счётчики после:";          printf '%s\n' "$AFTER"  | sed 's/^/  /'
+    echo
+    echo "Рукопожатия:"; wg show "$WG_IF" latest-handshakes | sed 's/^/  /'
+    echo
+    echo "Столбцы transfer: публичный ключ, принято сервером, отправлено сервером."
+    echo "Если принято растёт, а отправлено стоит — сервер не выпускает трафик наружу."
+    echo "Если оба по нулям — пакеты клиента до сервера не доходят."
+    exit 0
 fi
 
 WAN="$(ip route show default | awk '/default/ {print $5; exit}')"
