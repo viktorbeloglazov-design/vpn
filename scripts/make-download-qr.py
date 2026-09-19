@@ -18,7 +18,7 @@ stage, apk = sys.argv[1], sys.argv[2]
 
 links = {
     "Android/QR-скачать-приложение.png": apk,
-    "iPhone/QR-скачать-AmneziaVPN.png": "https://apps.apple.com/app/amneziavpn/id1600529900",
+    "iPhone/QR-скачать-приложение.png": "https://apps.apple.com/app/defaultvpn/id6744725017",
     "Windows/QR-скачать-AmneziaVPN.png": "https://amnezia.org/ru/downloads",
 }
 

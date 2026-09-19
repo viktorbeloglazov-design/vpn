@@ -8,7 +8,7 @@ Premium VPN · Special for Kupibas Group
   Android  — приложение QP VPN (файл .apk) + инструкция
   Mac      — приложение QP VPN (файл .dmg) + инструкция
   Windows  — инструкция: ставится клиент AmneziaVPN
-  iPhone   — инструкция: ставится AmneziaVPN из App Store
+  iPhone   — инструкция: ставится DefaultVPN из App Store
 
 Что вам пришлют отдельно: QR-код или ссылку вида vpn://…
 Это ваш личный ключ доступа. QR-код и ссылка — одно и то же:
