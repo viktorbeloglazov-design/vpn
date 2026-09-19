@@ -28,10 +28,15 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
-
       - name: Компоненты Android SDK
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+        run: |
+          # На раннере SDK уже стоит: пользуемся им напрямую, потому что
+          # setup-android тянет пакет tools, которого больше не существует.
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"
+          echo "sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
