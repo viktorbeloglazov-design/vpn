@@ -3,6 +3,12 @@ name: build
 on:
   push:
     branches: ["**"]
+    # Правки инструкций и описаний не трогают приложение — сборку не гоняем.
+    paths-ignore:
+      - "kit/**"
+      - "docs/**"
+      - "android/**"
+      - "**/*.md"
   pull_request:
 
 jobs:
