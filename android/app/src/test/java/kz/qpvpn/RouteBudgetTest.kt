@@ -102,9 +102,17 @@ class RouteBudgetTest {
         val nets = listOf(Cidr.parse("10.0.0.0/24")!!, Cidr.parse("10.0.2.0/24")!!)
         val merged = Cidr.mergeWithGap(nets, gap = 512)
 
-        assertEquals("должен получиться один кусок", 1, Cidr.merge(merged).size)
+        // Между подсетями 256 адресов — при таком зазоре они склеиваются
+        // в один непрерывный кусок. Префиксов при этом может быть несколько:
+        // 768 адресов одним префиксом не описать.
         val covered = merged.sumOf { it.size }
-        assertTrue("склейка обязана покрывать исходные подсети", covered >= 512)
+        assertEquals("склейка обязана покрыть обе подсети и промежуток", 768L, covered)
+        assertTrue("кусок должен быть непрерывным", merged.zipWithNext().all {
+            it.first.endInclusive + 1 == it.second.start.toLong()
+        })
+
+        // Без прощения промежутка склейки не происходит.
+        assertEquals(512L, Cidr.merge(nets).sumOf { it.size })
     }
 
     @Test
