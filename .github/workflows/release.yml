@@ -60,6 +60,30 @@ jobs:
           echo "Архитектуры службы:     $(lipo -archs "$APP/Contents/Library/Helpers/kupibasvpnd")"
           codesign --verify --strict "$APP"
 
+      - name: Проверить, что приложение запускается
+        run: |
+          APP="$PWD/dist/KupibasVPN.app"
+          LOG="$HOME/Library/Logs/KupibasVPN.log"
+          rm -f "$LOG"
+
+          open "$APP"
+          sleep 10
+
+          if pgrep -f "KupibasVPN.app/Contents/MacOS/KupibasVPN" > /dev/null; then
+            echo "Приложение запущено и держится в памяти."
+            echo "--- журнал запуска ---"
+            cat "$LOG" 2>/dev/null || echo "(журнал пуст)"
+            pkill -f "KupibasVPN.app/Contents/MacOS/KupibasVPN" || true
+          else
+            echo "Приложение не осталось в памяти — запуск оборвался." >&2
+            echo "--- журнал запуска ---" >&2
+            cat "$LOG" 2>/dev/null || echo "(журнал пуст)" >&2
+            echo "--- отчёты о падении ---" >&2
+            ls -t "$HOME/Library/Logs/DiagnosticReports" 2>/dev/null | head -3 >&2 || true
+            find "$HOME/Library/Logs/DiagnosticReports" -name "KupibasVPN*" -mmin -5 -exec head -40 {} \; 2>/dev/null >&2 || true
+            exit 1
+          fi
+
       - name: Собрать DMG
         run: ./scripts/make-dmg.sh "${{ steps.version.outputs.value }}"
 
