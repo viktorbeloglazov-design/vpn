@@ -1,0 +1,58 @@
+name: carlink
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "carlink/**"
+      - ".github/workflows/carlink.yml"
+  workflow_dispatch:
+
+jobs:
+  apk:
+    name: Сборка CarLink
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Компоненты Android SDK
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Тесты
+        working-directory: carlink
+        run: gradle test --no-daemon --stacktrace
+
+      - name: Сборка APK
+        working-directory: carlink
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Проверяю манифест
+        run: |
+          # Без подписки на строки аксессуара машина не запустит приложение,
+          # а без службы переднего плана оборвётся захват экрана.
+          MANIFEST="$(find carlink/app/build/intermediates -name AndroidManifest.xml -path "*merged*" | head -1)"
+          echo "манифест: $MANIFEST"
+          grep -q "USB_ACCESSORY_ATTACHED" "$MANIFEST" || { echo "нет подписки на подключение к машине" >&2; exit 1; }
+          grep -q "mediaProjection" "$MANIFEST" || { echo "нет службы захвата экрана" >&2; exit 1; }
+          grep -q "BIND_ACCESSIBILITY_SERVICE" "$MANIFEST" || { echo "нет службы нажатий" >&2; exit 1; }
+          echo "--- строки аксессуара ---"
+          grep -o 'model="[^"]*"' carlink/app/src/main/res/xml/usb_accessory_filter.xml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CarLink-apk
+          path: carlink/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

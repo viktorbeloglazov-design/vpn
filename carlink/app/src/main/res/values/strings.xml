@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">CarLink</string>
+    <string name="injector_label">CarLink: нажатия с экрана машины</string>
+    <string name="injector_description">Передаёт касания с экрана автомобиля в программы телефона. Нужно только для режима «зеркало экрана».</string>
+    <string name="channel_name">Подключение к машине</string>
+</resources>
