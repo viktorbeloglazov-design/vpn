@@ -28,8 +28,25 @@ struct SettingsView: View {
 
                     Section("Служба") {
                         LabeledContent("Состояние") {
-                            Text(serviceState)
-                                .foregroundColor(model.isDaemonRunning ? .green : .orange)
+                            HStack(spacing: 10) {
+                                Text(serviceState)
+                                    .foregroundColor(model.isDaemonRunning ? .green : .orange)
+                                if model.canInstallHelper {
+                                    Button(model.isHelperInstalled ? "Переустановить" : "Установить") {
+                                        model.installHelper()
+                                    }
+                                    .disabled(model.isInstallingHelper)
+                                    if model.isHelperInstalled {
+                                        Button("Удалить") { model.uninstallHelper() }
+                                            .disabled(model.isInstallingHelper)
+                                    }
+                                }
+                                if let message = model.installMessage {
+                                    Text(message)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
                         }
                         LabeledContent("Интерфейс") {
                             Text(model.status.interfaceName.isEmpty ? "—" : model.status.interfaceName)
@@ -48,7 +65,7 @@ struct SettingsView: View {
                 }
                 .formStyle(.grouped)
 
-                GroupBox("Команды обслуживания") {
+                GroupBox("Команды обслуживания (для сборки из исходников)") {
                     VStack(alignment: .leading, spacing: 8) {
                         commandRow("Установить службу", "sudo ./scripts/install.sh")
                         commandRow("Перезапустить службу",

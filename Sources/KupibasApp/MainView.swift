@@ -8,9 +8,9 @@ struct MainView: View {
     var body: some View {
         VStack(spacing: 0) {
             if !model.isHelperInstalled {
-                InstallBanner(text: "Служба kupibasvpnd не установлена. Без неё переключатель не сработает.")
+                InstallBanner(text: "Служба Kupibas VPN не установлена — без неё переключатель не сработает.")
             } else if !model.isDaemonRunning {
-                InstallBanner(text: "Служба kupibasvpnd не отвечает. Проверьте: sudo launchctl print system/\(Paths.daemonLabel)")
+                InstallBanner(text: "Служба не отвечает. Переустановите её или проверьте журнал.")
             }
 
             PowerHeader()
@@ -149,6 +149,7 @@ struct PowerHeader: View {
 }
 
 struct InstallBanner: View {
+    @EnvironmentObject private var model: AppModel
     let text: String
 
     var body: some View {
@@ -158,8 +159,15 @@ struct InstallBanner: View {
             Text(text)
                 .font(.callout)
             Spacer()
-            Button("Скопировать команду установки") {
-                NSWorkspaceOpener.copyToPasteboard("sudo ./scripts/install.sh")
+            if model.canInstallHelper {
+                Button(model.isInstallingHelper ? "Устанавливаю…" : "Установить службу") {
+                    model.installHelper()
+                }
+                .disabled(model.isInstallingHelper)
+            } else {
+                Button("Скопировать команду установки") {
+                    NSWorkspaceOpener.copyToPasteboard("sudo ./scripts/install.sh")
+                }
             }
         }
         .padding(10)

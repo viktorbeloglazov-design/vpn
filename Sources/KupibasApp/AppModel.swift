@@ -14,6 +14,8 @@ final class AppModel: ObservableObject {
     @Published var ipError: String?
     @Published var isCheckingIP = false
     @Published var launchAtLogin: Bool
+    @Published var isInstallingHelper = false
+    @Published var installMessage: String?
 
     private var timer: Timer?
     private var saveWorkItem: DispatchWorkItem?
@@ -169,6 +171,38 @@ final class AppModel: ObservableObject {
         } catch {
             saveError = "Не удалось изменить автозапуск: \(error.localizedDescription)"
             launchAtLogin = SMAppService.mainApp.status == .enabled
+        }
+    }
+
+    // MARK: - Служба
+
+    /// Можно ли поставить службу кнопкой (приложение запущено из собранного бандла).
+    var canInstallHelper: Bool { HelperInstaller.isBundled }
+
+    func installHelper() {
+        guard !isInstallingHelper else { return }
+        isInstallingHelper = true
+        installMessage = nil
+        let error = HelperInstaller.run(.install)
+        isInstallingHelper = false
+        if let error {
+            saveError = error
+        } else {
+            config = ConfigStore.loadConfig()
+            installMessage = "Служба установлена."
+        }
+    }
+
+    func uninstallHelper() {
+        guard !isInstallingHelper else { return }
+        isInstallingHelper = true
+        installMessage = nil
+        let error = HelperInstaller.run(.uninstall)
+        isInstallingHelper = false
+        if let error {
+            saveError = error
+        } else {
+            installMessage = "Служба удалена."
         }
     }
 

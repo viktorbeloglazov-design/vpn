@@ -1,0 +1,81 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия, например 1.0.0"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    name: Образ для скачивания
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Определить версию
+        id: version
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Версия: $VERSION"
+
+      - name: Собрать утилиты WireGuard
+        run: ./scripts/ci/build-wireguard.sh "$RUNNER_TEMP/wg-tools"
+
+      - name: Собрать приложение (universal)
+        run: ./scripts/build.sh --universal --tools "$RUNNER_TEMP/wg-tools"
+
+      - name: Проверить бандл
+        run: |
+          APP="dist/KupibasVPN.app"
+          test -x "$APP/Contents/MacOS/KupibasVPN"
+          test -f "$APP/Contents/Info.plist"
+          test -x "$APP/Contents/Resources/install-helper.sh"
+          test -f "$APP/Contents/Resources/com.kupibas.vpn.helper.plist"
+          for tool in kupibasvpnd wireguard-go wg wg-quick; do
+            test -x "$APP/Contents/Library/Helpers/$tool"
+          done
+          echo "Архитектуры приложения: $(lipo -archs "$APP/Contents/MacOS/KupibasVPN")"
+          echo "Архитектуры службы:     $(lipo -archs "$APP/Contents/Library/Helpers/kupibasvpnd")"
+          codesign --verify --strict "$APP"
+
+      - name: Собрать DMG
+        run: ./scripts/make-dmg.sh "${{ steps.version.outputs.value }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KupibasVPN-${{ steps.version.outputs.value }}-dmg
+          path: dist/*.dmg
+          if-no-files-found: error
+
+      - name: Опубликовать релиз
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.dmg --clobber
+          else
+            gh release create "$TAG" dist/*.dmg \
+              --target "$GITHUB_SHA" \
+              --title "Kupibas VPN $VERSION" \
+              --notes-file .github/release-notes.md
+          fi
+          echo "Ссылка на релиз: $(gh release view "$TAG" --json url --jq .url)"

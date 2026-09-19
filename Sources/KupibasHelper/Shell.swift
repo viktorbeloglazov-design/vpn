@@ -1,4 +1,5 @@
 import Foundation
+import KupibasCore
 
 struct CommandResult {
     let status: Int32
@@ -16,8 +17,10 @@ struct CommandResult {
 }
 
 enum Shell {
-    /// Homebrew-каталоги идут первыми: wg-quick и wireguard-go живут там.
+    /// Сначала — утилиты, поставленные вместе со службой (их кладёт установщик
+    /// из бандла приложения), затем Homebrew, затем системные каталоги.
     static let searchPaths = [
+        Paths.helperDir,
         "/opt/homebrew/bin", "/opt/homebrew/sbin",
         "/usr/local/bin", "/usr/local/sbin",
         "/usr/bin", "/bin", "/usr/sbin", "/sbin",

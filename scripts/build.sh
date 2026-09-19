@@ -1,34 +1,51 @@
 #!/bin/bash
-# Сборка Kupibas VPN: приложение «Kupibas VPN.app» и служебный демон kupibasvpnd.
+# Сборка Kupibas VPN: приложение KupibasVPN.app и служебный демон kupibasvpnd.
+#
+#   ./scripts/build.sh                       обычная сборка под текущий процессор
+#   ./scripts/build.sh --universal           universal-бинарник (Apple Silicon + Intel)
+#   ./scripts/build.sh --tools КАТАЛОГ       вложить утилиты WireGuard в приложение
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST="$ROOT/dist"
-APP="$DIST/KupibasVPN.app"
+ARCH_FLAGS=()
+TOOLS_DIR=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --universal) ARCH_FLAGS=(--arch arm64 --arch x86_64); shift ;;
+        --tools) TOOLS_DIR="$2"; shift 2 ;;
+        *) echo "Неизвестный аргумент: $1" >&2; exit 1 ;;
+    esac
+done
 
 cd "$ROOT"
 
 echo "==> Собираю Swift-пакет (release)"
-swift build -c release
+swift build -c release "${ARCH_FLAGS[@]}"
 
-BIN_DIR="$(swift build -c release --show-bin-path)"
+BIN_DIR="$(swift build -c release "${ARCH_FLAGS[@]}" --show-bin-path)"
 
 echo "==> Собираю бандл приложения"
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN_DIR/KupibasVPNApp" "$APP/Contents/MacOS/KupibasVPN"
-cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+mkdir -p "$DIST"
+if [ -n "$TOOLS_DIR" ]; then
+    "$ROOT/scripts/bundle-app.sh" --bin-dir "$BIN_DIR" --tools "$TOOLS_DIR" --out "$DIST"
+else
+    "$ROOT/scripts/bundle-app.sh" --bin-dir "$BIN_DIR" --out "$DIST"
+fi
 
-echo "==> Кладу рядом демон"
-cp "$BIN_DIR/kupibasvpnd" "$DIST/kupibasvpnd"
-
-echo "==> Подписываю ad-hoc подписью"
+echo "==> Кладу рядом демон (для установки из исходников)"
+install -m 0755 "$BIN_DIR/kupibasvpnd" "$DIST/kupibasvpnd"
 codesign --force --sign - --timestamp=none "$DIST/kupibasvpnd"
-codesign --force --deep --sign - --timestamp=none "$APP"
 
 echo
 echo "Готово:"
-echo "  приложение: $APP"
+echo "  приложение: $DIST/KupibasVPN.app"
 echo "  демон:      $DIST/kupibasvpnd"
 echo
-echo "Дальше: sudo $ROOT/scripts/install.sh"
+if [ -n "$TOOLS_DIR" ]; then
+    echo "Утилиты WireGuard вложены внутрь приложения — Homebrew не нужен."
+    echo "Службу можно поставить кнопкой в самом приложении."
+else
+    echo "Дальше: sudo $ROOT/scripts/install.sh"
+fi
