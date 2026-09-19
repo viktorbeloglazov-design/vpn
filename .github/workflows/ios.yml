@@ -1,0 +1,63 @@
+name: ios
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+jobs:
+  app:
+    name: Сборка под iOS
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      - name: Собрать проект
+        working-directory: ios
+        run: |
+          xcodegen generate
+          ls -la QPVPN.xcodeproj
+
+      - name: Сборка без подписи
+        working-directory: ios
+        run: |
+          # Подписать приложение нечем: сертификат Apple есть только
+          # у владельца учётной записи разработчика. Проверяем, что оно
+          # собирается — этого достаточно, чтобы поймать ошибки в коде.
+          set -o pipefail
+          xcodebuild build \
+            -project QPVPN.xcodeproj \
+            -scheme QPVPN \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            ONLY_ACTIVE_ARCH=NO \
+            | tail -80
+
+      - name: Проверить собранное
+        working-directory: ios
+        run: |
+          APP="build/Build/Products/Release-iphoneos/QP VPN.app"
+          test -d "$APP" || { echo "приложение не собралось" >&2; ls -R build/Build/Products || true; exit 1; }
+          test -f "$APP/ru_ipv4.txt" || { echo "в приложении нет списка подсетей России" >&2; exit 1; }
+          test -d "$APP/PlugIns/QPVPNTunnel.appex" || { echo "нет расширения-туннеля" >&2; exit 1; }
+          du -sh "$APP"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QPVPN-ios-app
+          path: ios/build/Build/Products/Release-iphoneos/*.app
+          if-no-files-found: error

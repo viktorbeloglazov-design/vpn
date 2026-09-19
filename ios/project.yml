@@ -1,0 +1,88 @@
+name: QPVPN
+options:
+  bundleIdPrefix: kz.qpvpn
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "15.0"
+  groupSortPosition: top
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+
+packages:
+  # Библиотека AmneziaWG: тот же туннель, что в приложении Amnezia.
+  WireGuardKit:
+    url: https://github.com/amnezia-vpn/amneziawg-apple.git
+    revision: 9d5ee60edefa95b933a738dd7cda671dd18021fc
+
+targets:
+
+  QPVPN:
+    type: application
+    platform: iOS
+    sources:
+      - path: QPVPN
+      - path: Shared
+      # Разбор ссылок vpn:// общий с версией для Mac.
+      - path: ../Sources/KupibasCore/SharedLink.swift
+        group: Shared
+    info:
+      path: QPVPN/Info.plist
+    entitlements:
+      path: QPVPN/QPVPN.entitlements
+    dependencies:
+      - target: QPVPNTunnel
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kz.qpvpn
+        PRODUCT_NAME: QP VPN
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_CFBundleDisplayName: QP VPN
+        TARGETED_DEVICE_FAMILY: "1,2"
+
+  QPVPNTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: QPVPNTunnel
+      - path: Vendor
+    info:
+      path: QPVPNTunnel/Info.plist
+    entitlements:
+      path: QPVPNTunnel/QPVPNTunnel.entitlements
+    dependencies:
+      - package: WireGuardKit
+        product: WireGuardKit
+      - target: WireGuardGoBridge
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: kz.qpvpn.tunnel
+        PRODUCT_NAME: QPVPNTunnel
+
+  # Библиотека WireGuardKit линкуется с частью на Go, а собрать её сам
+  # менеджер пакетов не умеет — поэтому отдельная цель с обычным make.
+  WireGuardGoBridge:
+    type: ""
+    platform: iOS
+    legacy:
+      toolPath: /usr/bin/make
+      passSettings: true
+      workingDirectory: "${BUILD_DIR%Build/*}SourcePackages/checkouts/amneziawg-apple/Sources/WireGuardKitGo"
+
+schemes:
+  QPVPN:
+    build:
+      targets:
+        QPVPN: all
+    run:
+      config: Debug
+    archive:
+      config: Release
