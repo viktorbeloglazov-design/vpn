@@ -10,6 +10,7 @@ STATE_DIR="/Library/Application Support/KupibasVPN"
 PLIST="/Library/LaunchDaemons/$LABEL.plist"
 RUNTIME_DIR="/var/run/kupibas-vpn"
 
+LOG="/var/log/kupibas-vpn-install.log"
 RESOURCES="$(cd "$(dirname "$0")" && pwd)"
 CONTENTS="$(cd "$RESOURCES/.." 2>/dev/null && pwd || echo "$RESOURCES")"
 HELPERS="$CONTENTS/Library/Helpers"
@@ -18,6 +19,10 @@ if [ "$(id -u)" -ne 0 ]; then
     echo "Нужны права администратора." >&2
     exit 1
 fi
+
+touch "$LOG" 2>/dev/null || true
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG" 2>/dev/null || true; }
+log "=== запуск установщика: $* ==="
 
 stop_tunnel() {
     if [ -f "$RUNTIME_DIR/kb0.conf" ]; then
@@ -29,6 +34,8 @@ stop_tunnel() {
 if [ "${1:-}" = "--uninstall" ]; then
     stop_tunnel
     launchctl bootout "system/$LABEL" 2>/dev/null || true
+    launchctl disable "system/$LABEL" 2>/dev/null || true
+    launchctl enable "system/$LABEL" 2>/dev/null || true
     rm -f "$PLIST"
     rm -rf "$HELPER_DIR" "$RUNTIME_DIR"
     echo "Служба удалена. Настройки сохранены в $STATE_DIR"
@@ -107,15 +114,72 @@ fi
 chown root:staff "$STATE_DIR/config.json"
 chmod 0660 "$STATE_DIR/config.json"
 
+echo "Проверяю служебный файл"
+if ! "$HELPER_DIR/kupibasvpnd" --check >/dev/null 2>&1; then
+    log "kupibasvpnd --check не прошёл"
+    {
+        echo "--- диагностика бинарника ---"
+        file "$HELPER_DIR/kupibasvpnd" 2>&1
+        codesign -dv "$HELPER_DIR/kupibasvpnd" 2>&1 | head -5
+    } >> "$LOG" 2>&1
+    echo "Служебный файл не запускается на этом компьютере. Подробности: $LOG" >&2
+    exit 1
+fi
+
 echo "Регистрирую службу в системе"
 install -m 0644 -o root -g wheel "$RESOURCES/$LABEL.plist" "$PLIST"
-launchctl bootstrap system "$PLIST"
-launchctl enable "system/$LABEL"
+# Файл службы тоже мог приехать с меткой карантина — launchd такую не примет.
+xattr -dr com.apple.quarantine "$PLIST" 2>/dev/null || true
+
+if ! plutil -lint "$PLIST" >/dev/null 2>&1; then
+    echo "Файл службы повреждён: $PLIST" >&2
+    exit 1
+fi
+
+# Прошлая регистрация снимается не мгновенно, а bootstrap поверх неё
+# отвечает «Bootstrap failed: 5: Input/output error». Поэтому ждём,
+# пока launchd действительно забудет метку.
+launchctl bootout "system/$LABEL" >/dev/null 2>&1 || true
+ATTEMPT=0
+while launchctl print "system/$LABEL" >/dev/null 2>&1 && [ $ATTEMPT -lt 15 ]; do
+    sleep 1
+    ATTEMPT=$((ATTEMPT + 1))
+done
+log "ожидание снятия прошлой регистрации: $ATTEMPT с"
+
+# Метка могла остаться помеченной как отключённая — тогда bootstrap
+# тоже падает с ошибкой 5.
+launchctl enable "system/$LABEL" >/dev/null 2>&1 || true
+
+BOOTSTRAP_ERROR=""
+if ! BOOTSTRAP_ERROR="$(launchctl bootstrap system "$PLIST" 2>&1)"; then
+    log "bootstrap не удался: $BOOTSTRAP_ERROR"
+    # Запасной путь: старый API launchctl, он переживает часть таких отказов.
+    if launchctl load -w "$PLIST" >/dev/null 2>&1; then
+        log "служба загружена через launchctl load"
+    else
+        {
+            echo "--- диагностика launchd ---"
+            echo "bootstrap: $BOOTSTRAP_ERROR"
+            ls -l "$PLIST" "$HELPER_DIR" 2>&1
+            launchctl print "system/$LABEL" 2>&1 | head -25
+            launchctl print-disabled system 2>&1 | grep -i kupibas || true
+        } >> "$LOG" 2>&1
+        echo "launchd отклонил службу: $BOOTSTRAP_ERROR" >&2
+        echo "Подробности записаны в $LOG" >&2
+        exit 1
+    fi
+fi
+
+launchctl kickstart -k "system/$LABEL" >/dev/null 2>&1 || true
 
 sleep 2
 if launchctl print "system/$LABEL" >/dev/null 2>&1; then
+    log "служба запущена"
     echo "Служба установлена и запущена."
 else
-    echo "Служба установлена, но не отвечает. Журнал: /var/log/kupibas-vpn.log" >&2
+    log "служба не отвечает после запуска"
+    launchctl print "system/$LABEL" >> "$LOG" 2>&1 || true
+    echo "Служба установлена, но не отвечает. Журналы: /var/log/kupibas-vpn.log и $LOG" >&2
     exit 1
 fi

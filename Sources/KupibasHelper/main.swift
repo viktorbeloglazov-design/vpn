@@ -7,6 +7,13 @@ import KupibasCore
 
 setvbuf(stdout, nil, _IOLBF, 0)
 
+// Проверка работоспособности файла: установщик так убеждается, что бинарник
+// вообще запускается на этой машине, до регистрации в launchd.
+if CommandLine.arguments.contains("--check") {
+    print("kupibasvpnd готов к запуску")
+    exit(0)
+}
+
 let log = Logger(path: Paths.logFile)
 
 guard getuid() == 0 else {
