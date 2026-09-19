@@ -42,84 +42,12 @@ object Presets {
     private fun domains(vararg hosts: String) = hosts.map { RuleKind.DOMAIN to it }
 
     /** Наборы для туннеля: сервисы, которые не работают с российских адресов. */
-    val throughVpn: List<RulePreset> = listOf(
-        RulePreset(
-            id = "ai",
-            title = "Нейросети",
-            subtitle = "ChatGPT, Claude, Gemini, Midjourney — почти все закрыты для адресов РФ",
-            direction = PresetDirection.THROUGH_VPN,
-            values = domains(
-                "openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com",
-                "anthropic.com", "claude.ai",
-                "gemini.google.com", "bard.google.com", "aistudio.google.com",
-                "perplexity.ai", "midjourney.com", "huggingface.co",
-                "copilot.microsoft.com", "x.ai", "grok.com", "mistral.ai",
-                "runwayml.com", "elevenlabs.io", "suno.com",
-            ),
-        ),
-        RulePreset(
-            id = "social",
-            title = "Соцсети",
-            subtitle = "Instagram, Facebook, X, LinkedIn и их сети доставки",
-            direction = PresetDirection.THROUGH_VPN,
-            values = domains(
-                "instagram.com", "cdninstagram.com", "facebook.com", "fb.com",
-                "fbcdn.net", "messenger.com", "threads.net",
-                "twitter.com", "x.com", "twimg.com", "t.co",
-                "linkedin.com", "licdn.com", "pinterest.com", "reddit.com",
-                "redditstatic.com", "tumblr.com",
-            ),
-        ),
-        RulePreset(
-            id = "video",
-            title = "Видео и музыка",
-            subtitle = "YouTube, Twitch, Netflix, Spotify",
-            direction = PresetDirection.THROUGH_VPN,
-            values = domains(
-                "youtube.com", "youtu.be", "ytimg.com", "googlevideo.com", "ggpht.com",
-                "twitch.tv", "ttvnw.net", "jtvnw.net",
-                "netflix.com", "nflxvideo.net", "nflximg.net",
-                "spotify.com", "scdn.co", "spotifycdn.com",
-                "vimeo.com", "soundcloud.com", "deezer.com",
-            ),
-        ),
-        RulePreset(
-            id = "messengers",
-            title = "Мессенджеры",
-            subtitle = "Discord, Signal, Viber, Skype",
-            direction = PresetDirection.THROUGH_VPN,
-            values = domains(
-                "discord.com", "discordapp.com", "discordapp.net", "discord.gg",
-                "signal.org", "signal.art", "viber.com", "skype.com",
-                "slack.com", "slack-edge.com",
-            ),
-        ),
-        RulePreset(
-            id = "work",
-            title = "Рабочие сервисы",
-            subtitle = "GitHub, Notion, Figma, Atlassian, магазины приложений",
-            direction = PresetDirection.THROUGH_VPN,
-            values = domains(
-                "github.com", "githubusercontent.com", "githubassets.com", "github.io",
-                "gitlab.com", "docker.com", "docker.io", "npmjs.com",
-                "jetbrains.com", "atlassian.com", "atlassian.net",
-                "notion.so", "notion.site", "figma.com", "canva.com",
-                "vercel.com", "netlify.app", "cloudflare.com",
-                "medium.com", "stackoverflow.com", "patreon.com",
-            ),
-        ),
-        RulePreset(
-            id = "shopping-global",
-            title = "Зарубежные покупки",
-            subtitle = "Amazon, eBay, Shein и платёжные сервисы",
-            direction = PresetDirection.THROUGH_VPN,
-            values = domains(
-                "amazon.com", "amazon.de", "ebay.com", "shein.com",
-                "paypal.com", "stripe.com", "wise.com", "revolut.com",
-                "booking.com", "airbnb.com", "aliexpress.us",
-            ),
-        ),
-    )
+    /**
+     * Через туннель теперь всё решает главный фильтр (MasterFilter), поэтому
+     * отдельных наборов «в VPN» больше нет. Остались наборы для прямого
+     * канала — они нужны в режиме «всё через VPN, кроме правил».
+     */
+    val throughVpn: List<RulePreset> = emptyList()
 
     /** Наборы для прямого канала: сервисы, которым нужен российский адрес. */
     val direct: List<RulePreset> = listOf(
