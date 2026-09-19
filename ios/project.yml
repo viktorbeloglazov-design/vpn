@@ -54,7 +54,7 @@ targets:
     platform: iOS
     sources:
       - path: QPVPNTunnel
-      - path: Vendor
+      - path: Compat
     info:
       path: QPVPNTunnel/Info.plist
     entitlements:

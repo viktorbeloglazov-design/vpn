@@ -13,7 +13,7 @@
 | Камера для QR-кода | `QPVPN/QRScannerView.swift` |
 | Сам туннель | `QPVPNTunnel/PacketTunnelProvider.swift` |
 | Маршруты, фильтры, подсети | `Shared/` |
-| Разбор .conf с маскировкой | `Vendor/TunnelConfiguration+WgQuickConfig.swift` (MIT, из amneziawg-apple) |
+| Разбор .conf с маскировкой | `Compat/TunnelConfiguration+WgQuickConfig.swift` (MIT, из amneziawg-apple) |
 
 Устройство то же, что на других платформах: главный фильтр «Обход
 блокировок» на 244 сервиса, второй переключатель «Рабочие ресурсы»,
