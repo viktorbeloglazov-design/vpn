@@ -78,29 +78,42 @@ class TunnelController(
         }
 
         val config = store.config.value
-        val routes = routesFor(config, profile)
+        val wantsRuZone = config.options.bypassRuZone && config.mode == TunnelMode.EXCLUDE
+        val wantsIpv6 = config.options.blockIpv6 || profile.hasIpv6Address
 
-        try {
-            applyConfig(profile, config, routes, withIpv6 = config.options.blockIpv6 || profile.hasIpv6Address)
-        } catch (error: Exception) {
-            // Не всякий сервер и не всякая сеть принимают маршрут для IPv6 —
-            // пробуем ещё раз без него, чтобы подключение не срывалось целиком.
-            try {
-                applyConfig(profile, config, routes, withIpv6 = false)
-            } catch (second: Exception) {
-                fail(second.message ?: "Не удалось поднять туннель.")
-                return
+        // Попытки от полной к упрощённой. Российский список — это тысячи
+        // маршрутов, и если система откажется их принять, лучше подключиться
+        // без него и честно об этом сказать, чем оставить человека без связи.
+        val attempts = buildList {
+            add(Triple(wantsRuZone, wantsIpv6, ""))
+            if (wantsIpv6) add(Triple(wantsRuZone, false, ""))
+            if (wantsRuZone) {
+                add(Triple(false, wantsIpv6, "Список адресов России телефон не принял — подключение без него."))
+                add(Triple(false, false, "Список адресов России телефон не принял — подключение без него."))
             }
         }
 
-        appliedRoutes = routes
-        _status.value = TunnelStatus(
-            state = ConnectionState.CONNECTED,
-            connectedSince = System.currentTimeMillis(),
-            routeCount = routes.size,
-            serverName = profile.endpointHost,
-        )
-        startWatching()
+        var lastError: Exception? = null
+        for ((useRuZone, withIpv6, note) in attempts) {
+            val routes = routesFor(config, profile, useRuZone)
+            try {
+                applyConfig(profile, config, routes, withIpv6 = withIpv6)
+                appliedRoutes = routes
+                _status.value = TunnelStatus(
+                    state = ConnectionState.CONNECTED,
+                    connectedSince = System.currentTimeMillis(),
+                    routeCount = routes.size,
+                    serverName = profile.endpointHost,
+                    message = note,
+                )
+                startWatching()
+                return
+            } catch (error: Exception) {
+                lastError = error
+            }
+        }
+
+        fail(lastError?.message ?: "Не удалось поднять туннель.")
     }
 
     suspend fun disconnect() {
@@ -128,7 +141,8 @@ class TunnelController(
         }
 
         val config = store.config.value
-        val routes = routesFor(config, profile)
+        val useRuZone = config.options.bypassRuZone && config.mode == TunnelMode.EXCLUDE
+        val routes = routesFor(config, profile, useRuZone)
         if (routes == appliedRoutes) return
 
         try {
@@ -167,7 +181,7 @@ class TunnelController(
     }
 
     /** Считает список подсетей, которые должны уходить в туннель. */
-    private fun routesFor(config: AppConfig, profile: WgProfile): List<String> {
+    private fun routesFor(config: AppConfig, profile: WgProfile, useRuZone: Boolean): List<String> {
         val nets = resolveRules(config)
 
         return when (config.mode) {
@@ -184,7 +198,7 @@ class TunnelController(
             TunnelMode.EXCLUDE -> {
                 // Кроме правил пользователя из туннеля вычитается вся
                 // российская зона, если это включено в настройках.
-                val excluded = if (config.options.bypassRuZone) {
+                val excluded = if (useRuZone) {
                     nets + RuZone.networks(context)
                 } else {
                     nets
