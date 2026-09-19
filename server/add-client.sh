@@ -9,6 +9,8 @@ WG_NET_V4="10.8.0"
 NAME="${1:-mac}"
 PORT="${PORT:-$(awk -F'= *' '/ListenPort/ {print $2; exit}' "$WG_DIR/wg0.conf")}"
 DNS="${DNS:-1.1.1.1, 8.8.8.8}"
+# 1420 подходит для обычной сети; за роутером с VPN или PPPoE ставьте MTU=1280.
+MTU="${MTU:-1420}"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Запустите с правами root: sudo bash $0 $NAME" >&2
@@ -68,7 +70,7 @@ cat > "$CONFIG" <<CONF
 PrivateKey = $CLIENT_PRIVATE
 Address = $CLIENT_IP/32
 DNS = $DNS
-MTU = 1420
+MTU = $MTU
 
 [Peer]
 PublicKey = $SERVER_PUBLIC

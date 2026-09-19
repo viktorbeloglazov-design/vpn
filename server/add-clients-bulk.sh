@@ -45,6 +45,8 @@ fi
 
 PORT="${PORT:-$(awk -F'= *' '/ListenPort/ {print $2; exit}' "$WG_DIR/wg0.conf")}"
 DNS="${DNS:-1.1.1.1, 8.8.8.8}"
+# 1420 подходит для обычной сети; за роутером с VPN или PPPoE ставьте MTU=1280.
+MTU="${MTU:-1420}"
 
 if [ -z "${PUBLIC_IP:-}" ]; then
     PUBLIC_IP="$(curl -4 -s --max-time 10 https://ifconfig.me || true)"
@@ -110,7 +112,7 @@ PEER
 PrivateKey = $CLIENT_PRIVATE
 Address = $CLIENT_IP/32
 DNS = $DNS
-MTU = 1420
+MTU = $MTU
 
 [Peer]
 PublicKey = $SERVER_PUBLIC
