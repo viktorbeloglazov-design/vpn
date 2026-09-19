@@ -83,13 +83,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ steps.version.outputs.value }}"
-          TAG="v$VERSION"
+          TAG="android-v$VERSION"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${{ steps.apk.outputs.path }}" --clobber
+            gh release edit "$TAG" --notes-file .github/release-notes-android.md
           else
             gh release create "$TAG" "${{ steps.apk.outputs.path }}" \
               --target "$GITHUB_SHA" \
-              --title "QP VPN $VERSION" \
-              --notes-file .github/release-notes.md
+              --title "QP VPN для Android $VERSION" \
+              --notes-file .github/release-notes-android.md
           fi
           echo "Ссылка: $(gh release view "$TAG" --json url --jq .url)"
