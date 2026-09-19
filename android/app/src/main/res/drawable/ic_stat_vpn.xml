@@ -1,0 +1,15 @@
+<!--
+  Значок в строке состояния рядом с сетью и Wi-Fi.
+
+  Система перекрашивает его в один цвет и рисует мелко, поэтому это
+  сплошной щит без мелких деталей — такой читается и на 24 точках.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,1L3,5v6c0,5.55 3.84,10.74 9,12 5.16,-1.26 9,-6.45 9,-12V5L12,1z" />
+</vector>

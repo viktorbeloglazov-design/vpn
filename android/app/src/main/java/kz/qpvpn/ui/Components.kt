@@ -23,15 +23,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -146,155 +142,6 @@ fun SectionHeader(title: String, subtitle: String? = null, modifier: Modifier = 
     }
 }
 
-/** Карточка выбора режима маршрутизации. */
-@Composable
-fun ModeCard(
-    selected: Boolean,
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-) {
-    val border = if (selected) {
-        BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-    } else {
-        BorderStroke(1.dp, LocalAppColors.current.cardBorder)
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surface
-        ),
-        border = border,
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                        else MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = if (selected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (selected) {
-                Icon(
-                    Icons.Filled.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-    }
-}
-
-/** Карточка готового набора правил. */
-@Composable
-fun PresetCard(
-    title: String,
-    subtitle: String,
-    count: Int,
-    directionLabel: String,
-    throughVpn: Boolean,
-    added: Boolean,
-    onAdd: () -> Unit,
-) {
-    val colors = LocalAppColors.current
-    val accent = if (throughVpn) MaterialTheme.colorScheme.primary else colors.waiting
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, colors.cardBorder),
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Surface(
-                    color = accent.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Text(
-                        directionLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = accent,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                    )
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "$count ${plural(count, "сайт", "сайта", "сайтов")}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                Surface(
-                    color = if (added) MaterialTheme.colorScheme.surfaceVariant else accent,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.clickable(enabled = !added, onClick = onAdd),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            if (added) Icons.Filled.Check else Icons.Filled.Add,
-                            contentDescription = null,
-                            tint = if (added) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            if (added) "Добавлен" else "Добавить",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (added) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 @Composable
 fun InfoCard(content: @Composable () -> Unit) {
     Card(
@@ -327,26 +174,6 @@ fun KeyValueRow(label: String, value: String, monospace: Boolean = false) {
     }
 }
 
-@Composable
-fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onChange)
-    }
-}
-
-/** Русские окончания для счётчиков: 1 сайт, 2 сайта, 5 сайтов. */
 fun plural(count: Int, one: String, few: String, many: String): String {
     val mod100 = count % 100
     if (mod100 in 11..14) return many

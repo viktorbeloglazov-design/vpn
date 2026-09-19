@@ -67,7 +67,7 @@ class TunnelController(
         override fun getName(): String = "qpvpn"
         override fun onStateChange(newState: Tunnel.State) {
             if (newState == Tunnel.State.DOWN && _status.value.state == ConnectionState.CONNECTED) {
-                _status.value = _status.value.copy(state = ConnectionState.DISCONNECTED)
+                publish(_status.value.copy(state = ConnectionState.DISCONNECTED))
             }
         }
     }
@@ -81,6 +81,40 @@ class TunnelController(
     private val _status = MutableStateFlow(TunnelStatus())
     val status: StateFlow<TunnelStatus> = _status.asStateFlow()
 
+    /**
+     * Показывает состояние на экране и в строке состояния телефона.
+     *
+     * Значок наверху обязан появляться ровно тогда, когда туннель поднят,
+     * поэтому состояние меняется только здесь — иначе где-нибудь забудется.
+     */
+    private fun publish(status: TunnelStatus) {
+        _status.value = status
+        when (status.state) {
+            ConnectionState.CONNECTED -> VpnNotification.show(
+                context,
+                connected = true,
+                server = status.serverName,
+                rxBytes = status.rxBytes,
+                txBytes = status.txBytes,
+            )
+
+            ConnectionState.CONNECTING -> VpnNotification.show(
+                context,
+                connected = false,
+                server = status.serverName,
+                rxBytes = 0,
+                txBytes = 0,
+            )
+
+            else -> VpnNotification.hide(context)
+        }
+    }
+
+    /** Кнопка «Отключить» из уведомления: работает и когда экран закрыт. */
+    fun requestDisconnect() {
+        scope.launch { disconnect() }
+    }
+
     // MARK: - Управление
 
     suspend fun connect() {
@@ -90,7 +124,7 @@ class TunnelController(
             return
         }
 
-        _status.value = _status.value.copy(state = ConnectionState.CONNECTING, message = "")
+        publish(_status.value.copy(state = ConnectionState.CONNECTING, message = ""))
 
         val profile = try {
             WgProfile.parse(profileText)
@@ -124,11 +158,13 @@ class TunnelController(
             try {
                 applyConfig(profile, config, routes, withIpv6 = withIpv6)
                 appliedRoutes = routes
-                _status.value = TunnelStatus(
-                    state = ConnectionState.CONNECTING,
-                    routeCount = routes.size,
-                    serverName = profile.endpointHost,
-                    message = "Устанавливаю связь с сервером…",
+                publish(
+                    TunnelStatus(
+                        state = ConnectionState.CONNECTING,
+                        routeCount = routes.size,
+                        serverName = profile.endpointHost,
+                        message = "Устанавливаю связь с сервером…",
+                    )
                 )
 
                 // Поднятый туннель — ещё не связь. Пока сервер не ответил на
@@ -146,13 +182,15 @@ class TunnelController(
                     return
                 }
 
-                _status.value = TunnelStatus(
-                    state = ConnectionState.CONNECTED,
-                    connectedSince = System.currentTimeMillis(),
-                    routeCount = routes.size,
-                    serverName = profile.endpointHost,
-                    message = note,
-                    lastHandshake = lastHandshakeMillis(),
+                publish(
+                    TunnelStatus(
+                        state = ConnectionState.CONNECTED,
+                        connectedSince = System.currentTimeMillis(),
+                        routeCount = routes.size,
+                        serverName = profile.endpointHost,
+                        message = note,
+                        lastHandshake = lastHandshakeMillis(),
+                    )
                 )
                 startWatching()
                 return
@@ -220,17 +258,19 @@ class TunnelController(
             val profile = store.profileText()?.let { text ->
                 runCatching { WgProfile.parse(text) }.getOrNull()
             }
-            _status.value = TunnelStatus(
-                state = ConnectionState.CONNECTED,
-                connectedSince = System.currentTimeMillis(),
-                routeCount = appliedRoutes.size,
-                serverName = profile?.endpointHost.orEmpty(),
+            publish(
+                TunnelStatus(
+                    state = ConnectionState.CONNECTED,
+                    connectedSince = System.currentTimeMillis(),
+                    routeCount = appliedRoutes.size,
+                    serverName = profile?.endpointHost.orEmpty(),
+                )
             )
             startWatching()
         } else if (!up && _status.value.state == ConnectionState.CONNECTED) {
             watchJob?.cancel()
             watchJob = null
-            _status.value = TunnelStatus()
+            publish(TunnelStatus())
         }
     }
 
@@ -245,7 +285,7 @@ class TunnelController(
             // Туннель мог уже упасть сам — состояние всё равно сбрасываем.
         }
         appliedRoutes = emptyList()
-        _status.value = TunnelStatus(state = ConnectionState.DISCONNECTED)
+        publish(TunnelStatus(state = ConnectionState.DISCONNECTED))
     }
 
     /** Перестраивает маршруты после правки правил, не разрывая соединение без нужды. */
@@ -267,7 +307,7 @@ class TunnelController(
         try {
             applyConfig(profile, config, routes, withIpv6 = config.options.blockIpv6 || profile.hasIpv6Address)
             appliedRoutes = routes
-            _status.value = _status.value.copy(routeCount = routes.size)
+            publish(_status.value.copy(routeCount = routes.size))
         } catch (error: Exception) {
             _status.value = _status.value.copy(message = "Маршруты не обновились: ${error.message}")
         }
@@ -475,9 +515,11 @@ class TunnelController(
                     null
                 }
                 if (statistics != null) {
-                    _status.value = _status.value.copy(
-                        rxBytes = statistics.totalRx(),
-                        txBytes = statistics.totalTx(),
+                    publish(
+                        _status.value.copy(
+                            rxBytes = statistics.totalRx(),
+                            txBytes = statistics.totalTx(),
+                        )
                     )
                 }
 
@@ -511,6 +553,6 @@ class TunnelController(
     }
 
     private fun fail(message: String) {
-        _status.value = TunnelStatus(state = ConnectionState.ERROR, message = message)
+        publish(TunnelStatus(state = ConnectionState.ERROR, message = message))
     }
 }

@@ -147,6 +147,29 @@ data class AppConfig(
             mainFilter -> TunnelMode.EXCLUDE
             else -> mode
         }
+
+    /**
+     * Настройки, приведённые к зашитому поведению.
+     *
+     * Маршрутизация не настраивается: заблокированные сервисы всегда идут
+     * через VPN, российские адреса — всегда напрямую. Единственное, что
+     * человек выбирает сам, — рабочие ресурсы, поэтому [workFilter] здесь
+     * не трогается. Остальное приводится к заводскому виду, в том числе
+     * настройки, сохранённые прежними версиями программы.
+     */
+    fun pinned(): AppConfig = copy(
+        fullTunnel = false,
+        mainFilter = true,
+        mode = TunnelMode.EXCLUDE,
+        rules = emptyList(),
+        appsMode = AppsMode.OFF,
+        selectedApps = emptyList(),
+        options = options.copy(
+            useTunnelDns = true,
+            blockIpv6 = true,
+            bypassRuZone = true,
+        ),
+    )
 }
 
 enum class ConnectionState {

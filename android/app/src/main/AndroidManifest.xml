@@ -55,5 +55,14 @@
                 <data android:mimeType="application/octet-stream" />
             </intent-filter>
         </activity>
+
+        <!-- Кнопка «Отключить» в уведомлении о работающем туннеле. -->
+        <receiver
+            android:name=".vpn.DisconnectReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="kz.qpvpn.action.DISCONNECT" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

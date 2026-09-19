@@ -27,15 +27,21 @@ class Store(context: Context) {
     private val _config = MutableStateFlow(readConfig())
     val config: StateFlow<AppConfig> = _config.asStateFlow()
 
+    // Маршрутизация зашита: что бы ни лежало в файле от прошлых версий,
+    // в работу уходит одно и то же поведение. Иначе сохранённая когда-то
+    // галочка осталась бы включённой навсегда — выключить её больше негде.
     private fun readConfig(): AppConfig = try {
-        if (configFile.exists()) json.decodeFromString(AppConfig.serializer(), configFile.readText())
-        else AppConfig()
+        if (configFile.exists()) {
+            json.decodeFromString(AppConfig.serializer(), configFile.readText()).pinned()
+        } else {
+            AppConfig().pinned()
+        }
     } catch (error: Exception) {
-        AppConfig()
+        AppConfig().pinned()
     }
 
     fun update(transform: (AppConfig) -> AppConfig) {
-        val updated = transform(_config.value)
+        val updated = transform(_config.value).pinned()
         _config.value = updated
         try {
             configFile.writeText(json.encodeToString(AppConfig.serializer(), updated))

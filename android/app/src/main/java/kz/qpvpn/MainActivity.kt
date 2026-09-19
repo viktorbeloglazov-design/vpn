@@ -5,9 +5,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.drawable.Drawable
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -23,25 +20,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kz.qpvpn.model.AppsMode
 import kz.qpvpn.model.MasterFilter
 import kz.qpvpn.model.ConnectionState
-import kz.qpvpn.model.RoutingRule
-import kz.qpvpn.model.RuleKind
-import kz.qpvpn.model.RulePreset
-import kz.qpvpn.model.TunnelMode
 import kz.qpvpn.model.TunnelOptions
-import kz.qpvpn.net.Cidr
 import kz.qpvpn.net.IpCheck
 import kz.qpvpn.net.RuZone
-import kz.qpvpn.ui.AppEntry
 import kz.qpvpn.ui.Format
 import kz.qpvpn.ui.QrScannerScreen
 import kz.qpvpn.ui.decodeQrFromImage
@@ -59,8 +47,8 @@ class MainActivity : ComponentActivity() {
     private var ipText by mutableStateOf("")
     private var ipIsKazakhstan by mutableStateOf(false)
     private var checkingIp by mutableStateOf(false)
-    private var installedApps by mutableStateOf<List<AppEntry>>(emptyList())
     private var ruZoneCount by mutableStateOf(0)
+    private var notificationsAllowed by mutableStateOf(true)
     private var showScanner by mutableStateOf(false)
 
     /** Системное окно «разрешить VPN» — без него туннель поднять нельзя. */
@@ -89,14 +77,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notificationsAllowed = granted
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
+        // Без разрешения на уведомления телефон не покажет значок VPN наверху:
+        // спрашиваем сразу, а отказ подсвечиваем на главном экране.
+        notificationsAllowed = hasNotificationPermission()
+        if (!notificationsAllowed) {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
@@ -110,10 +101,6 @@ class MainActivity : ComponentActivity() {
             QpVpnTheme {
                 val config by app.store.config.collectAsStateWithLifecycle()
                 val status by app.tunnel.status.collectAsStateWithLifecycle()
-
-                LaunchedEffect(Unit) {
-                    installedApps = loadInstalledApps()
-                }
 
                 LaunchedEffect(Unit) {
                     ruZoneCount = withContext(Dispatchers.IO) { RuZone.count(this@MainActivity) }
@@ -141,11 +128,10 @@ class MainActivity : ComponentActivity() {
                         hasProfile = hasProfile,
                         profileSummary = profileSummary,
                         profileProtocol = profileProtocol,
-                        apps = installedApps,
                         ruZoneCount = ruZoneCount,
                         masterCount = MasterFilter.count,
                         masterSections = MasterFilter.sections.map { it.title to it.domains.size },
-                        masterApps = MasterFilter.packageCount,
+                        notificationsAllowed = notificationsAllowed,
                         diagnostics = { diagnostics(status) },
                         ipText = ipText,
                         ipIsKazakhstan = ipIsKazakhstan,
@@ -153,16 +139,8 @@ class MainActivity : ComponentActivity() {
                     ),
                     actions = ScreenActions(
                         onToggle = ::toggleTunnel,
-                        onModeChange = ::changeMode,
-                        onMainFilterChange = ::changeMainFilter,
-                        onFullTunnelChange = ::changeFullTunnel,
                         onWorkFilterChange = ::changeWorkFilter,
-                        onAddRule = ::addRule,
-                        onToggleRule = ::toggleRule,
-                        onDeleteRule = ::deleteRule,
-                        onAddPreset = ::addPreset,
-                        onAppsModeChange = ::changeAppsMode,
-                        onToggleApp = ::toggleApp,
+                        onOpenNotificationSettings = ::openNotificationSettings,
                         onPickProfile = { pickProfile.launch(arrayOf("*/*")) },
                         onClearProfile = ::clearProfile,
                         onOptionsChange = ::changeOptions,
@@ -179,7 +157,27 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        notificationsAllowed = hasNotificationPermission()
         lifecycleScope.launch { app.tunnel.syncState() }
+    }
+
+    private fun hasNotificationPermission(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    /** Открывает системные настройки уведомлений программы. */
+    private fun openNotificationSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+        val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+        runCatching { startActivity(intent) }.onFailure {
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     // MARK: - Туннель
@@ -209,95 +207,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // MARK: - Правила
+    // MARK: - Рабочие ресурсы
 
-    /** Главный фильтр сам задаёт маршруты, поэтому туннель пересобирается. */
-    private fun changeMainFilter(enabled: Boolean) {
-        app.store.update { it.copy(mainFilter = enabled) }
-        reapplyRoutes()
-    }
-
-    /** Весь трафик через VPN: перекрывает остальные переключатели. */
-    private fun changeFullTunnel(enabled: Boolean) {
-        app.store.update { it.copy(fullTunnel = enabled) }
-        reapplyRoutes()
-    }
-
-    /** Рабочие ресурсы: включён — через VPN, выключен — напрямую. */
+    /**
+     * Единственная настройка маршрутизации, которая осталась у человека.
+     *
+     * Всё остальное зашито в программу: заблокированные сервисы идут через
+     * VPN, российские адреса — напрямую, менять это негде и не нужно.
+     */
     private fun changeWorkFilter(enabled: Boolean) {
         app.store.update { it.copy(workFilter = enabled) }
-        reapplyRoutes()
-    }
-
-    private fun changeMode(mode: TunnelMode) {
-        app.store.update { it.copy(mode = mode) }
-        reapplyRoutes()
-    }
-
-    private fun addRule(kind: RuleKind, value: String): String? {
-        val text = value.trim().lowercase()
-        Cidr.ruleError(kind, text)?.let { return it }
-        if (app.store.config.value.rules.any { it.kind == kind && it.value.equals(text, ignoreCase = true) }) {
-            return "Такое правило уже есть."
-        }
-        app.store.update { it.copy(rules = it.rules + RoutingRule(kind = kind, value = text)) }
-        reapplyRoutes()
-        return null
-    }
-
-    private fun toggleRule(id: String, enabled: Boolean) {
-        app.store.update { config ->
-            config.copy(rules = config.rules.map { if (it.id == id) it.copy(enabled = enabled) else it })
-        }
-        reapplyRoutes()
-    }
-
-    private fun deleteRule(id: String) {
-        app.store.update { config -> config.copy(rules = config.rules.filterNot { it.id == id }) }
-        reapplyRoutes()
-    }
-
-    private fun addPreset(preset: RulePreset) {
-        app.store.update { config ->
-            val existing = config.rules.map { "${it.kind}:${it.value.lowercase()}" }.toSet()
-            val added = preset.rules().filterNot { "${it.kind}:${it.value.lowercase()}" in existing }
-            // Набор бессмысленен в режиме «весь трафик»: переводим в тот режим,
-            // ради которого его и добавляют.
-            val mode = if (config.mode == TunnelMode.FULL) preset.direction.mode else config.mode
-            config.copy(rules = config.rules + added, mode = mode)
-        }
-        reapplyRoutes()
-    }
-
-    private fun changeAppsMode(mode: AppsMode) {
-        app.store.update { it.copy(appsMode = mode) }
-        restartIfRunning()
-    }
-
-    private fun toggleApp(packageName: String, selected: Boolean) {
-        app.store.update { config ->
-            val apps = if (selected) config.selectedApps + packageName
-            else config.selectedApps - packageName
-            config.copy(selectedApps = apps.distinct())
-        }
-        restartIfRunning()
+        lifecycleScope.launch { app.tunnel.refreshRoutes() }
     }
 
     private fun changeOptions(options: TunnelOptions) {
         app.store.update { it.copy(options = options) }
-    }
-
-    private fun reapplyRoutes() {
-        lifecycleScope.launch { app.tunnel.refreshRoutes() }
-    }
-
-    /** Списки программ применяются только при пересоздании туннеля. */
-    private fun restartIfRunning() {
-        if (app.tunnel.status.value.state != ConnectionState.CONNECTED) return
-        lifecycleScope.launch {
-            app.tunnel.disconnect()
-            app.tunnel.connect()
-        }
     }
 
     // MARK: - Профиль
@@ -414,11 +338,7 @@ class MainActivity : ComponentActivity() {
             "не было"
         }
 
-        val mode = when {
-            config.fullTunnel -> "весь трафик через VPN"
-            config.mainFilter -> "обход блокировок (всё, кроме ${RuZone.count(this)} подсетей РФ)"
-            else -> config.mode.title.lowercase()
-        }
+        val mode = "обход блокировок (всё, кроме ${RuZone.count(this)} подсетей РФ)"
 
         return buildString {
             appendLine("QP VPN ${BuildConfig.VERSION_NAME}, Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}")
@@ -512,30 +432,5 @@ class MainActivity : ComponentActivity() {
                 ipIsKazakhstan = false
             }
         }
-    }
-
-    private suspend fun loadInstalledApps(): List<AppEntry> = withContext(Dispatchers.IO) {
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val manager = packageManager
-        manager.queryIntentActivities(intent, 0)
-            .asSequence()
-            .mapNotNull { info ->
-                val packageName = info.activityInfo?.packageName ?: return@mapNotNull null
-                if (packageName == getPackageName()) return@mapNotNull null
-                val icon = runCatching { info.loadIcon(manager).toImageBitmap() }.getOrNull()
-                AppEntry(packageName, info.loadLabel(manager).toString(), icon)
-            }
-            .distinctBy { it.packageName }
-            .sortedBy { it.label.lowercase() }
-            .toList()
-    }
-
-    /** Значок программы приходит рисунком системы — переводим его в картинку Compose. */
-    private fun Drawable.toImageBitmap(size: Int = 96): ImageBitmap {
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        setBounds(0, 0, size, size)
-        draw(canvas)
-        return bitmap.asImageBitmap()
     }
 }
