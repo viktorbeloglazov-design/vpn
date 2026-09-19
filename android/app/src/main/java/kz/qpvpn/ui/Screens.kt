@@ -44,6 +44,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -110,6 +111,7 @@ data class ScreenState(
     val masterCount: Int,
     val masterSections: List<Pair<String, Int>>,
     val masterApps: Int,
+    val diagnostics: String,
     val ipText: String,
     val ipIsKazakhstan: Boolean,
     val checkingIp: Boolean,
@@ -131,6 +133,7 @@ data class ScreenActions(
     val onClearProfile: () -> Unit,
     val onOptionsChange: (TunnelOptions) -> Unit,
     val onCheckIp: () -> Unit,
+    val onCopyDiagnostics: () -> Unit,
     val onScanQr: () -> Unit,
     val onPickQrImage: () -> Unit,
     val onImportText: (String) -> Unit,
@@ -1130,6 +1133,7 @@ private fun ProfileSection(state: ScreenState, actions: ScreenActions) {
 @Composable
 private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
     val options = state.config.options
+    var showDiagnostics by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -1156,6 +1160,27 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
                 checked = options.blockIpv6,
                 onChange = { actions.onOptionsChange(options.copy(blockIpv6 = it)) },
             )
+
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                Text("Размер пакета (MTU)", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Если сайты не открываются при работающем туннеле — поставьте 1280",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(0 to "Из ключа", 1380 to "1380", 1280 to "1280").forEach { (value, title) ->
+                        FilterChip(
+                            selected = options.mtu == value,
+                            onClick = { actions.onOptionsChange(options.copy(mtu = value)) },
+                            label = { Text(title) },
+                        )
+                    }
+                }
+            }
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Пересчёт адресов доменов", style = MaterialTheme.typography.bodyLarge)
@@ -1180,8 +1205,42 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
         }
 
         InfoCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Диагностика", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Что происходит с туннелем прямо сейчас",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = { showDiagnostics = !showDiagnostics }) {
+                    Text(if (showDiagnostics) "Свернуть" else "Показать")
+                }
+            }
+
+            if (showDiagnostics) {
+                Text(
+                    state.diagnostics,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(
+                    onClick = actions.onCopyDiagnostics,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Скопировать отчёт") }
+                Text(
+                    "Отчёт можно переслать тому, кто выдал ключ: в нём нет самих ключей, только состояние.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        InfoCard {
             Text("О программе", style = MaterialTheme.typography.titleMedium)
-            KeyValueRow("Протокол", "WireGuard")
+            KeyValueRow("Протокол", "AmneziaWG и WireGuard")
             KeyValueRow("Правил в наборах", Presets.all.sumOf { it.count }.toString())
             KeyValueRow("Подсетей России", state.ruZoneCount.toString())
             Text(

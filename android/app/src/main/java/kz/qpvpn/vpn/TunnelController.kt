@@ -62,6 +62,7 @@ class TunnelController(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var watchJob: Job? = null
     private var appliedRoutes: List<String> = emptyList()
+    private var lastRepair = 0L
 
     private val _status = MutableStateFlow(TunnelStatus())
     val status: StateFlow<TunnelStatus> = _status.asStateFlow()
@@ -137,6 +138,7 @@ class TunnelController(
                     routeCount = routes.size,
                     serverName = profile.endpointHost,
                     message = note,
+                    lastHandshake = lastHandshakeMillis(),
                 )
                 startWatching()
                 return
@@ -279,10 +281,13 @@ class TunnelController(
         // заблокированные имена подставным российским адресом, а тот идёт
         // мимо VPN — и сайт всё равно не открывается. Если в ключе DNS не
         // указан, подставляем публичный.
-        val effective = if (profile.dns.isEmpty()) {
+        var effective = if (profile.dns.isEmpty()) {
             profile.copy(dns = listOf("1.1.1.1", "8.8.8.8"))
         } else {
             profile
+        }
+        if (config.options.mtu > 0) {
+            effective = effective.copy(mtu = config.options.mtu)
         }
 
         val text = effective.toConfigText(
@@ -435,15 +440,20 @@ class TunnelController(
                 }
 
                 // Связь могла пропасть: сервер перестал отвечать, а туннель
-                // при этом поднят — трафик уходит в никуда.
+                // при этом поднят — трафик уходит в никуда. Сначала пробуем
+                // поднять заново сами: чаще всего помогает, если телефон
+                // переехал с Wi-Fi на мобильную сеть.
                 val handshake = lastHandshakeMillis()
+                _status.value = _status.value.copy(lastHandshake = handshake)
+
                 if (handshake > 0) {
                     val silence = System.currentTimeMillis() - handshake
-                    _status.value = _status.value.copy(
-                        message = if (silence > 180_000)
-                            "Сервер молчит больше трёх минут — связь потеряна."
-                        else _status.value.message.takeIf { !it.startsWith("Сервер молчит") }.orEmpty(),
-                    )
+                    if (silence > 150_000 && System.currentTimeMillis() - lastRepair > 120_000) {
+                        lastRepair = System.currentTimeMillis()
+                        _status.value = _status.value.copy(message = "Сервер молчит — переподключаюсь…")
+                        connect()
+                        return@launch
+                    }
                 }
 
                 sinceResolve += 2_000

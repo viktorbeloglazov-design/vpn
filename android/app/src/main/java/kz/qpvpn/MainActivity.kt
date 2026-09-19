@@ -1,15 +1,20 @@
 package kz.qpvpn
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,6 +42,7 @@ import kz.qpvpn.net.Cidr
 import kz.qpvpn.net.IpCheck
 import kz.qpvpn.net.RuZone
 import kz.qpvpn.ui.AppEntry
+import kz.qpvpn.ui.Format
 import kz.qpvpn.ui.QrScannerScreen
 import kz.qpvpn.ui.decodeQrFromImage
 import kz.qpvpn.ui.QpVpnTheme
@@ -140,6 +146,7 @@ class MainActivity : ComponentActivity() {
                         masterCount = MasterFilter.count,
                         masterSections = MasterFilter.sections.map { it.title to it.domains.size },
                         masterApps = MasterFilter.packageCount,
+                        diagnostics = diagnostics(status),
                         ipText = ipText,
                         ipIsKazakhstan = ipIsKazakhstan,
                         checkingIp = checkingIp,
@@ -160,6 +167,7 @@ class MainActivity : ComponentActivity() {
                         onClearProfile = ::clearProfile,
                         onOptionsChange = ::changeOptions,
                         onCheckIp = ::checkIp,
+                        onCopyDiagnostics = ::copyDiagnostics,
                         onScanQr = { showScanner = true },
                         onPickQrImage = { pickQrImage.launch("image/*") },
                         onImportText = ::importFromText,
@@ -387,6 +395,71 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Название протокола для шапки: обычный WireGuard или маскированный AmneziaWG. */
+    /**
+     * Короткий отчёт о состоянии — его можно переслать тому, кто выдал ключ.
+     *
+     * Ключей внутри нет: только адрес сервера, режим, счётчики и время
+     * последнего ответа сервера. Этого хватает, чтобы понять, где встало.
+     */
+    private fun diagnostics(status: kz.qpvpn.model.TunnelStatus): String {
+        val config = app.store.config.value
+        val profile = app.store.profileText()?.let { text ->
+            runCatching { WgProfile.parse(text) }.getOrNull()
+        }
+
+        val handshake = if (status.lastHandshake > 0) {
+            val seconds = (System.currentTimeMillis() - status.lastHandshake) / 1000
+            "$seconds с назад"
+        } else {
+            "не было"
+        }
+
+        val mode = when {
+            config.fullTunnel -> "весь трафик через VPN"
+            config.mainFilter -> "обход блокировок (всё, кроме ${RuZone.count(this)} подсетей РФ)"
+            else -> config.mode.title.lowercase()
+        }
+
+        return buildString {
+            appendLine("QP VPN ${BuildConfig.VERSION_NAME}, Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}")
+            appendLine("Состояние: ${status.state.title}${if (status.message.isNotEmpty()) " — ${status.message}" else ""}")
+            appendLine("Сеть: ${networkKind()}")
+            appendLine("Режим: $mode")
+            appendLine("Рабочие ресурсы: ${if (config.workFilter) "через VPN" else "напрямую"}")
+            if (profile != null) {
+                appendLine("Сервер: ${profile.endpoint}")
+                appendLine("Протокол: ${profile.protocolName}, параметров маскировки: ${profile.amneziaParams.size}")
+                appendLine("DNS из ключа: ${profile.dns.joinToString(", ").ifEmpty { "нет, подставляем 1.1.1.1" }}")
+                appendLine("MTU: ${if (config.options.mtu > 0) "${config.options.mtu} (задан вручную)" else "${profile.mtu} (из ключа)"}")
+            } else {
+                appendLine("Ключ: не загружен")
+            }
+            appendLine("Маршрутов в туннеле: ${status.routeCount}")
+            appendLine("Рукопожатие: $handshake")
+            append("Принято/отправлено: ${Format.bytes(status.rxBytes)} / ${Format.bytes(status.txBytes)}")
+        }
+    }
+
+    /** Через что телефон сейчас в интернете. */
+    private fun networkKind(): String {
+        val manager = getSystemService(ConnectivityManager::class.java) ?: return "неизвестно"
+        val capabilities = manager.getNetworkCapabilities(manager.activeNetwork) ?: return "нет сети"
+        return when {
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "мобильная"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "провод"
+            else -> "другая"
+        }
+    }
+
+    private fun copyDiagnostics() {
+        val manager = getSystemService(ClipboardManager::class.java) ?: return
+        manager.setPrimaryClip(
+            ClipData.newPlainText("QP VPN", diagnostics(app.tunnel.status.value))
+        )
+        Toast.makeText(this, "Отчёт скопирован", Toast.LENGTH_SHORT).show()
+    }
+
     private fun profileProtocol(): String {
         val text = app.store.profileText() ?: return ""
         return runCatching { WgProfile.parse(text).protocolName }.getOrDefault("WireGuard")
