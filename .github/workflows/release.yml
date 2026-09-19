@@ -72,6 +72,7 @@ jobs:
           TAG="v$VERSION"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/*.dmg --clobber
+            gh release edit "$TAG" --notes-file .github/release-notes.md
           else
             gh release create "$TAG" dist/*.dmg \
               --target "$GITHUB_SHA" \
