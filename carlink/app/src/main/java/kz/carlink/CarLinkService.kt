@@ -18,9 +18,12 @@ import kz.carlink.aa.FrameCodec
 import kz.carlink.aa.Session
 import kz.carlink.aa.Stage
 import kz.carlink.diag.EventLog
+import kz.carlink.net.TcpTransport
 import kz.carlink.projection.PlaybackCapture
 import kz.carlink.projection.ScreenProjection
 import kz.carlink.usb.AoapTransport
+import java.io.InputStream
+import java.io.OutputStream
 
 /** Что показывает главный экран, пока идёт разговор с машиной. */
 data class LinkState(
@@ -30,18 +33,19 @@ data class LinkState(
 )
 
 /**
- * Служба, которая держит соединение с машиной.
+ * Служба, которая держит соединение.
  *
  * Живёт на переднем плане: провод — «подключённое устройство», а захват экрана
- * система разрешает только видимой службе. Всё общение идёт в отдельном потоке,
- * его состояние видно в [state].
+ * система разрешает только видимой службе. Соединение поднимается в рабочем
+ * потоке — и потому, что открытие сокета с главного потока Android запрещает, и
+ * потому, что чтение с провода блокирующее.
  */
 class CarLinkService : Service() {
 
-    private var transport: AoapTransport? = null
     private var session: Session? = null
     private var worker: Thread? = null
     private var projection: MediaProjection? = null
+    private var closeLink: (() -> Unit)? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -78,7 +82,7 @@ class CarLinkService : Service() {
 
         if (withCapture) {
             val manager = getSystemService(MediaProjectionManager::class.java)
-            projection = manager.getMediaProjection(resultCode, resultData)?.also {
+            projection = manager.getMediaProjection(resultCode, resultData!!)?.also {
                 it.registerCallback(object : MediaProjection.Callback() {
                     override fun onStop() {
                         EventLog.log("захват экрана остановлен системой")
@@ -87,23 +91,12 @@ class CarLinkService : Service() {
             }
         }
 
-        val accessory = AoapTransport.attached(this)
-        if (accessory == null) {
-            EventLog.log("машина не подключена: воткните провод в порт USB автомобиля")
-            update(Stage.WAITING, "нет провода")
-            stopSelf()
-            return
-        }
-        if (!AoapTransport.hasPermission(this, accessory)) {
-            EventLog.log("нет разрешения на доступ к машине — подтвердите запрос Android")
-            AoapTransport.requestPermission(this, accessory)
+        val transport = Settings.transport(this)
+        if (transport == Transport.USB && !usbReady()) {
             stopSelf()
             return
         }
 
-        EventLog.log("машина на проводе: ${AoapTransport.describe(accessory)}")
-
-        val mode = Settings.mode(this)
         val keyManagers = try {
             Settings.keyManagers(this)
         } catch (e: Exception) {
@@ -111,7 +104,7 @@ class CarLinkService : Service() {
             stopSelf()
             return
         }
-        if (!Settings.hasCredentials(this)) {
+        if (!Settings.hasCredentials(this) && transport == Transport.USB) {
             EventLog.log(
                 "внимание: используется отладочный самоподписанный ключ. " +
                     "Серийная машина обрывает соединение сразу после рукопожатия — " +
@@ -119,48 +112,95 @@ class CarLinkService : Service() {
             )
         }
 
-        val link = try {
-            AoapTransport.open(this, accessory)
-        } catch (e: Exception) {
-            EventLog.log("не открыл соединение: ${e.message}")
-            stopSelf()
-            return
-        }
-        transport = link
-
-        val codec = FrameCodec(link.input, link.output)
-        val screen = ScreenProjection(applicationContext, mode, { projection }, EventLog::log)
-        val audio = if (projection != null) PlaybackCapture({ projection }, EventLog::log) else null
-
-        val session = Session(
-            codec = codec,
-            keyManagers = keyManagers,
-            projection = screen,
-            audio = audio,
-            deviceName = Build.MODEL ?: "Android",
-            deviceBrand = Build.MANUFACTURER ?: "Android",
-            log = EventLog::log,
-            onStage = { stage, detail -> update(stage, detail) },
-        )
-        this.session = session
+        val mode = Settings.mode(this)
+        val host = Settings.deskHost(this)
+        val port = Settings.deskPort(this)
 
         worker = Thread({
-            session.run()
-            mainHandler.post {
+            val streams = openLink(transport, host, port)
+            if (streams != null) {
+                val screen = ScreenProjection(applicationContext, mode, { projection }, EventLog::log)
+                val audio = if (projection != null) PlaybackCapture({ projection }, EventLog::log) else null
+                val session = Session(
+                    codec = FrameCodec(streams.first, streams.second),
+                    keyManagers = keyManagers,
+                    projection = screen,
+                    audio = audio,
+                    deviceName = Build.MODEL ?: "Android",
+                    deviceBrand = Build.MANUFACTURER ?: "Android",
+                    log = EventLog::log,
+                    onStage = { stage, detail -> update(stage, detail) },
+                )
+                this.session = session
+                session.run()
                 EventLog.log(session.statistics())
+            }
+            mainHandler.post {
                 disconnect()
                 stopSelf()
             }
         }, "carlink-session").also { it.start() }
     }
 
+    /** Открывает провод или соединение со стендом. */
+    private fun openLink(transport: Transport, host: String, port: Int): Pair<InputStream, OutputStream>? =
+        when (transport) {
+            Transport.USB -> {
+                val accessory = AoapTransport.attached(this)
+                if (accessory == null) {
+                    EventLog.log("машина отключилась, пока собирались")
+                    null
+                } else {
+                    try {
+                        val link = AoapTransport.open(this, accessory)
+                        closeLink = link::close
+                        link.input to link.output
+                    } catch (e: Exception) {
+                        EventLog.log("не открыл соединение с машиной: ${e.message}")
+                        null
+                    }
+                }
+            }
+
+            Transport.DESK -> try {
+                EventLog.log("подключаюсь к стенду $host:$port")
+                val link = TcpTransport.open(host, port)
+                closeLink = link::close
+                EventLog.log("стенд ответил")
+                link.input to link.output
+            } catch (e: Exception) {
+                EventLog.log(
+                    "стенд не отвечает ($host:$port): ${e.message}. " +
+                        "Проверьте, запущен ли эмулятор и сделан ли adb reverse tcp:$port tcp:$port"
+                )
+                null
+            }
+        }
+
+    /** Проверки, которые дешевле сделать до запуска потока. */
+    private fun usbReady(): Boolean {
+        val accessory = AoapTransport.attached(this)
+        if (accessory == null) {
+            EventLog.log("машина не подключена: воткните провод в порт USB автомобиля")
+            update(Stage.WAITING, "нет провода", running = false)
+            return false
+        }
+        if (!AoapTransport.hasPermission(this, accessory)) {
+            EventLog.log("нет разрешения на доступ к машине — подтвердите запрос Android")
+            AoapTransport.requestPermission(this, accessory)
+            return false
+        }
+        EventLog.log("машина на проводе: ${AoapTransport.describe(accessory)}")
+        return true
+    }
+
     private fun disconnect() {
         session?.stop()
         session = null
+        closeLink?.invoke()
+        closeLink = null
         worker?.let { if (it !== Thread.currentThread()) it.join(700) }
         worker = null
-        transport?.close()
-        transport = null
         projection?.stop()
         projection = null
         update(Stage.CLOSED, "", running = false)

@@ -1,15 +1,10 @@
 package kz.carlink.aa
 
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import java.io.ByteArrayOutputStream
-import java.math.BigInteger
 import java.nio.ByteBuffer
-import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.Calendar
 import javax.net.ssl.KeyManager
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
@@ -17,7 +12,6 @@ import javax.net.ssl.SSLEngine
 import javax.net.ssl.SSLEngineResult
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
-import javax.security.auth.x500.X500Principal
 
 /**
  * Шифрованный канал поверх сообщений SslHandshake.
@@ -26,21 +20,23 @@ import javax.security.auth.x500.X500Principal
  * не идут отдельным потоком: они ездят внутри сообщений протокола, поэтому
  * вместо SSLSocket здесь SSLEngine, которому байты подают вручную.
  *
- * Сертификат машины не проверяется: она на другом конце провода, а цепочку
- * Google всё равно проверить нечем. Зато он попадает в журнал — по нему видно,
- * что за устройство подключилось.
+ * Сертификат другой стороны не проверяется: она на другом конце провода, а
+ * цепочку Google всё равно проверить нечем. Зато он попадает в журнал — по нему
+ * видно, что за устройство подключилось.
+ *
+ * @param clientMode сторона головного устройства (им пользуется эмулятор).
  */
-class SslLink(keyManagers: Array<KeyManager>) : Cryptor {
+class SslLink(keyManagers: Array<KeyManager>, clientMode: Boolean = false) : Cryptor {
 
     private val trust = RecordingTrustManager()
 
     private val engine: SSLEngine = SSLContext.getInstance("TLSv1.2").apply {
         init(keyManagers, arrayOf<TrustManager>(trust), SecureRandom())
     }.createSSLEngine().apply {
-        useClientMode = false
+        useClientMode = clientMode
         // Машина показывает свой сертификат сама; требовать его мы не можем —
         // иначе разрыв там, где соединение могло бы состояться.
-        wantClientAuth = true
+        if (!clientMode) wantClientAuth = true
         beginHandshake()
     }
 
@@ -56,6 +52,13 @@ class SslLink(keyManagers: Array<KeyManager>) : Cryptor {
     /** Сертификат, который показала машина, — для журнала. */
     val peerCertificate: X509Certificate?
         get() = trust.peer
+
+    /**
+     * Первое слово в рукопожатии. Его говорит та сторона, что подключается, —
+     * головное устройство. Телефон только отвечает, поэтому у него метод
+     * возвращает пусто.
+     */
+    fun startHandshake(): ByteArray = drainWrap()
 
     /**
      * Принимает очередную порцию рукопожатия от машины.
@@ -163,54 +166,20 @@ class SslLink(keyManagers: Array<KeyManager>) : Cryptor {
 }
 
 /**
- * Откуда брать ключ и сертификат телефона.
+ * Загрузка ключа и цепочки из файла PKCS#12.
  *
- * Настоящая машина проверяет, что сертификат подписан Google: так она отличает
- * телефон с Android Auto от чего угодно другого. Сгенерированный здесь ключ эту
- * проверку не пройдёт — он нужен для отладки против эмулятора головного
- * устройства (openauto и подобных), где проверку можно выключить. Для боевого
- * подключения нужен файл PKCS#12 с ключом и цепочкой, которую машина примет.
+ * Настоящая машина проверяет, что сертификат телефона подписан Google: так она
+ * отличает телефон с Android Auto от чего угодно другого. Ни один ключ, который
+ * можно сделать самому, эту проверку не пройдёт — он годится для эмулятора
+ * головного устройства, где проверка выключена.
  */
-object Credentials {
+object Pkcs12 {
 
-    private const val DEV_ALIAS = "carlink-dev"
-
-    /** Ключ и цепочка из файла .p12, который выбрал пользователь. */
-    fun fromPkcs12(data: ByteArray, password: String): Array<KeyManager> {
+    fun keyManagers(data: ByteArray, password: String): Array<KeyManager> {
         val store = KeyStore.getInstance("PKCS12")
         store.load(data.inputStream(), password.toCharArray())
         val factory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
         factory.init(store, password.toCharArray())
-        return factory.keyManagers
-    }
-
-    /**
-     * Самоподписанный ключ в хранилище Android — только для проверки протокола.
-     * Машина такой сертификат отклонит.
-     */
-    fun developmentKey(): Array<KeyManager> {
-        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        if (!store.containsAlias(DEV_ALIAS)) {
-            val notBefore = Calendar.getInstance()
-            val notAfter = Calendar.getInstance().apply { add(Calendar.YEAR, 10) }
-            val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA, "AndroidKeyStore")
-            generator.initialize(
-                KeyGenParameterSpec.Builder(DEV_ALIAS, KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_DECRYPT)
-                    .setKeySize(2048)
-                    .setDigests(KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA1, KeyProperties.DIGEST_NONE)
-                    .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_RSA_PKCS1)
-                    .setCertificateSubject(X500Principal("CN=CarLink development"))
-                    .setCertificateSerialNumber(BigInteger.ONE)
-                    .setCertificateNotBefore(notBefore.time)
-                    .setCertificateNotAfter(notAfter.time)
-                    .setUserAuthenticationRequired(false)
-                    .build()
-            )
-            generator.generateKeyPair()
-        }
-        val factory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
-        factory.init(store, null)
         return factory.keyManagers
     }
 }

@@ -1,6 +1,6 @@
 package kz.carlink
 
-import kz.carlink.aa.Credentials
+import kz.carlink.aa.Pkcs12
 import kz.carlink.aa.SslLink
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertTrue
@@ -57,7 +57,7 @@ class SslHandshakeTest {
     @Test
     fun handshakeCompletesAndDataFlows() {
         val p12 = javaClass.classLoader!!.getResourceAsStream("handshake-test.p12")!!.use { it.readBytes() }
-        val keyManagers = Credentials.fromPkcs12(p12, "secret")
+        val keyManagers = Pkcs12.keyManagers(p12, "secret")
         val server = SslLink(keyManagers)
 
         val context = SSLContext.getInstance("TLSv1.2")

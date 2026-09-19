@@ -7,3 +7,4 @@ dist/
 *.conf.local
 secrets/
 android/app/libs/*.aar
+.gradle/

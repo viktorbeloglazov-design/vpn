@@ -351,4 +351,158 @@ object Messages {
 
     fun sensorStartRequest(sensorType: Int, refreshIntervalUs: Long = 0): ByteArray =
         ProtoWriter().int32(1, sensorType).varint(2, refreshIntervalUs).toByteArray()
+
+    // --- сторона головного устройства ------------------------------------
+    //
+    // Тем же кодом пользуется эмулятор из модуля headunit: обе стороны провода
+    // собираются из одних и тех же номеров полей, так что расхождению взяться
+    // неоткуда.
+
+    fun versionRequest(major: Int = Session.PROTOCOL_MAJOR, minor: Int = Session.PROTOCOL_MINOR): ByteArray =
+        byteArrayOf(
+            ((major shr 8) and 0xFF).toByte(), (major and 0xFF).toByte(),
+            ((minor shr 8) and 0xFF).toByte(), (minor and 0xFF).toByte(),
+        )
+
+    fun authComplete(status: Int = 0): ByteArray = ProtoWriter().int32(1, status).toByteArray()
+
+    fun parseServiceDiscoveryRequest(payload: ByteArray): Pair<String, String> {
+        var name = ""
+        var brand = ""
+        val reader = ProtoReader(payload)
+        while (reader.next()) {
+            when (reader.field) {
+                4 -> name = reader.string()
+                5 -> brand = reader.string()
+                else -> reader.skipValue()
+            }
+        }
+        return name to brand
+    }
+
+    fun serviceDiscoveryResponse(headUnit: HeadUnit, services: List<Service>): ByteArray {
+        val writer = ProtoWriter()
+        for (service in services) {
+            writer.message(1) {
+                int32(1, service.channelId)
+                when (service.kind) {
+                    ServiceKind.SENSORS -> message(2) {
+                        message(1) { int32(1, Sensors.TYPE_DRIVING_STATUS) }
+                        message(1) { int32(1, Sensors.TYPE_NIGHT_DATA) }
+                    }
+                    ServiceKind.VIDEO -> message(3) {
+                        int32(1, STREAM_VIDEO)
+                        for (config in service.videoConfigs) {
+                            message(4) {
+                                int32(1, config.resolutionCode)
+                                int32(2, if (config.fps >= 60) 2 else 1)
+                                int32(5, config.dpi)
+                            }
+                        }
+                    }
+                    ServiceKind.AUDIO -> message(3) {
+                        int32(1, STREAM_AUDIO)
+                        int32(2, service.audioKind.streamType)
+                        for (config in service.audioConfigs) {
+                            message(3) {
+                                int32(1, config.sampleRate)
+                                int32(2, config.bitDepth)
+                                int32(3, config.channels)
+                            }
+                        }
+                    }
+                    ServiceKind.INPUT -> message(4) {
+                        message(1) {
+                            int32(1, service.videoConfigs.firstOrNull()?.width ?: 1280)
+                            int32(2, service.videoConfigs.firstOrNull()?.height ?: 720)
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+        writer.string(2, headUnit.name)
+        writer.string(3, headUnit.carModel)
+        writer.string(4, headUnit.carYear)
+        writer.string(5, headUnit.serial)
+        writer.bool(6, headUnit.leftHandDrive)
+        writer.string(7, headUnit.manufacturer)
+        writer.string(8, headUnit.model)
+        writer.string(9, headUnit.softwareBuild)
+        writer.string(10, headUnit.softwareVersion)
+        return writer.toByteArray()
+    }
+
+    fun parseChannelOpenRequest(payload: ByteArray): Int {
+        var channelId = -1
+        val reader = ProtoReader(payload)
+        while (reader.next()) {
+            when (reader.field) {
+                2 -> channelId = reader.int32()
+                else -> reader.skipValue()
+            }
+        }
+        return channelId
+    }
+
+    fun channelOpenResponse(status: Int = 0): ByteArray = ProtoWriter().int32(1, status).toByteArray()
+
+    fun parseSetupRequest(payload: ByteArray): Int = parseStatus(payload)
+
+    fun setupResponse(status: Int, maxUnacked: Int, configIndices: List<Int>): ByteArray {
+        val writer = ProtoWriter().int32(1, status).int32(2, maxUnacked)
+        configIndices.forEach { writer.int32(3, it) }
+        return writer.toByteArray()
+    }
+
+    fun parseVideoFocusRequest(payload: ByteArray): Int {
+        var mode = 1
+        val reader = ProtoReader(payload)
+        while (reader.next()) {
+            when (reader.field) {
+                2 -> mode = reader.int32()
+                else -> reader.skipValue()
+            }
+        }
+        return mode
+    }
+
+    fun videoFocusIndication(mode: Int, unrequested: Boolean = false): ByteArray =
+        ProtoWriter().int32(1, mode).bool(2, unrequested).toByteArray()
+
+    fun startIndication(session: Int, config: Int): ByteArray =
+        ProtoWriter().int32(1, session).int32(2, config).toByteArray()
+
+    fun mediaAck(session: Int, value: Int = 1): ByteArray =
+        ProtoWriter().int32(1, session).int32(2, value).toByteArray()
+
+    /** Разбирает кусок потока: восемь байт времени, дальше данные. */
+    fun parseMediaWithTimestamp(payload: ByteArray): Pair<Long, ByteArray> {
+        if (payload.size < 8) return 0L to payload
+        var timestamp = 0L
+        for (i in 0 until 8) timestamp = (timestamp shl 8) or (payload[i].toLong() and 0xFF)
+        return timestamp to payload.copyOfRange(8, payload.size)
+    }
+
+    fun inputEvent(timestampUs: Long, touch: TouchEvent): ByteArray =
+        ProtoWriter()
+            .varint(1, timestampUs)
+            .message(3) {
+                for (pointer in touch.pointers) {
+                    message(1) {
+                        int32(1, pointer.x)
+                        int32(2, pointer.y)
+                        int32(3, pointer.id)
+                    }
+                }
+                int32(2, touch.actionIndex)
+                int32(3, touch.action)
+            }
+            .toByteArray()
+
+    fun sensorStartResponse(status: Int = 0): ByteArray = ProtoWriter().int32(1, status).toByteArray()
+
+    /** Значения поля available_type: звук и картинка. */
+    const val STREAM_AUDIO = 1
+    const val STREAM_VIDEO = 3
 }

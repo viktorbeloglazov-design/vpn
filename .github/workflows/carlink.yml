@@ -32,12 +32,14 @@ jobs:
           gradle-version: "8.10.2"
 
       - name: Тесты
+        # Ядро протокола, стенд головного устройства и сквозная проверка
+        # проекции: телефон и машина поднимаются в одном процессе.
         working-directory: carlink
         run: gradle test --no-daemon --stacktrace
 
-      - name: Сборка APK
+      - name: Сборка APK и стенда
         working-directory: carlink
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: gradle :app:assembleDebug :headunit:installDist --no-daemon --stacktrace
 
       - name: Проверяю манифест
         run: |
@@ -55,4 +57,10 @@ jobs:
         with:
           name: CarLink-apk
           path: carlink/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CarLink-headunit
+          path: carlink/headunit/build/install/headunit
           if-no-files-found: error

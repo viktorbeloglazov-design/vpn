@@ -30,6 +30,9 @@ import kz.carlink.usb.AoapTransport
 class MainActivity : ComponentActivity() {
 
     private var accessory by mutableStateOf<String?>(null)
+    private var transport by mutableStateOf(Transport.USB)
+    private var deskHost by mutableStateOf("127.0.0.1")
+    private var deskPort by mutableStateOf(5288)
     private var mode by mutableStateOf(ProjectionMode.CAR_UI)
     private var hasCredentials by mutableStateOf(false)
     private var pendingCredentials by mutableStateOf<ByteArray?>(null)
@@ -76,6 +79,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        transport = Settings.transport(this)
+        deskHost = Settings.deskHost(this)
+        deskPort = Settings.deskPort(this)
         mode = Settings.mode(this)
         hasCredentials = Settings.hasCredentials(this)
         requestPermissions()
@@ -92,11 +98,26 @@ class MainActivity : ComponentActivity() {
             CarLinkScreen(
                 state = state,
                 accessory = accessory,
+                transport = transport,
+                deskHost = deskHost,
+                deskPort = deskPort,
                 mode = mode,
                 hasCredentials = hasCredentials,
                 injectorEnabled = TouchInjector.instance != null,
                 log = log,
                 passwordRequested = pendingCredentials != null,
+                onTransportChange = {
+                    transport = it
+                    Settings.setTransport(this, it)
+                },
+                onDeskHostChange = {
+                    deskHost = it
+                    Settings.setDeskHost(this, it)
+                },
+                onDeskPortChange = {
+                    deskPort = it
+                    Settings.setDeskPort(this, it)
+                },
                 onModeChange = {
                     mode = it
                     Settings.setMode(this, it)
@@ -146,7 +167,7 @@ class MainActivity : ComponentActivity() {
         EventLog.log("машина позвала приложение сама")
         // В режиме своего экрана разрешение на показ не нужно — можно
         // подключаться сразу, не дожидаясь нажатия.
-        if (Settings.mode(this) == ProjectionMode.CAR_UI) connect()
+        if (Settings.mode(this) == ProjectionMode.CAR_UI && Settings.transport(this) == Transport.USB) connect()
     }
 
     /** Уведомление службы и звук телефона в машину — оба под разрешением. */
@@ -167,15 +188,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun connect() {
-        val attached = AoapTransport.attached(this)
-        if (attached == null) {
-            EventLog.log("провод не найден: телефон должен быть в порту USB машины")
-            return
+        if (transport == Transport.USB) {
+            val attached = AoapTransport.attached(this)
+            if (attached == null) {
+                EventLog.log("провод не найден: телефон должен быть в порту USB машины")
+                return
+            }
+            if (!AoapTransport.hasPermission(this, attached)) {
+                AoapTransport.requestPermission(this, attached)
+                return
+            }
         }
-        if (!AoapTransport.hasPermission(this, attached)) {
-            AoapTransport.requestPermission(this, attached)
-            return
-        }
+        // Зеркало и звук идут через захват экрана, а он требует согласия
+        // пользователя каждый раз заново.
         if (mode == ProjectionMode.MIRROR) {
             val manager = getSystemService(MediaProjectionManager::class.java)
             captureLauncher.launch(manager.createScreenCaptureIntent())

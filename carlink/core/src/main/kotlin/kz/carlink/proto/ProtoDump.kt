@@ -25,7 +25,7 @@ object ProtoDump {
                         .append(java.lang.Long.toHexString(reader.fixed64())).append('\n')
                     2 -> {
                         val value = reader.bytes()
-                        val nested = if (depth < 6) tryNested(value) else null
+                        val nested = if (depth < 6) tryNested(value, indent, depth) else null
                         when {
                             nested != null -> {
                                 sb.append(indent).append("#$field {\n").append(nested).append(indent).append("}\n")
@@ -52,11 +52,11 @@ object ProtoDump {
      * последнего байта. Иначе короткая строка вроде «PCM» превращается в
      * бессмысленное дерево: её байты тоже похожи на номера полей.
      */
-    private fun tryNested(value: ByteArray): String? {
+    private fun tryNested(value: ByteArray, indent: String, depth: Int): String? {
         if (value.size < 2) return null
         if (!parsesExactly(value)) return null
         val sb = StringBuilder()
-        render(ProtoReader(value), "  ", sb, depth = 1)
+        render(ProtoReader(value), "$indent  ", sb, depth + 1)
         return if (sb.contains("разбор прерван")) null else sb.toString()
     }
 

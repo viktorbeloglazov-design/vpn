@@ -40,6 +40,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kz.carlink.LinkState
+import kz.carlink.Transport
 import kz.carlink.aa.Stage
 import kz.carlink.projection.ProjectionMode
 
@@ -47,11 +48,17 @@ import kz.carlink.projection.ProjectionMode
 fun CarLinkScreen(
     state: LinkState,
     accessory: String?,
+    transport: Transport,
+    deskHost: String,
+    deskPort: Int,
     mode: ProjectionMode,
     hasCredentials: Boolean,
     injectorEnabled: Boolean,
     log: List<String>,
     passwordRequested: Boolean,
+    onTransportChange: (Transport) -> Unit,
+    onDeskHostChange: (String) -> Unit,
+    onDeskPortChange: (Int) -> Unit,
     onModeChange: (ProjectionMode) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
@@ -74,8 +81,9 @@ fun CarLinkScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    StatusCard(state, accessory)
-                    if (!hasCredentials) CertificateWarning()
+                    StatusCard(state, accessory, transport)
+                    ConnectionCard(transport, deskHost, deskPort, onTransportChange, onDeskHostChange, onDeskPortChange)
+                    if (!hasCredentials && transport == Transport.USB) CertificateWarning()
                     ModeCard(mode, injectorEnabled, onModeChange, onOpenAccessibility)
                     CredentialsCard(hasCredentials, onPickCredentials, onForgetCredentials)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -98,7 +106,7 @@ fun CarLinkScreen(
 }
 
 @Composable
-private fun StatusCard(state: LinkState, accessory: String?) {
+private fun StatusCard(state: LinkState, accessory: String?, transport: Transport) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(state.stage.title, style = MaterialTheme.typography.headlineSmall)
@@ -106,11 +114,67 @@ private fun StatusCard(state: LinkState, accessory: String?) {
                 Text(state.detail, style = MaterialTheme.typography.bodyMedium)
             }
             Text(
-                accessory?.let { "Провод: $it" } ?: "Провод: машина не найдена",
+                when {
+                    transport == Transport.DESK -> "Подключение: стенд на компьютере"
+                    accessory != null -> "Провод: $accessory"
+                    else -> "Провод: машина не найдена"
+                },
                 style = MaterialTheme.typography.bodySmall,
             )
             if (state.stage == Stage.STREAMING) {
                 Text("Экран отдан машине", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConnectionCard(
+    transport: Transport,
+    host: String,
+    port: Int,
+    onTransportChange: (Transport) -> Unit,
+    onHostChange: (String) -> Unit,
+    onPortChange: (Int) -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Куда подключаться", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = transport == Transport.USB,
+                    onClick = { onTransportChange(Transport.USB) },
+                    label = { Text("Машина по USB") },
+                )
+                FilterChip(
+                    selected = transport == Transport.DESK,
+                    onClick = { onTransportChange(Transport.DESK) },
+                    label = { Text("Стенд на компьютере") },
+                )
+            }
+            if (transport == Transport.DESK) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = host,
+                        onValueChange = onHostChange,
+                        singleLine = true,
+                        label = { Text("Адрес") },
+                        modifier = Modifier.weight(2f),
+                    )
+                    OutlinedTextField(
+                        value = port.toString(),
+                        onValueChange = { text -> text.toIntOrNull()?.let(onPortChange) },
+                        singleLine = true,
+                        label = { Text("Порт") },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Text(
+                    "На компьютере запустите стенд и пробросьте порт: " +
+                        "adb reverse tcp:$port tcp:$port. Тогда адрес 127.0.0.1 работает по тому же " +
+                        "кабелю отладки, без общей сети.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
     }
@@ -138,6 +202,9 @@ private fun CertificateWarning() {
 private fun ModeCard(
     mode: ProjectionMode,
     injectorEnabled: Boolean,
+    onTransportChange: (Transport) -> Unit,
+    onDeskHostChange: (String) -> Unit,
+    onDeskPortChange: (Int) -> Unit,
     onModeChange: (ProjectionMode) -> Unit,
     onOpenAccessibility: () -> Unit,
 ) {
