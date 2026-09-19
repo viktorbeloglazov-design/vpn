@@ -58,11 +58,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Kupibas VPN"
+        window.title = "QP VPN"
         window.contentView = hosting
         window.minSize = NSSize(width: 720, height: 560)
         window.isReleasedWhenClosed = false
-        window.setFrameAutosaveName("KupibasVPNMainWindow")
+        window.setFrameAutosaveName("QPVPNMainWindow")
         window.center()
         window.makeKeyAndOrderFront(nil)
 
@@ -79,11 +79,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "О программе Kupibas VPN",
+        appMenu.addItem(withTitle: "О программе QP VPN",
                         action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
                         keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Скрыть Kupibas VPN",
+        appMenu.addItem(withTitle: "Скрыть QP VPN",
                         action: #selector(NSApplication.hide(_:)),
                         keyEquivalent: "h")
         appMenu.addItem(NSMenuItem.separator())
@@ -107,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let windowMenuItem = NSMenuItem()
         mainMenu.addItem(windowMenuItem)
         let windowMenu = NSMenu(title: "Окно")
-        windowMenu.addItem(withTitle: "Показать окно Kupibas VPN",
+        windowMenu.addItem(withTitle: "Показать окно QP VPN",
                            action: #selector(showWindow),
                            keyEquivalent: "0")
         windowMenu.addItem(withTitle: "Свернуть", action: #selector(NSWindow.miniaturize(_:)), keyEquivalent: "m")
@@ -121,8 +121,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildStatusItem(model: AppModel) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = NSImage(systemSymbolName: "shield", accessibilityDescription: "Kupibas VPN")
-        item.button?.toolTip = "Kupibas VPN"
+        item.button?.image = NSImage(systemSymbolName: "shield", accessibilityDescription: "QP VPN")
+        item.button?.toolTip = "QP VPN"
 
         let menu = NSMenu()
         menu.delegate = self
@@ -146,8 +146,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .error: symbol = "exclamationmark.shield"
         case .disconnected: symbol = enabled ? "shield.lefthalf.filled.slash" : "shield"
         }
-        statusItem?.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Kupibas VPN")
-            ?? NSImage(systemSymbolName: "shield", accessibilityDescription: "Kupibas VPN")
+        statusItem?.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "QP VPN")
+            ?? NSImage(systemSymbolName: "shield", accessibilityDescription: "QP VPN")
     }
 
     @objc private func toggleTunnel() {
@@ -169,7 +169,7 @@ extension AppDelegate: NSMenuDelegate {
         guard let model else { return }
         menu.removeAllItems()
 
-        let header = NSMenuItem(title: "Kupibas VPN — \(model.stateText)", action: nil, keyEquivalent: "")
+        let header = NSMenuItem(title: "QP VPN — \(model.stateText)", action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
 

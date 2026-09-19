@@ -43,8 +43,8 @@ jobs:
 
       - name: Проверить бандл
         run: |
-          APP="dist/KupibasVPN.app"
-          test -x "$APP/Contents/MacOS/KupibasVPN"
+          APP="dist/QPVPN.app"
+          test -x "$APP/Contents/MacOS/QPVPN"
           test -f "$APP/Contents/Info.plist"
           test -x "$APP/Contents/Resources/install-helper.sh"
           test -f "$APP/Contents/Resources/AppIcon.icns"
@@ -56,31 +56,31 @@ jobs:
           for tool in kupibasvpnd wireguard-go wg wg-quick; do
             test -x "$APP/Contents/Library/Helpers/$tool"
           done
-          echo "Архитектуры приложения: $(lipo -archs "$APP/Contents/MacOS/KupibasVPN")"
+          echo "Архитектуры приложения: $(lipo -archs "$APP/Contents/MacOS/QPVPN")"
           echo "Архитектуры службы:     $(lipo -archs "$APP/Contents/Library/Helpers/kupibasvpnd")"
           codesign --verify --strict "$APP"
 
       - name: Проверить, что приложение запускается
         run: |
-          APP="$PWD/dist/KupibasVPN.app"
-          LOG="$HOME/Library/Logs/KupibasVPN.log"
+          APP="$PWD/dist/QPVPN.app"
+          LOG="$HOME/Library/Logs/QPVPN.log"
           rm -f "$LOG"
 
           open "$APP"
           sleep 10
 
-          if pgrep -f "KupibasVPN.app/Contents/MacOS/KupibasVPN" > /dev/null; then
+          if pgrep -f "QPVPN.app/Contents/MacOS/QPVPN" > /dev/null; then
             echo "Приложение запущено и держится в памяти."
             echo "--- журнал запуска ---"
             cat "$LOG" 2>/dev/null || echo "(журнал пуст)"
-            pkill -f "KupibasVPN.app/Contents/MacOS/KupibasVPN" || true
+            pkill -f "QPVPN.app/Contents/MacOS/QPVPN" || true
           else
             echo "Приложение не осталось в памяти — запуск оборвался." >&2
             echo "--- журнал запуска ---" >&2
             cat "$LOG" 2>/dev/null || echo "(журнал пуст)" >&2
             echo "--- отчёты о падении ---" >&2
             ls -t "$HOME/Library/Logs/DiagnosticReports" 2>/dev/null | head -3 >&2 || true
-            find "$HOME/Library/Logs/DiagnosticReports" -name "KupibasVPN*" -mmin -5 -exec head -40 {} \; 2>/dev/null >&2 || true
+            find "$HOME/Library/Logs/DiagnosticReports" -name "QPVPN*" -mmin -5 -exec head -40 {} \; 2>/dev/null >&2 || true
             exit 1
           fi
 
@@ -89,7 +89,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: KupibasVPN-${{ steps.version.outputs.value }}-dmg
+          name: QPVPN-${{ steps.version.outputs.value }}-dmg
           path: dist/*.dmg
           if-no-files-found: error
 
@@ -105,7 +105,7 @@ jobs:
           else
             gh release create "$TAG" dist/*.dmg \
               --target "$GITHUB_SHA" \
-              --title "Kupibas VPN $VERSION" \
+              --title "QP VPN для Mac $VERSION" \
               --notes-file .github/release-notes.md
           fi
           echo "Ссылка на релиз: $(gh release view "$TAG" --json url --jq .url)"

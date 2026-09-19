@@ -26,11 +26,11 @@ if [ -z "$BIN_DIR" ]; then
     exit 1
 fi
 
-APP="$OUT_DIR/KupibasVPN.app"
+APP="$OUT_DIR/QPVPN.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/Helpers"
 
-install -m 0755 "$BIN_DIR/KupibasVPNApp" "$APP/Contents/MacOS/KupibasVPN"
+install -m 0755 "$BIN_DIR/KupibasVPNApp" "$APP/Contents/MacOS/QPVPN"
 install -m 0644 "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
@@ -71,7 +71,7 @@ for binary in "$APP/Contents/Library/Helpers"/*; do
         codesign --force --sign - --timestamp=none "$binary"
     fi
 done
-codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/KupibasVPN"
+codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/QPVPN"
 codesign --force --sign - --timestamp=none "$APP"
 codesign --verify --strict "$APP"
 

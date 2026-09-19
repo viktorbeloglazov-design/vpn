@@ -44,7 +44,7 @@
 
 | Компонент | Назначение |
 |---|---|
-| `KupibasVPN.app` | интерфейс: кнопка, маршруты, настройки. Работает от пользователя |
+| `QPVPN.app` | интерфейс: кнопка, маршруты, настройки. Работает от пользователя |
 | `kupibasvpnd` | служба под root (launchd): поднимает туннель, правит маршруты |
 | `server/*.sh` | разворачивают WireGuard на вашем VPS в Казахстане |
 
@@ -73,11 +73,11 @@ curl -fsSL https://raw.githubusercontent.com/viktorbeloglazov-design/vpn/claude/
 Внутри один файл `KupibasVPN.dmg` для Apple Silicon и Intel сразу; всё нужное
 для работы туннеля уже внутри приложения — Homebrew и терминал не нужны.
 
-1. Откройте образ, перетащите `KupibasVPN.app` в «Программы».
+1. Откройте образ, перетащите `QPVPN.app` в «Программы».
 2. Первый запуск macOS заблокирует: приложение подписано своим сертификатом.
    Разрешите его один раз — Системные настройки → Конфиденциальность и
    безопасность → «Открыть всё равно», либо командой
-   `xattr -dr com.apple.quarantine /Applications/KupibasVPN.app`.
+   `xattr -dr com.apple.quarantine /Applications/QPVPN.app`.
 3. Нажмите «Установить службу» и введите пароль администратора.
 4. Вкладка «Сервер» → «Вставить конфиг WireGuard…» → конфиг вашего сервера.
 
@@ -111,9 +111,9 @@ brew install wireguard-tools wireguard-go
 ```bash
 git clone https://github.com/viktorbeloglazov-design/vpn.git
 cd vpn
-./scripts/build.sh          # соберёт dist/KupibasVPN.app
+./scripts/build.sh          # соберёт dist/QPVPN.app
 sudo ./scripts/install.sh   # поставит службу kupibasvpnd
-open dist/KupibasVPN.app
+open dist/QPVPN.app
 ```
 
 Чтобы собрать такой же самодостаточный образ, как в релизах:

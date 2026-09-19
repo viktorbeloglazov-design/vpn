@@ -25,6 +25,7 @@ import kz.qpvpn.model.TunnelStatus
 import kz.qpvpn.net.Cidr
 import kz.qpvpn.net.DomainResolver
 import kz.qpvpn.net.Ipv4Net
+import kz.qpvpn.net.RuZone
 import java.io.BufferedReader
 import java.io.StringReader
 
@@ -180,12 +181,19 @@ class TunnelController(
                 Cidr.merge(nets).map { it.toString() }
             }
 
-            TunnelMode.EXCLUDE -> if (nets.isEmpty()) {
-                listOf("0.0.0.0/0")
-            } else {
-                // Сервер должен оставаться достижимым, поэтому его адрес
-                // из исключений не вычитаем — он и так вне туннеля.
-                Cidr.complement(nets).map { it.toString() }
+            TunnelMode.EXCLUDE -> {
+                // Кроме правил пользователя из туннеля вычитается вся
+                // российская зона, если это включено в настройках.
+                val excluded = if (config.options.bypassRuZone) {
+                    nets + RuZone.networks(context)
+                } else {
+                    nets
+                }
+                if (excluded.isEmpty()) {
+                    listOf("0.0.0.0/0")
+                } else {
+                    Cidr.complement(excluded).map { it.toString() }
+                }
             }
         }
     }

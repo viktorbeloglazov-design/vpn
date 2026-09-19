@@ -95,6 +95,7 @@ data class ScreenState(
     val profileSummary: String,
     val profileProtocol: String,
     val apps: List<AppEntry>,
+    val ruZoneCount: Int,
     val ipText: String,
     val ipIsKazakhstan: Boolean,
     val checkingIp: Boolean,
@@ -397,6 +398,11 @@ private fun RoutesSection(state: ScreenState, actions: ScreenActions) {
         }
 
         item {
+            SectionHeader("Российская зона", "Встроенный список адресов России")
+            RuZoneCard(state, actions)
+        }
+
+        item {
             SectionHeader("Готовые наборы", "Собраны под работу из России через зарубежный сервер")
         }
 
@@ -482,6 +488,45 @@ private fun RoutesSection(state: ScreenState, actions: ScreenActions) {
             items(state.config.rules, key = { it.id }) { rule ->
                 RuleRow(rule, state.config.mode, actions)
             }
+        }
+    }
+}
+
+/** Переключатель «вся российская зона мимо VPN» с пояснением про режим. */
+@Composable
+private fun RuZoneCard(state: ScreenState, actions: ScreenActions) {
+    val options = state.config.options
+    val active = options.bypassRuZone && state.config.mode == TunnelMode.EXCLUDE
+
+    InfoCard {
+        SwitchRow(
+            title = "Вся зона .ru — мимо VPN",
+            subtitle = if (state.ruZoneCount > 0)
+                "${state.ruZoneCount} ${plural(state.ruZoneCount, "подсеть", "подсети", "подсетей")} России идут напрямую"
+            else
+                "Российские адреса идут напрямую, без единого правила",
+            checked = options.bypassRuZone,
+            onChange = { actions.onOptionsChange(options.copy(bypassRuZone = it)) },
+        )
+
+        if (options.bypassRuZone && state.config.mode != TunnelMode.EXCLUDE) {
+            Text(
+                "Работает в режиме «всё через VPN, кроме правил» — сейчас выбран другой.",
+                style = MaterialTheme.typography.bodySmall,
+                color = LocalAppColors.current.waiting,
+            )
+            TextButton(onClick = { actions.onModeChange(TunnelMode.EXCLUDE) }) {
+                Text("Включить этот режим")
+            }
+        }
+
+        if (active) {
+            Text(
+                "Банки, госуслуги, маркетплейсы и всё остальное с российскими адресами " +
+                    "видят ваш домашний адрес. Остальной интернет идёт через сервер.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -715,6 +760,12 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
                 onChange = { actions.onOptionsChange(options.copy(useTunnelDns = it)) },
             )
             SwitchRow(
+                title = "Вся зона .ru мимо VPN",
+                subtitle = "Российские адреса идут напрямую в режиме «всё кроме правил»",
+                checked = options.bypassRuZone,
+                onChange = { actions.onOptionsChange(options.copy(bypassRuZone = it)) },
+            )
+            SwitchRow(
                 title = "Заворачивать IPv6 в туннель",
                 subtitle = "Иначе сайты могут увидеть настоящий адрес по IPv6",
                 checked = options.blockIpv6,
@@ -747,6 +798,7 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
             Text("О программе", style = MaterialTheme.typography.titleMedium)
             KeyValueRow("Протокол", "WireGuard")
             KeyValueRow("Правил в наборах", Presets.all.sumOf { it.count }.toString())
+            KeyValueRow("Подсетей России", state.ruZoneCount.toString())
             Text(
                 "Маршруты считаются по адресам назначения, а списки программ — средствами Android.",
                 style = MaterialTheme.typography.bodySmall,

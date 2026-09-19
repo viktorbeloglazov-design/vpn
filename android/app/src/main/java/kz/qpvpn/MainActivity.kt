@@ -34,6 +34,7 @@ import kz.qpvpn.model.TunnelMode
 import kz.qpvpn.model.TunnelOptions
 import kz.qpvpn.net.Cidr
 import kz.qpvpn.net.IpCheck
+import kz.qpvpn.net.RuZone
 import kz.qpvpn.ui.AppEntry
 import kz.qpvpn.ui.QpVpnTheme
 import kz.qpvpn.ui.ScreenActions
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
     private var ipIsKazakhstan by mutableStateOf(false)
     private var checkingIp by mutableStateOf(false)
     private var installedApps by mutableStateOf<List<AppEntry>>(emptyList())
+    private var ruZoneCount by mutableStateOf(0)
 
     /** Системное окно «разрешить VPN» — без него туннель поднять нельзя. */
     private val vpnConsent = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -83,6 +85,10 @@ class MainActivity : ComponentActivity() {
                     installedApps = loadInstalledApps()
                 }
 
+                LaunchedEffect(Unit) {
+                    ruZoneCount = withContext(Dispatchers.IO) { RuZone.count(this@MainActivity) }
+                }
+
                 val profileSummary = remember(profileVersion) { summarizeProfile() }
                 val profileProtocol = remember(profileVersion) { profileProtocol() }
                 val hasProfile = remember(profileVersion) { app.store.hasProfile }
@@ -95,6 +101,7 @@ class MainActivity : ComponentActivity() {
                         profileSummary = profileSummary,
                         profileProtocol = profileProtocol,
                         apps = installedApps,
+                        ruZoneCount = ruZoneCount,
                         ipText = ipText,
                         ipIsKazakhstan = ipIsKazakhstan,
                         checkingIp = checkingIp,

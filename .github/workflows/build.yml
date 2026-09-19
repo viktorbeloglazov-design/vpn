@@ -24,39 +24,39 @@ jobs:
       - name: Сборка бандла приложения
         run: |
           ./scripts/build.sh
-          test -x "dist/KupibasVPN.app/Contents/MacOS/KupibasVPN"
-          test -x "dist/KupibasVPN.app/Contents/Library/Helpers/kupibasvpnd"
-          test -x "dist/KupibasVPN.app/Contents/Resources/install-helper.sh"
+          test -x "dist/QPVPN.app/Contents/MacOS/KupibasVPN"
+          test -x "dist/QPVPN.app/Contents/Library/Helpers/kupibasvpnd"
+          test -x "dist/QPVPN.app/Contents/Resources/install-helper.sh"
 
       - name: Запуск из «Программ» с меткой карантина
         continue-on-error: true
         run: |
           # Повторяем путь обычного пользователя: приложение лежит в «Программах»
           # и помечено как скачанное из интернета.
-          sudo rm -rf /Applications/KupibasVPN.app
-          sudo cp -R dist/KupibasVPN.app /Applications/KupibasVPN.app
-          sudo xattr -w com.apple.quarantine "0081;$(printf '%x' $(date +%s));Safari;" /Applications/KupibasVPN.app
+          sudo rm -rf /Applications/QPVPN.app
+          sudo cp -R dist/QPVPN.app /Applications/QPVPN.app
+          sudo xattr -w com.apple.quarantine "0081;$(printf '%x' $(date +%s));Safari;" /Applications/QPVPN.app
           echo "--- метки файла ---"
-          xattr -l /Applications/KupibasVPN.app || true
+          xattr -l /Applications/QPVPN.app || true
           echo "--- оценка Gatekeeper ---"
-          spctl -a -vvv /Applications/KupibasVPN.app 2>&1 || true
+          spctl -a -vvv /Applications/QPVPN.app 2>&1 || true
           echo "--- подпись ---"
-          codesign -dv --verbose=4 /Applications/KupibasVPN.app 2>&1 | head -20 || true
+          codesign -dv --verbose=4 /Applications/QPVPN.app 2>&1 | head -20 || true
 
-          rm -f "$HOME/Library/Logs/KupibasVPN.log"
-          open /Applications/KupibasVPN.app 2>&1 || echo "open завершился ошибкой"
+          rm -f "$HOME/Library/Logs/QPVPN.log"
+          open /Applications/QPVPN.app 2>&1 || echo "open завершился ошибкой"
           sleep 10
 
-          if pgrep -f "KupibasVPN.app/Contents/MacOS/KupibasVPN" > /dev/null; then
+          if pgrep -f "QPVPN.app/Contents/MacOS/QPVPN" > /dev/null; then
             echo "РЕЗУЛЬТАТ: приложение с карантином запустилось"
-            pkill -f "KupibasVPN.app/Contents/MacOS/KupibasVPN" || true
+            pkill -f "QPVPN.app/Contents/MacOS/QPVPN" || true
           else
             echo "РЕЗУЛЬТАТ: приложение с карантином НЕ запустилось"
           fi
           echo "--- журнал запуска ---"
-          cat "$HOME/Library/Logs/KupibasVPN.log" 2>/dev/null || echo "(журнала нет)"
+          cat "$HOME/Library/Logs/QPVPN.log" 2>/dev/null || echo "(журнала нет)"
           echo "--- прямой запуск бинарника ---"
-          /Applications/KupibasVPN.app/Contents/MacOS/KupibasVPN 2>&1 &
+          /Applications/QPVPN.app/Contents/MacOS/KupibasVPN 2>&1 &
           BINPID=$!
           sleep 6
           if kill -0 $BINPID 2>/dev/null; then
@@ -67,7 +67,7 @@ jobs:
             wait $BINPID; echo "код выхода: $?"
           fi
           echo "--- отчёты о падениях ---"
-          find "$HOME/Library/Logs/DiagnosticReports" -name "KupibasVPN*" -mmin -10 -exec head -30 {} \; 2>/dev/null || echo "(отчётов нет)"
+          find "$HOME/Library/Logs/DiagnosticReports" -name "QPVPN*" -mmin -10 -exec head -30 {} \; 2>/dev/null || echo "(отчётов нет)"
 
       - name: Проверка синтаксиса скриптов
         run: |

@@ -11,7 +11,7 @@ enum Diagnostics {
     static let logPath: String = {
         let directory = NSHomeDirectory() + "/Library/Logs"
         try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
-        return directory + "/KupibasVPN.log"
+        return directory + "/QPVPN.log"
     }()
 
     private static let formatter: DateFormatter = {

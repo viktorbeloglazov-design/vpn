@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Kupibas VPN</string>
+    <string>QP VPN</string>
     <key>CFBundleDisplayName</key>
-    <string>Kupibas VPN</string>
+    <string>QP VPN</string>
     <key>CFBundleExecutable</key>
-    <string>KupibasVPN</string>
+    <string>QPVPN</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
@@ -25,7 +25,7 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>Kupibas VPN</string>
+    <string>QP VPN</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>

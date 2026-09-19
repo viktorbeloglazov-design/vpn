@@ -1,4 +1,4 @@
-Kupibas VPN для macOS 13 и новее — Apple Silicon и Intel в одном файле.
+QP VPN для macOS 13 и новее — Apple Silicon и Intel в одном файле.
 
 ## Установка одной командой (рекомендуется)
 
@@ -15,14 +15,14 @@ curl -fsSL https://raw.githubusercontent.com/viktorbeloglazov-design/vpn/claude/
 ## Установка вручную
 
 1. Скачайте `.dmg` ниже и откройте его.
-2. Перетащите `KupibasVPN.app` в папку «Программы».
+2. Перетащите `QPVPN.app` в папку «Программы».
 3. Первый запуск: macOS покажет «Файл "KupibasVPN" не был открыт» —
    приложение подписано своим сертификатом, а не сертификатом Apple.
    Разрешите его один раз любым способом:
    - **без терминала:** «Готово» → Системные настройки →
      Конфиденциальность и безопасность → раздел «Безопасность» →
      «Открыть всё равно» → подтвердить → «Открыть»;
-   - **одной командой:** `xattr -dr com.apple.quarantine /Applications/KupibasVPN.app`
+   - **одной командой:** `xattr -dr com.apple.quarantine /Applications/QPVPN.app`
 
    На macOS Sequoia и новее правая кнопка → «Открыть» уже не помогает,
    нужен один из способов выше.

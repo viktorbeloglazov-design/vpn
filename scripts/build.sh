@@ -1,5 +1,5 @@
 #!/bin/bash
-# Сборка Kupibas VPN: приложение KupibasVPN.app и служебный демон kupibasvpnd.
+# Сборка QP VPN: приложение QPVPN.app и служебный демон kupibasvpnd.
 #
 #   ./scripts/build.sh                       обычная сборка под текущий процессор
 #   ./scripts/build.sh --universal           universal-бинарник (Apple Silicon + Intel)
@@ -41,7 +41,7 @@ codesign --force --sign - --timestamp=none "$DIST/kupibasvpnd"
 
 echo
 echo "Готово:"
-echo "  приложение: $DIST/KupibasVPN.app"
+echo "  приложение: $DIST/QPVPN.app"
 echo "  демон:      $DIST/kupibasvpnd"
 echo
 if [ -n "$TOOLS_DIR" ]; then

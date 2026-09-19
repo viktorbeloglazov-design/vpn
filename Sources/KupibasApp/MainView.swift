@@ -8,7 +8,7 @@ struct MainView: View {
     var body: some View {
         VStack(spacing: 0) {
             if !model.isHelperInstalled {
-                InstallBanner(text: "Служба Kupibas VPN не установлена — без неё переключатель не сработает.")
+                InstallBanner(text: "Служба QP VPN не установлена — без неё переключатель не сработает.")
             } else if !model.isDaemonRunning {
                 InstallBanner(text: "Служба не отвечает. Переустановите её или проверьте журнал.")
             }
