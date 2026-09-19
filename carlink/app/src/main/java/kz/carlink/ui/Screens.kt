@@ -51,6 +51,7 @@ fun CarLinkScreen(
     transport: Transport,
     deskHost: String,
     deskPort: Int,
+    localAddresses: List<String>,
     mode: ProjectionMode,
     hasCredentials: Boolean,
     injectorEnabled: Boolean,
@@ -82,7 +83,15 @@ fun CarLinkScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     StatusCard(state, accessory, transport)
-                    ConnectionCard(transport, deskHost, deskPort, onTransportChange, onDeskHostChange, onDeskPortChange)
+                    ConnectionCard(
+                        transport = transport,
+                        host = deskHost,
+                        port = deskPort,
+                        localAddresses = localAddresses,
+                        onTransportChange = onTransportChange,
+                        onHostChange = onDeskHostChange,
+                        onPortChange = onDeskPortChange,
+                    )
                     if (!hasCredentials && transport == Transport.USB) CertificateWarning()
                     ModeCard(mode, injectorEnabled, onModeChange, onOpenAccessibility)
                     CredentialsCard(hasCredentials, onPickCredentials, onForgetCredentials)
@@ -133,6 +142,7 @@ private fun ConnectionCard(
     transport: Transport,
     host: String,
     port: Int,
+    localAddresses: List<String>,
     onTransportChange: (Transport) -> Unit,
     onHostChange: (String) -> Unit,
     onPortChange: (Int) -> Unit,
@@ -149,7 +159,12 @@ private fun ConnectionCard(
                 FilterChip(
                     selected = transport == Transport.DESK,
                     onClick = { onTransportChange(Transport.DESK) },
-                    label = { Text("Стенд на компьютере") },
+                    label = { Text("Стенд") },
+                )
+                FilterChip(
+                    selected = transport == Transport.WIFI,
+                    onClick = { onTransportChange(Transport.WIFI) },
+                    label = { Text("Ждать по Wi-Fi") },
                 )
             }
             if (transport == Transport.DESK) {
@@ -175,6 +190,25 @@ private fun ConnectionCard(
                         "кабелю отладки, без общей сети.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+            if (transport == Transport.WIFI) {
+                OutlinedTextField(
+                    value = port.toString(),
+                    onValueChange = { text -> text.toIntOrNull()?.let(onPortChange) },
+                    singleLine = true,
+                    label = { Text("Порт") },
+                )
+                Text(
+                    "Телефон держит порт открытым и ждёт, пока подключатся к нему. Приложение " +
+                        "остаётся в фоне: можно свернуть, соединение поднимется само.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (localAddresses.isNotEmpty()) {
+                    Text(
+                        "Адреса телефона: " + localAddresses.joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         }
     }
@@ -202,9 +236,6 @@ private fun CertificateWarning() {
 private fun ModeCard(
     mode: ProjectionMode,
     injectorEnabled: Boolean,
-    onTransportChange: (Transport) -> Unit,
-    onDeskHostChange: (String) -> Unit,
-    onDeskPortChange: (Int) -> Unit,
     onModeChange: (ProjectionMode) -> Unit,
     onOpenAccessibility: () -> Unit,
 ) {

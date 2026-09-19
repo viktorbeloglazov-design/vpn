@@ -25,6 +25,7 @@ import kz.carlink.diag.EventLog
 import kz.carlink.projection.ProjectionMode
 import kz.carlink.projection.TouchInjector
 import kz.carlink.ui.CarLinkScreen
+import kz.carlink.net.LocalAddresses
 import kz.carlink.usb.AoapTransport
 
 class MainActivity : ComponentActivity() {
@@ -33,6 +34,7 @@ class MainActivity : ComponentActivity() {
     private var transport by mutableStateOf(Transport.USB)
     private var deskHost by mutableStateOf("127.0.0.1")
     private var deskPort by mutableStateOf(5288)
+    private var localAddresses by mutableStateOf(emptyList<String>())
     private var mode by mutableStateOf(ProjectionMode.CAR_UI)
     private var hasCredentials by mutableStateOf(false)
     private var pendingCredentials by mutableStateOf<ByteArray?>(null)
@@ -101,6 +103,7 @@ class MainActivity : ComponentActivity() {
                 transport = transport,
                 deskHost = deskHost,
                 deskPort = deskPort,
+                localAddresses = localAddresses,
                 mode = mode,
                 hasCredentials = hasCredentials,
                 injectorEnabled = TouchInjector.instance != null,
@@ -185,6 +188,7 @@ class MainActivity : ComponentActivity() {
         val attached = AoapTransport.attached(this)
         accessory = attached?.let { AoapTransport.describe(it) }
         hasCredentials = Settings.hasCredentials(this)
+        localAddresses = LocalAddresses.list()
     }
 
     private fun connect() {

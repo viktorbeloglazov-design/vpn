@@ -6,6 +6,7 @@ import kz.carlink.aa.VideoConfig
 import java.awt.GraphicsEnvironment
 import java.io.File
 import java.io.FileOutputStream
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.text.SimpleDateFormat
@@ -31,10 +32,16 @@ fun main(args: Array<String>) {
 
     println("CarLink — стенд головного устройства")
     println("  экран машины: ${options.width}×${options.height}, ${options.fps} к/с")
-    println("  жду телефон на порту ${options.port}")
-    println()
-    println("  на компьютере:  adb reverse tcp:${options.port} tcp:${options.port}")
-    println("  на телефоне:    режим «Стенд на компьютере», адрес 127.0.0.1:${options.port}")
+    if (options.connect == null) {
+        println("  жду телефон на порту ${options.port}")
+        println()
+        println("  на компьютере:  adb reverse tcp:${options.port} tcp:${options.port}")
+        println("  на телефоне:    режим «Стенд», адрес 127.0.0.1:${options.port}")
+    } else {
+        println("  подключаюсь к телефону ${options.connect}")
+        println()
+        println("  на телефоне:    режим «Ждать по Wi-Fi»")
+    }
     println()
 
     val current = AtomicReference<HeadUnit?>(null)
@@ -42,6 +49,30 @@ fun main(args: Array<String>) {
         VideoWindow(options.width, options.height) { touch -> current.get()?.sendTouch(touch) }.also { it.open() }
     } else {
         null
+    }
+
+    val target = options.connect
+    if (target != null) {
+        // Телефон ждёт подключения сам — так же ведёт себя беспроводной
+        // Android Auto: машина стучится к телефону, а не наоборот.
+        val parts = target.split(":")
+        val host = parts[0]
+        val port = parts.getOrNull(1)?.toIntOrNull() ?: options.port
+        while (true) {
+            window?.status("подключаюсь к $host:$port")
+            val socket = try {
+                Socket().apply {
+                    tcpNoDelay = true
+                    connect(InetSocketAddress(host, port), 4000)
+                }
+            } catch (e: Exception) {
+                println("телефон не отвечает ($host:$port): ${e.message}, пробую ещё раз через 3 с")
+                Thread.sleep(3000)
+                continue
+            }
+            println("подключился к телефону $host:$port")
+            serve(socket, profile, options, window, current)
+        }
     }
 
     ServerSocket(options.port).use { server ->
@@ -125,6 +156,8 @@ data class Options(
     val fps: Int = 30,
     val window: Boolean = true,
     val record: String? = null,
+    /** Адрес телефона, если подключаться должен стенд, а не телефон. */
+    val connect: String? = null,
 ) {
     companion object {
         fun parse(args: Array<String>): Options {
@@ -137,6 +170,7 @@ data class Options(
                     "--port" -> options = options.copy(port = value!!.toInt())
                     "--fps" -> options = options.copy(fps = value!!.toInt())
                     "--record" -> options = options.copy(record = value!!)
+                    "--connect" -> options = options.copy(connect = value!!)
                     "--size" -> {
                         val parts = value!!.split("x", "×")
                         options = options.copy(width = parts[0].toInt(), height = parts[1].toInt())
@@ -146,7 +180,10 @@ data class Options(
                         index--
                     }
                     "--help", "-h" -> {
-                        println("--port 5288  --size 1280x720  --fps 30  --record поток.h264  --no-window")
+                        println(
+                            "--port 5288  --size 1280x720  --fps 30  --record поток.h264  " +
+                                "--no-window  --connect адрес-телефона:5288"
+                        )
                         kotlin.system.exitProcess(0)
                     }
                     else -> {

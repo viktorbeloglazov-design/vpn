@@ -18,12 +18,16 @@ import kz.carlink.aa.FrameCodec
 import kz.carlink.aa.Session
 import kz.carlink.aa.Stage
 import kz.carlink.diag.EventLog
+import kz.carlink.net.LocalAddresses
+import kz.carlink.net.TcpListener
 import kz.carlink.net.TcpTransport
 import kz.carlink.projection.PlaybackCapture
+import kz.carlink.projection.ProjectionMode
 import kz.carlink.projection.ScreenProjection
 import kz.carlink.usb.AoapTransport
 import java.io.InputStream
 import java.io.OutputStream
+import javax.net.ssl.KeyManager
 
 /** Что показывает главный экран, пока идёт разговор с машиной. */
 data class LinkState(
@@ -46,6 +50,10 @@ class CarLinkService : Service() {
     private var worker: Thread? = null
     private var projection: MediaProjection? = null
     private var closeLink: (() -> Unit)? = null
+    private var listener: TcpListener? = null
+
+    @Volatile
+    private var keepWaiting = true
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -104,7 +112,7 @@ class CarLinkService : Service() {
             stopSelf()
             return
         }
-        if (!Settings.hasCredentials(this) && transport == Transport.USB) {
+        if (!Settings.hasCredentials(this) && transport != Transport.DESK) {
             EventLog.log(
                 "внимание: используется отладочный самоподписанный ключ. " +
                     "Серийная машина обрывает соединение сразу после рукопожатия — " +
@@ -116,30 +124,79 @@ class CarLinkService : Service() {
         val host = Settings.deskHost(this)
         val port = Settings.deskPort(this)
 
+        keepWaiting = true
         worker = Thread({
-            val streams = openLink(transport, host, port)
-            if (streams != null) {
-                val screen = ScreenProjection(applicationContext, mode, { projection }, EventLog::log)
-                val audio = if (projection != null) PlaybackCapture({ projection }, EventLog::log) else null
-                val session = Session(
-                    codec = FrameCodec(streams.first, streams.second),
-                    keyManagers = keyManagers,
-                    projection = screen,
-                    audio = audio,
-                    deviceName = Build.MODEL ?: "Android",
-                    deviceBrand = Build.MANUFACTURER ?: "Android",
-                    log = EventLog::log,
-                    onStage = { stage, detail -> update(stage, detail) },
-                )
-                this.session = session
-                session.run()
-                EventLog.log(session.statistics())
+            if (transport == Transport.WIFI) {
+                waitForConnections(port, keyManagers, mode)
+            } else {
+                openLink(transport, host, port)?.let { runSession(it, keyManagers, mode) }
             }
             mainHandler.post {
                 disconnect()
                 stopSelf()
             }
         }, "carlink-session").also { it.start() }
+    }
+
+    /**
+     * Режим ожидания: телефон держит порт и принимает подключения одно за
+     * другим. Так работает беспроводной Android Auto — машина подключается
+     * к телефону сама.
+     */
+    private fun waitForConnections(port: Int, keyManagers: Array<KeyManager>, mode: ProjectionMode) {
+        val listener = try {
+            TcpListener(port).also { this.listener = it }
+        } catch (e: Exception) {
+            EventLog.log("не смог занять порт $port: ${e.message}")
+            return
+        }
+        val addresses = LocalAddresses.list()
+        EventLog.log(
+            if (addresses.isEmpty()) "жду подключение на порту $port"
+            else "жду подключение на порту $port, адреса телефона: ${addresses.joinToString(", ")}"
+        )
+        update(Stage.WAITING, "жду подключение на порту $port")
+
+        while (keepWaiting) {
+            val link = try {
+                listener.accept()
+            } catch (e: Exception) {
+                if (keepWaiting) EventLog.log("ожидание прервано: ${e.message}")
+                break
+            }
+            closeLink = link::close
+            EventLog.log("к телефону подключились")
+            runSession(link.input to link.output, keyManagers, mode)
+            closeLink = null
+            if (!keepWaiting) break
+            update(Stage.WAITING, "жду подключение на порту $port")
+            EventLog.log("снова жду подключение на порту $port")
+        }
+        listener.close()
+        this.listener = null
+    }
+
+    private fun runSession(
+        streams: Pair<InputStream, OutputStream>,
+        keyManagers: Array<KeyManager>,
+        mode: ProjectionMode,
+    ) {
+        val screen = ScreenProjection(applicationContext, mode, { projection }, EventLog::log)
+        val audio = if (projection != null) PlaybackCapture({ projection }, EventLog::log) else null
+        val session = Session(
+            codec = FrameCodec(streams.first, streams.second),
+            keyManagers = keyManagers,
+            projection = screen,
+            audio = audio,
+            deviceName = Build.MODEL ?: "Android",
+            deviceBrand = Build.MANUFACTURER ?: "Android",
+            log = EventLog::log,
+            onStage = { stage, detail -> update(stage, detail) },
+        )
+        this.session = session
+        session.run()
+        this.session = null
+        EventLog.log(session.statistics())
     }
 
     /** Открывает провод или соединение со стендом. */
@@ -161,6 +218,8 @@ class CarLinkService : Service() {
                     }
                 }
             }
+
+            Transport.WIFI -> null
 
             Transport.DESK -> try {
                 EventLog.log("подключаюсь к стенду $host:$port")
@@ -195,6 +254,9 @@ class CarLinkService : Service() {
     }
 
     private fun disconnect() {
+        keepWaiting = false
+        listener?.close()
+        listener = null
         session?.stop()
         session = null
         closeLink?.invoke()
@@ -219,7 +281,7 @@ class CarLinkService : Service() {
         )
         val notification: Notification = Notification.Builder(this, CarLinkApp.CHANNEL_ID)
             .setContentTitle("CarLink")
-            .setContentText("Соединение с автомобилем")
+            .setContentText(if (Settings.transport(this) == Transport.WIFI) "Жду подключение автомобиля" else "Соединение с автомобилем")
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentIntent(open)
             .setOngoing(true)
