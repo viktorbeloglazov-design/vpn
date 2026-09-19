@@ -1130,6 +1130,7 @@ private fun ProfileSection(state: ScreenState, actions: ScreenActions) {
 
 // MARK: - Настройки
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
     val options = state.config.options

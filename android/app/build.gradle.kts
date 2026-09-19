@@ -5,6 +5,19 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+/** Версия приложения: из параметра сборки, иначе для местной сборки. */
+val appVersion: String = (project.findProperty("qpvpnVersion") as String?)
+    ?.takeIf { it.firstOrNull()?.isDigit() == true }
+    ?: "1.0.0"
+
+val versionParts: Triple<Int, Int, Int> = appVersion.split(".").let { parts ->
+    Triple(
+        parts.getOrNull(0)?.toIntOrNull() ?: 1,
+        parts.getOrNull(1)?.toIntOrNull() ?: 0,
+        parts.getOrNull(2)?.toIntOrNull() ?: 0,
+    )
+}
+
 android {
     namespace = "kz.qpvpn"
     compileSdk = 35
@@ -13,8 +26,11 @@ android {
         applicationId = "kz.qpvpn"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // Версию задаёт сборка: gradle assembleRelease -PqpvpnVersion=1.7.1.
+        // Она же попадает в отчёт диагностики — иначе непонятно, что у
+        // человека стоит.
+        versionCode = versionParts.let { (major, minor, patch) -> major * 10_000 + minor * 100 + patch }
+        versionName = appVersion
     }
 
     signingConfigs {
@@ -51,6 +67,8 @@ android {
 
     buildFeatures {
         compose = true
+        // Нужен BuildConfig.VERSION_NAME: он показывается в диагностике.
+        buildConfig = true
     }
 
     packaging {

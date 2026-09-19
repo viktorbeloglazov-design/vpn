@@ -92,7 +92,9 @@ jobs:
 
       - name: Сборка релизного APK
         working-directory: android
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: |
+          gradle assembleRelease --no-daemon --stacktrace \
+            -PqpvpnVersion="${{ steps.version.outputs.value }}"
 
       - name: Проверяю манифест пакета
         run: |
