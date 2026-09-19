@@ -32,6 +32,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/
 
 install -m 0755 "$BIN_DIR/KupibasVPNApp" "$APP/Contents/MacOS/KupibasVPN"
 install -m 0644 "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # Служба и всё, что нужно для её установки, едут внутри приложения.
 install -m 0755 "$BIN_DIR/kupibasvpnd" "$APP/Contents/Library/Helpers/kupibasvpnd"

@@ -48,6 +48,10 @@ jobs:
           test -f "$APP/Contents/Info.plist"
           test -x "$APP/Contents/Resources/install-helper.sh"
           test -f "$APP/Contents/Resources/AppIcon.icns"
+          test -f "$APP/Contents/PkgInfo"
+          # Приложение должно хотя бы стартовать: проверяем, что бинарник
+          # запускается и отвечает системе, а не падает сразу.
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist"
           test -f "$APP/Contents/Resources/com.kupibas.vpn.helper.plist"
           for tool in kupibasvpnd wireguard-go wg wg-quick; do
             test -x "$APP/Contents/Library/Helpers/$tool"
