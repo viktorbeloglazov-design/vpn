@@ -11,13 +11,21 @@ on:
 jobs:
   app:
     name: Сборка под iOS
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+
+      - name: Свежий Xcode
+        run: |
+          # XcodeGen пишет проект в новом формате: старый Xcode его не откроет.
+          LATEST="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          echo "Выбран $LATEST"
+          sudo xcode-select -s "$LATEST"
+          xcodebuild -version
 
       - name: XcodeGen
         run: brew install xcodegen
@@ -34,7 +42,9 @@ jobs:
           # Подписать приложение нечем: сертификат Apple есть только
           # у владельца учётной записи разработчика. Проверяем, что оно
           # собирается — этого достаточно, чтобы поймать ошибки в коде.
-          set -o pipefail
+          # Полный вывод сохраняем, на экран берём только суть: иначе
+          # ошибка тонет в тысячах строк.
+          set +e
           xcodebuild build \
             -project QPVPN.xcodeproj \
             -scheme QPVPN \
@@ -44,8 +54,15 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            ONLY_ACTIVE_ARCH=NO \
-            | tail -80
+            ONLY_ACTIVE_ARCH=NO > build.log 2>&1
+          CODE=$?
+          set -e
+          tail -40 build.log
+          if [ $CODE -ne 0 ]; then
+            echo "=== ошибки ==="
+            grep -E "error:|error " build.log | head -40 || true
+            exit $CODE
+          fi
 
       - name: Проверить собранное
         working-directory: ios
