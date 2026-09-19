@@ -1,10 +1,11 @@
 package kz.qpvpn.ui
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,19 +21,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AltRoute
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Power
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -61,38 +62,38 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.BoxWithConstraints
 import kz.qpvpn.model.AppConfig
 import kz.qpvpn.model.AppsMode
 import kz.qpvpn.model.ConnectionState
+import kz.qpvpn.model.PresetDirection
 import kz.qpvpn.model.Presets
+import kz.qpvpn.model.RoutingRule
 import kz.qpvpn.model.RuleKind
 import kz.qpvpn.model.RulePreset
-import kz.qpvpn.model.RoutingRule
 import kz.qpvpn.model.TunnelMode
 import kz.qpvpn.model.TunnelOptions
 import kz.qpvpn.model.TunnelStatus
 
-/** Программа, установленная на телефоне. */
-data class AppEntry(val packageName: String, val label: String)
+data class AppEntry(val packageName: String, val label: String, val icon: ImageBitmap?)
 
 enum class Section(val title: String) {
     HOME("Главная"),
     ROUTES("Маршруты"),
     APPS("Программы"),
     PROFILE("Профиль"),
-    SETTINGS("Настройки"),
+    SETTINGS("Ещё"),
 }
 
-/** Всё состояние приходит сверху — экран ничего не хранит сам, кроме ввода. */
 data class ScreenState(
     val config: AppConfig,
     val status: TunnelStatus,
     val hasProfile: Boolean,
     val profileSummary: String,
+    val profileProtocol: String,
     val apps: List<AppEntry>,
     val ipText: String,
     val ipIsKazakhstan: Boolean,
@@ -120,13 +121,13 @@ fun QpVpnRoot(state: ScreenState, actions: ScreenActions) {
     var section by remember { mutableStateOf(Section.HOME) }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        // Разложенный экран Samsung — широкий: панель разделов уезжает влево,
-        // как в планшетном режиме One UI.
+        // Развёрнутый экран складного Samsung — широкий, разделы уезжают влево.
         val wide = maxWidth >= 720.dp
 
         if (wide) {
-            Row(modifier = Modifier.fillMaxSize()) {
-                NavigationRail {
+            Row(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                NavigationRail(containerColor = MaterialTheme.colorScheme.surface) {
+                    Spacer(Modifier.height(12.dp))
                     Section.entries.forEach { item ->
                         NavigationRailItem(
                             selected = section == item,
@@ -136,14 +137,15 @@ fun QpVpnRoot(state: ScreenState, actions: ScreenActions) {
                         )
                     }
                 }
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    SectionContent(section, state, actions, PaddingValues(20.dp))
+                Box(modifier = Modifier.weight(1f)) {
+                    SectionContent(section, state, actions, PaddingValues(0.dp)) { section = it }
                 }
             }
         } else {
             Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
                 bottomBar = {
-                    NavigationBar {
+                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                         Section.entries.forEach { item ->
                             NavigationBarItem(
                                 selected = section == item,
@@ -153,16 +155,16 @@ fun QpVpnRoot(state: ScreenState, actions: ScreenActions) {
                             )
                         }
                     }
-                }
+                },
             ) { padding ->
-                SectionContent(section, state, actions, padding)
+                SectionContent(section, state, actions, padding) { section = it }
             }
         }
     }
 }
 
 private fun iconFor(section: Section) = when (section) {
-    Section.HOME -> Icons.Filled.Power
+    Section.HOME -> Icons.Filled.Shield
     Section.ROUTES -> Icons.Filled.AltRoute
     Section.APPS -> Icons.Filled.Apps
     Section.PROFILE -> Icons.Filled.VpnKey
@@ -175,10 +177,11 @@ private fun SectionContent(
     state: ScreenState,
     actions: ScreenActions,
     padding: PaddingValues,
+    onNavigate: (Section) -> Unit,
 ) {
-    Box(modifier = Modifier.padding(padding)) {
+    Box(modifier = Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding())) {
         when (section) {
-            Section.HOME -> HomeSection(state, actions)
+            Section.HOME -> HomeSection(state, actions, onNavigate)
             Section.ROUTES -> RoutesSection(state, actions)
             Section.APPS -> AppsSection(state, actions)
             Section.PROFILE -> ProfileSection(state, actions)
@@ -190,176 +193,294 @@ private fun SectionContent(
 // MARK: - Главная
 
 @Composable
-private fun HomeSection(state: ScreenState, actions: ScreenActions) {
+private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: (Section) -> Unit) {
+    val colors = LocalAppColors.current
     val status = state.status
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
     ) {
-        if (!state.hasProfile) {
-            WarningCard("Профиль не загружен. Откройте раздел «Профиль» и выберите файл .conf от вашего сервера.")
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        val accent = when (status.state) {
-            ConnectionState.CONNECTED -> Color(0xFF2E9E6B)
-            ConnectionState.CONNECTING -> Color(0xFFCB8B1A)
-            ConnectionState.ERROR -> MaterialTheme.colorScheme.error
-            ConnectionState.DISCONNECTED -> MaterialTheme.colorScheme.outline
-        }
-
+        // Шапка с градиентом
         Box(
             modifier = Modifier
-                .size(148.dp)
-                .clip(CircleShape)
-                .background(accent.copy(alpha = 0.14f))
-                .clickable { actions.onToggle() },
-            contentAlignment = Alignment.Center,
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+                .background(colors.heroGradient)
+                .padding(horizontal = 20.dp)
+                .padding(top = 28.dp, bottom = 22.dp),
         ) {
-            Icon(
-                Icons.Filled.Power,
-                contentDescription = if (status.state == ConnectionState.DISCONNECTED) "Включить" else "Выключить",
-                tint = accent,
-                modifier = Modifier.size(64.dp),
-            )
-        }
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "QP VPN",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = colors.onHero,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (state.hasProfile) {
+                        Surface(color = Color.White.copy(alpha = 0.16f), shape = RoundedCornerShape(8.dp)) {
+                            Text(
+                                state.profileProtocol,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.onHero,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                        }
+                    }
+                }
 
-        Text(status.state.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                PowerButton(state = status.state, onClick = actions.onToggle)
 
-        if (status.message.isNotEmpty()) {
-            Text(
-                status.message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
+                Text(
+                    status.state.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = colors.onHero,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (status.serverName.isNotEmpty()) status.serverName
+                    else if (state.hasProfile) "Профиль загружен" else "Профиль не загружен",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.heroMuted,
+                )
 
-        Text(state.config.mode.title, style = MaterialTheme.typography.bodyMedium)
+                if (status.message.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        status.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.danger.copy(alpha = 0.35f))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                InfoRow("Сервер", status.serverName.ifEmpty { "—" })
-                InfoRow("Время сессии", if (status.state == ConnectionState.CONNECTED) Format.duration(status.connectedSince) else "—")
-                InfoRow("Принято", Format.bytes(status.rxBytes))
-                InfoRow("Отправлено", Format.bytes(status.txBytes))
-                if (state.config.mode != TunnelMode.FULL) {
-                    InfoRow("Маршрутов", status.routeCount.toString())
+                Spacer(Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    HeroStat("В СЕТИ", if (status.state == ConnectionState.CONNECTED) Format.duration(status.connectedSince) else "—")
+                    HeroStat("ПРИНЯТО", Format.bytes(status.rxBytes))
+                    HeroStat("ОТПРАВЛЕНО", Format.bytes(status.txBytes))
                 }
             }
         }
 
-        OutlinedButton(onClick = actions.onCheckIp, enabled = !state.checkingIp) {
-            if (state.checkingIp) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.width(8.dp))
-                Text("Проверяю…")
-            } else {
-                Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Проверить мой IP")
+        Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+            if (!state.hasProfile) {
+                SectionHeader("Сначала профиль", "Без него подключаться некуда")
+                InfoCard {
+                    Text(
+                        "Загрузите файл .conf от вашего сервера — Amnezia, WireGuard или любой другой, " +
+                            "который выдаёт конфигурацию WireGuard.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Button(onClick = { onNavigate(Section.PROFILE) }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Открыть профиль")
+                    }
+                }
             }
-        }
 
-        if (state.ipText.isNotEmpty()) {
-            Text(
-                state.ipText,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (state.ipIsKazakhstan) Color(0xFF2E9E6B) else MaterialTheme.colorScheme.onSurface,
-            )
+            SectionHeader("Маршрутизация")
+            InfoCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.CallSplit,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(state.config.mode.title, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            state.config.mode.subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (state.config.mode != TunnelMode.FULL) {
+                    KeyValueRow("Активных правил", state.config.activeRules.size.toString())
+                    KeyValueRow("Маршрутов в туннеле", status.routeCount.toString())
+                }
+                if (state.config.appsMode != AppsMode.OFF) {
+                    KeyValueRow("Программ выбрано", state.config.selectedApps.size.toString())
+                }
+                TextButton(onClick = { onNavigate(Section.ROUTES) }) { Text("Настроить маршруты") }
+            }
+
+            SectionHeader("Проверка")
+            InfoCard {
+                Text(
+                    "Посмотрите, из какой страны вас видят сайты.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (state.ipText.isNotEmpty()) {
+                    Text(
+                        state.ipText,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontFamily = FontFamily.Monospace,
+                        color = if (state.ipIsKazakhstan) colors.connected else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                OutlinedButton(
+                    onClick = actions.onCheckIp,
+                    enabled = !state.checkingIp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (state.checkingIp) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text("Проверяю…")
+                    } else {
+                        Icon(Icons.Filled.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Проверить мой IP")
+                    }
+                }
+            }
         }
     }
 }
 
 // MARK: - Маршруты
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RoutesSection(state: ScreenState, actions: ScreenActions) {
     var newKind by remember { mutableStateOf(RuleKind.DOMAIN) }
     var newValue by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var kindMenu by remember { mutableStateOf(false) }
-    var presetMenu by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Text("Что идёт через VPN", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 12.dp))
+    val existing = remember(state.config.rules) {
+        state.config.rules.map { "${it.kind}:${it.value.lowercase()}" }.toSet()
+    }
 
-        TunnelMode.entries.forEach { mode ->
-            ChoiceRow(
-                selected = state.config.mode == mode,
-                title = mode.title,
-                subtitle = mode.subtitle,
-                onClick = { actions.onModeChange(mode) },
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            SectionHeader("Что идёт через VPN", "Выберите, как делится трафик")
+        }
+
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ModeCard(
+                    selected = state.config.mode == TunnelMode.FULL,
+                    icon = Icons.Filled.Shield,
+                    title = TunnelMode.FULL.title,
+                    subtitle = TunnelMode.FULL.subtitle,
+                    onClick = { actions.onModeChange(TunnelMode.FULL) },
+                )
+                ModeCard(
+                    selected = state.config.mode == TunnelMode.INCLUDE,
+                    icon = Icons.Filled.CallSplit,
+                    title = TunnelMode.INCLUDE.title,
+                    subtitle = TunnelMode.INCLUDE.subtitle,
+                    onClick = { actions.onModeChange(TunnelMode.INCLUDE) },
+                )
+                ModeCard(
+                    selected = state.config.mode == TunnelMode.EXCLUDE,
+                    icon = Icons.Filled.AltRoute,
+                    title = TunnelMode.EXCLUDE.title,
+                    subtitle = TunnelMode.EXCLUDE.subtitle,
+                    onClick = { actions.onModeChange(TunnelMode.EXCLUDE) },
+                )
+            }
+        }
+
+        item {
+            SectionHeader("Готовые наборы", "Собраны под работу из России через зарубежный сервер")
+        }
+
+        item {
+            Text(
+                "В туннель — то, что не открывается с российского адреса",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
 
-        Spacer(Modifier.height(12.dp))
+        items(Presets.throughVpn, key = { "p-" + it.id }) { preset ->
+            PresetCard(
+                title = preset.title,
+                subtitle = preset.subtitle,
+                count = preset.count,
+                directionLabel = preset.direction.title,
+                throughVpn = true,
+                added = preset.values.all { "${it.first}:${it.second.lowercase()}" in existing },
+                onAdd = { actions.onAddPreset(preset) },
+            )
+        }
 
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box {
-                OutlinedButton(onClick = { kindMenu = true }) { Text(newKind.title) }
-                DropdownMenu(expanded = kindMenu, onDismissRequest = { kindMenu = false }) {
-                    RuleKind.entries.forEach { kind ->
-                        DropdownMenuItem(text = { Text(kind.title) }, onClick = {
-                            newKind = kind
-                            kindMenu = false
-                        })
+        item {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Мимо туннеля — то, чему нужен российский адрес",
+                style = MaterialTheme.typography.labelMedium,
+                color = LocalAppColors.current.waiting,
+            )
+        }
+
+        items(Presets.direct, key = { "d-" + it.id }) { preset ->
+            PresetCard(
+                title = preset.title,
+                subtitle = preset.subtitle,
+                count = preset.count,
+                directionLabel = preset.direction.title,
+                throughVpn = false,
+                added = preset.values.all { "${it.first}:${it.second.lowercase()}" in existing },
+                onAdd = { actions.onAddPreset(preset) },
+            )
+        }
+
+        item {
+            SectionHeader("Своё правило", "Домен или подсеть")
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box {
+                    OutlinedButton(onClick = { kindMenu = true }) { Text(newKind.title) }
+                    DropdownMenu(expanded = kindMenu, onDismissRequest = { kindMenu = false }) {
+                        RuleKind.entries.forEach { kind ->
+                            DropdownMenuItem(text = { Text(kind.title) }, onClick = {
+                                newKind = kind
+                                kindMenu = false
+                            })
+                        }
                     }
                 }
+                OutlinedTextField(
+                    value = newValue,
+                    onValueChange = { newValue = it },
+                    singleLine = true,
+                    placeholder = { Text(if (newKind == RuleKind.DOMAIN) "kaspi.kz" else "92.46.0.0/16") },
+                    modifier = Modifier.weight(1f),
+                )
+                Button(onClick = {
+                    error = actions.onAddRule(newKind, newValue)
+                    if (error == null) newValue = ""
+                }) { Text("+") }
             }
-            OutlinedTextField(
-                value = newValue,
-                onValueChange = { newValue = it },
-                singleLine = true,
-                placeholder = { Text(if (newKind == RuleKind.DOMAIN) "kaspi.kz" else "92.46.0.0/16") },
-                modifier = Modifier.weight(1f),
-            )
-            Button(onClick = {
-                error = actions.onAddRule(newKind, newValue)
-                if (error == null) newValue = ""
-            }) { Text("＋") }
-        }
-
-        error?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        }
-
-        Box {
-            TextButton(onClick = { presetMenu = true }) { Text("Готовые наборы") }
-            DropdownMenu(expanded = presetMenu, onDismissRequest = { presetMenu = false }) {
-                Presets.all.forEach { preset ->
-                    DropdownMenuItem(
-                        text = { Text("${preset.title} — ${preset.mode.title.lowercase()}") },
-                        onClick = {
-                            actions.onAddPreset(preset)
-                            presetMenu = false
-                        },
-                    )
-                }
+            error?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
 
-        if (state.config.rules.isEmpty()) {
-            Text(
-                if (state.config.mode == TunnelMode.INCLUDE)
-                    "Правил нет — значит, в туннель сейчас ничего не уходит."
-                else
-                    "Правил нет — весь трафик идёт через VPN.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 24.dp),
-            )
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(state.config.rules, key = { it.id }) { rule ->
-                    RuleRow(rule, state.config.mode, actions)
-                }
+        if (state.config.rules.isNotEmpty()) {
+            item {
+                SectionHeader(
+                    "Правила",
+                    "${state.config.rules.size} ${plural(state.config.rules.size, "штука", "штуки", "штук")}",
+                )
+            }
+            items(state.config.rules, key = { it.id }) { rule ->
+                RuleRow(rule, state.config.mode, actions)
             }
         }
     }
@@ -367,59 +488,82 @@ private fun RoutesSection(state: ScreenState, actions: ScreenActions) {
 
 @Composable
 private fun RuleRow(rule: RoutingRule, mode: TunnelMode, actions: ScreenActions) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Switch(checked = rule.enabled, onCheckedChange = { actions.onToggleRule(rule.id, it) })
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(rule.value, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
-                val destination = when (mode) {
-                    TunnelMode.FULL -> "не используется"
-                    TunnelMode.INCLUDE -> "через VPN"
-                    TunnelMode.EXCLUDE -> "напрямую"
-                }
-                Text(
-                    if (rule.note.isEmpty()) destination else "$destination · ${rule.note}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            IconButton(onClick = { actions.onDeleteRule(rule.id) }) {
-                Icon(Icons.Filled.Delete, contentDescription = "Удалить")
-            }
+    val colors = LocalAppColors.current
+    val destination = when (mode) {
+        TunnelMode.FULL -> "не используется" to MaterialTheme.colorScheme.onSurfaceVariant
+        TunnelMode.INCLUDE -> "через VPN" to MaterialTheme.colorScheme.primary
+        TunnelMode.EXCLUDE -> "напрямую" to colors.waiting
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (rule.kind == RuleKind.DOMAIN) Icons.Filled.Language else Icons.Filled.AltRoute,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                rule.value,
+                style = MaterialTheme.typography.bodyMedium,
+                fontFamily = FontFamily.Monospace,
+                color = if (rule.enabled) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                if (rule.note.isEmpty()) destination.first else "${destination.first} · ${rule.note}",
+                style = MaterialTheme.typography.labelSmall,
+                color = destination.second,
+            )
+        }
+        Switch(
+            checked = rule.enabled,
+            onCheckedChange = { actions.onToggleRule(rule.id, it) },
+        )
+        IconButton(onClick = { actions.onDeleteRule(rule.id) }) {
+            Icon(Icons.Filled.Delete, contentDescription = "Удалить", modifier = Modifier.size(18.dp))
         }
     }
 }
 
 // MARK: - Программы
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppsSection(state: ScreenState, actions: ScreenActions) {
     var query by remember { mutableStateOf("") }
 
+    val visible = remember(query, state.apps) {
+        if (query.isBlank()) state.apps
+        else state.apps.filter { it.label.contains(query, ignoreCase = true) }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Text(
-            "Маршрутизация по программам",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(vertical = 12.dp),
-        )
-        Text(
-            "Android умеет то, чего нет на компьютере: пускать через VPN только отдельные программы.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        SectionHeader(
+            "Маршруты по программам",
+            "Чего нет на компьютере: правила прямо для приложений",
         )
 
-        AppsMode.entries.forEach { mode ->
-            ChoiceRow(
-                selected = state.config.appsMode == mode,
-                title = mode.title,
-                subtitle = null,
-                onClick = { actions.onAppsModeChange(mode) },
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            AppsMode.entries.forEach { mode ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { actions.onAppsModeChange(mode) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(
+                        selected = state.config.appsMode == mode,
+                        onClick = { actions.onAppsModeChange(mode) },
+                    )
+                    Text(mode.title, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
         }
 
         if (state.config.appsMode != AppsMode.OFF) {
@@ -428,37 +572,56 @@ private fun AppsSection(state: ScreenState, actions: ScreenActions) {
                 onValueChange = { query = it },
                 singleLine = true,
                 placeholder = { Text("Поиск программы") },
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
             )
 
-            val visible = remember(query, state.apps) {
-                if (query.isBlank()) state.apps
-                else state.apps.filter { it.label.contains(query, ignoreCase = true) }
-            }
+            Text(
+                "Выбрано: ${state.config.selectedApps.size}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
-            LazyColumn {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 items(visible, key = { it.packageName }) { app ->
+                    val selected = app.packageName in state.config.selectedApps
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                actions.onToggleApp(app.packageName, app.packageName !in state.config.selectedApps)
-                            }
-                            .padding(vertical = 8.dp),
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { actions.onToggleApp(app.packageName, !selected) }
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Checkbox(
-                            checked = app.packageName in state.config.selectedApps,
-                            onCheckedChange = { actions.onToggleApp(app.packageName, it) },
-                        )
+                        if (app.icon != null) {
+                            Image(
+                                bitmap = app.icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)),
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(app.label.take(1).uppercase(), style = MaterialTheme.typography.titleMedium)
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(app.label, style = MaterialTheme.typography.bodyMedium)
+                            Text(app.label, style = MaterialTheme.typography.bodyLarge)
                             Text(
                                 app.packageName,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                        Switch(
+                            checked = selected,
+                            onCheckedChange = { actions.onToggleApp(app.packageName, it) },
+                        )
                     }
                 }
             }
@@ -474,25 +637,32 @@ private fun ProfileSection(state: ScreenState, actions: ScreenActions) {
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Профиль подключения", style = MaterialTheme.typography.titleMedium)
+        SectionHeader("Профиль подключения")
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (state.hasProfile) {
-                    Text("Профиль загружен", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        state.profileSummary,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
+        InfoCard {
+            if (state.hasProfile) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.VpnKey,
+                        contentDescription = null,
+                        tint = LocalAppColors.current.connected,
                     )
-                } else {
-                    Text("Профиль не загружен", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "Возьмите файл .conf, который выдал ваш сервер WireGuard в Казахстане.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text("Профиль загружен", style = MaterialTheme.typography.titleMedium)
                 }
+                Text(
+                    state.profileSummary,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text("Профиль не загружен", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Подойдёт файл .conf из Amnezia, от вашего сервера WireGuard или от провайдера VPN.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
@@ -506,8 +676,19 @@ private fun ProfileSection(state: ScreenState, actions: ScreenActions) {
             }
         }
 
+        InfoCard {
+            Text("Если профиль из Amnezia", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "В Amnezia откройте сервер → «Протоколы» → WireGuard → «Поделиться» и сохраните файл. " +
+                    "Протокол AmneziaWG (с маскировкой под обычный трафик) этой программе пока не подходит — " +
+                    "у него другой формат рукопожатия.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         Text(
-            "Ключи хранятся в памяти приложения и не видны другим программам.",
+            "Ключи хранятся в памяти приложения и недоступны другим программам.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -522,109 +703,55 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Настройки", style = MaterialTheme.typography.titleMedium)
+        SectionHeader("Настройки")
 
-        SwitchRow(
-            title = "DNS-серверы из профиля",
-            subtitle = "В режиме «только правила» системный DNS не трогается.",
-            checked = options.useTunnelDns,
-            onChange = { actions.onOptionsChange(options.copy(useTunnelDns = it)) },
-        )
-
-        SwitchRow(
-            title = "Заворачивать IPv6 в туннель",
-            subtitle = "Иначе сайты могут увидеть настоящий адрес по IPv6.",
-            checked = options.blockIpv6,
-            onChange = { actions.onOptionsChange(options.copy(blockIpv6 = it)) },
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Пересчитывать адреса доменов")
-                Text(
-                    "каждые ${options.reresolveMinutes} мин",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            OutlinedButton(onClick = {
-                actions.onOptionsChange(options.copy(reresolveMinutes = (options.reresolveMinutes - 1).coerceAtLeast(1)))
-            }) { Text("−") }
-            Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = {
-                actions.onOptionsChange(options.copy(reresolveMinutes = (options.reresolveMinutes + 1).coerceAtMost(60)))
-            }) { Text("+") }
-        }
-
-        Text(
-            "QP VPN · WireGuard · маршруты по адресам и по программам",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-// MARK: - Мелкие кирпичики
-
-@Composable
-private fun InfoRow(title: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
-    }
-}
-
-@Composable
-private fun ChoiceRow(selected: Boolean, title: String, subtitle: String?, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected, onClick = onClick)
-        Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        InfoCard {
+            SwitchRow(
+                title = "DNS-серверы из профиля",
+                subtitle = "В режиме «только правила» системный DNS не трогается",
+                checked = options.useTunnelDns,
+                onChange = { actions.onOptionsChange(options.copy(useTunnelDns = it)) },
+            )
+            SwitchRow(
+                title = "Заворачивать IPv6 в туннель",
+                subtitle = "Иначе сайты могут увидеть настоящий адрес по IPv6",
+                checked = options.blockIpv6,
+                onChange = { actions.onOptionsChange(options.copy(blockIpv6 = it)) },
+            )
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Пересчёт адресов доменов", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "каждые ${options.reresolveMinutes} мин",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                OutlinedButton(onClick = {
+                    actions.onOptionsChange(
+                        options.copy(reresolveMinutes = (options.reresolveMinutes - 1).coerceAtLeast(1))
+                    )
+                }) { Text("−") }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(onClick = {
+                    actions.onOptionsChange(
+                        options.copy(reresolveMinutes = (options.reresolveMinutes + 1).coerceAtMost(60))
+                    )
+                }) { Text("+") }
             }
         }
-    }
-}
 
-@Composable
-private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        InfoCard {
+            Text("О программе", style = MaterialTheme.typography.titleMedium)
+            KeyValueRow("Протокол", "WireGuard")
+            KeyValueRow("Правил в наборах", Presets.all.sumOf { it.count }.toString())
+            Text(
+                "Маршруты считаются по адресам назначения, а списки программ — средствами Android.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        Switch(checked = checked, onCheckedChange = onChange)
-    }
-}
-
-@Composable
-private fun WarningCard(text: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
-    ) {
-        Text(
-            text,
-            modifier = Modifier.padding(14.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-        )
     }
 }
