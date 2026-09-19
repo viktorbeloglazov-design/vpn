@@ -54,12 +54,33 @@ final class ConfigTests: XCTestCase {
         config.rules = [RoutingRule(kind: .domain, value: "kaspi.kz")]
         XCTAssertEqual(baseline, config.restartSignature, "правила не требуют перезапуска туннеля")
 
-        config.mode = .exclude
-        XCTAssertNotEqual(baseline, config.restartSignature)
+        // Подпись считается по тому, что применяется на самом деле.
+        // При включённом главном фильтре режим в расширенных настройках
+        // ничего не меняет — значит, и перезапускать нечего.
+        config.mode = .include
+        XCTAssertEqual(baseline, config.restartSignature, "главный фильтр перекрывает режим")
+
+        config.mainFilter = false
+        XCTAssertNotEqual(baseline, config.restartSignature, "без главного фильтра режим снова решает")
+
+        var all = TunnelConfig(server: makeServer())
+        all.fullTunnel = true
+        XCTAssertNotEqual(baseline, all.restartSignature, "весь трафик — это другой туннель")
 
         var other = TunnelConfig(server: makeServer())
         other.server.endpoint = "91.201.1.2:51820"
         XCTAssertNotEqual(baseline, other.restartSignature)
+    }
+
+    func testSwitchesChangeRoutesWithoutRestart() {
+        var config = TunnelConfig(server: makeServer())
+        let routes = config.rulesSignature
+
+        config.workFilter = false
+        XCTAssertNotEqual(routes, config.rulesSignature, "рабочие ресурсы меняют набор исключений")
+        XCTAssertEqual(TunnelConfig(server: makeServer()).restartSignature,
+                       config.restartSignature,
+                       "переключатель рабочих ресурсов не требует перезапуска туннеля")
     }
 
     func testDecodingToleratesMissingFields() throws {
