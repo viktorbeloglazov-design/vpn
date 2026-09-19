@@ -3,6 +3,9 @@ package kz.qpvpn
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
@@ -15,6 +18,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
@@ -79,6 +84,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val profileSummary = remember(profileVersion) { summarizeProfile() }
+                val profileProtocol = remember(profileVersion) { profileProtocol() }
                 val hasProfile = remember(profileVersion) { app.store.hasProfile }
 
                 kz.qpvpn.ui.QpVpnRoot(
@@ -87,6 +93,7 @@ class MainActivity : ComponentActivity() {
                         status = status,
                         hasProfile = hasProfile,
                         profileSummary = profileSummary,
+                        profileProtocol = profileProtocol,
                         apps = installedApps,
                         ipText = ipText,
                         ipIsKazakhstan = ipIsKazakhstan,
@@ -172,7 +179,10 @@ class MainActivity : ComponentActivity() {
         app.store.update { config ->
             val existing = config.rules.map { "${it.kind}:${it.value.lowercase()}" }.toSet()
             val added = preset.rules().filterNot { "${it.kind}:${it.value.lowercase()}" in existing }
-            config.copy(rules = config.rules + added)
+            // Набор бессмысленен в режиме «весь трафик»: переводим в тот режим,
+            // ради которого его и добавляют.
+            val mode = if (config.mode == TunnelMode.FULL) preset.direction.mode else config.mode
+            config.copy(rules = config.rules + added, mode = mode)
         }
         reapplyRoutes()
     }
@@ -243,11 +253,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Название протокола для шапки: обычный WireGuard или маскированный AmneziaWG. */
+    private fun profileProtocol(): String {
+        val text = app.store.profileText() ?: return ""
+        return runCatching { WgProfile.parse(text).protocolName }.getOrDefault("WireGuard")
+    }
+
     private fun summarizeProfile(): String {
         val text = app.store.profileText() ?: return ""
         return try {
             val profile = WgProfile.parse(text)
             buildString {
+                if (profile.isAmnezia) {
+                    append("протокол AmneziaWG — обычный WireGuard-сервер его не примет\n")
+                }
                 append("сервер ${profile.endpoint}")
                 append("\nадрес ${profile.addresses.joinToString(", ")}")
                 if (profile.dns.isNotEmpty()) append("\nDNS ${profile.dns.joinToString(", ")}")
@@ -284,10 +303,20 @@ class MainActivity : ComponentActivity() {
             .mapNotNull { info ->
                 val packageName = info.activityInfo?.packageName ?: return@mapNotNull null
                 if (packageName == getPackageName()) return@mapNotNull null
-                AppEntry(packageName, info.loadLabel(manager).toString())
+                val icon = runCatching { info.loadIcon(manager).toImageBitmap() }.getOrNull()
+                AppEntry(packageName, info.loadLabel(manager).toString(), icon)
             }
             .distinctBy { it.packageName }
             .sortedBy { it.label.lowercase() }
             .toList()
+    }
+
+    /** Значок программы приходит рисунком системы — переводим его в картинку Compose. */
+    private fun Drawable.toImageBitmap(size: Int = 96): ImageBitmap {
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        setBounds(0, 0, size, size)
+        draw(canvas)
+        return bitmap.asImageBitmap()
     }
 }

@@ -296,7 +296,7 @@ fun PresetCard(
 }
 
 @Composable
-fun InfoCard(content: @Composable ColumnScopeContent) {
+fun InfoCard(content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -308,9 +308,6 @@ fun InfoCard(content: @Composable ColumnScopeContent) {
         }
     }
 }
-
-/** Псевдоним, чтобы не тянуть ColumnScope в сигнатуры вызовов. */
-typealias ColumnScopeContent = @Composable () -> Unit
 
 @Composable
 fun KeyValueRow(label: String, value: String, monospace: Boolean = false) {

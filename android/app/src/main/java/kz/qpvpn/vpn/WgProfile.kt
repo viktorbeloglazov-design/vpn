@@ -12,7 +12,14 @@ data class WgProfile(
     val presharedKey: String,
     val endpoint: String,
     val keepalive: Int,
+    /** Параметры маскировки AmneziaWG, если они были в файле. */
+    val amneziaParams: Map<String, String> = emptyMap(),
 ) {
+    /** Профиль сделан под AmneziaWG — обычный WireGuard такой сервер не примет. */
+    val isAmnezia: Boolean get() = amneziaParams.isNotEmpty()
+
+    val protocolName: String get() = if (isAmnezia) "AmneziaWG" else "WireGuard"
+
     val hasIpv6Address: Boolean get() = addresses.any { it.contains(":") }
 
     val endpointHost: String
@@ -111,6 +118,14 @@ data class WgProfile(
                 throw ParseError("Preshared-ключ имеет неверный формат.")
             }
 
+            // Amnezia добавляет в [Interface] параметры маскировки: размеры
+            // мусорных пакетов и подменённые заголовки. Обычный WireGuard их
+            // не понимает, поэтому запоминаем отдельно.
+            val amneziaKeys = listOf("jc", "jmin", "jmax", "s1", "s2", "h1", "h2", "h3", "h4")
+            val amnezia = amneziaKeys.mapNotNull { key ->
+                iface[key]?.let { key to it }
+            }.toMap()
+
             return WgProfile(
                 privateKey = privateKey,
                 addresses = addresses,
@@ -120,6 +135,7 @@ data class WgProfile(
                 presharedKey = presharedKey,
                 endpoint = endpoint,
                 keepalive = peer["persistentkeepalive"]?.toIntOrNull() ?: 25,
+                amneziaParams = amnezia,
             )
         }
 
