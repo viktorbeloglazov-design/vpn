@@ -1,0 +1,70 @@
+name: kit
+
+on:
+  workflow_dispatch:
+    inputs:
+      android_version:
+        description: "Версия Android, например 1.5.0"
+        required: true
+        default: "1.5.0"
+      mac_version:
+        description: "Версия Mac, например 1.5.0"
+        required: true
+        default: "1.5.0"
+      kit_version:
+        description: "Версия комплекта, например 1.0"
+        required: true
+        default: "1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  kit:
+    name: Комплект для раздачи
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Собрать архив
+        run: |
+          scripts/make-kit.sh \
+            --android "${{ github.event.inputs.android_version }}" \
+            --mac "${{ github.event.inputs.mac_version }}" \
+            --with-admin
+          ls -lh dist
+
+      - name: Проверить содержимое
+        run: |
+          ARCHIVE="$(ls dist/*.zip)"
+          echo "Архив: $ARCHIVE"
+          unzip -l "$ARCHIVE"
+          # В каждой папке должна лежать инструкция, а у Mac и Android — ещё и приложение.
+          for folder in Windows Mac Android iPhone; do
+            unzip -l "$ARCHIVE" | grep -q "$folder/КАК-УСТАНОВИТЬ.md" || {
+              echo "Нет инструкции для $folder" >&2; exit 1; }
+          done
+          unzip -l "$ARCHIVE" | grep -q "Android/QPVPN-.*\.apk" || { echo "Нет APK" >&2; exit 1; }
+          unzip -l "$ARCHIVE" | grep -q "Mac/QPVPN-.*\.dmg" || { echo "Нет DMG" >&2; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QP-VPN-kit-${{ github.event.inputs.kit_version }}
+          path: dist/*.zip
+
+      - name: Опубликовать
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="kit-v${{ github.event.inputs.kit_version }}"
+          ARCHIVE="$(ls dist/*.zip)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ARCHIVE" --clobber
+            gh release edit "$TAG" --notes-file .github/release-notes-kit.md
+          else
+            gh release create "$TAG" "$ARCHIVE" \
+              --title "QP VPN — комплект ${{ github.event.inputs.kit_version }}" \
+              --target "${{ github.ref_name }}" \
+              --notes-file .github/release-notes-kit.md
+          fi
+          echo "Ссылка: $(gh release view "$TAG" --json url --jq .url)"
