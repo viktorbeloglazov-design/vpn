@@ -26,7 +26,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
+import ru.carpanel.apps.AppCatalog
 import ru.carpanel.drive.SpeedSnapshot
+import ru.carpanel.model.AppSet
 import ru.carpanel.model.Grid
 import ru.carpanel.model.PanelConfig
 
@@ -35,8 +38,10 @@ import ru.carpanel.model.PanelConfig
 fun SettingsScreen(
     config: PanelConfig,
     speed: SpeedSnapshot,
+    catalog: AppCatalog,
     mediaAccess: Boolean,
     actions: PanelActions,
+    onAddSetApp: () -> Unit,
     onClose: () -> Unit,
 ) {
     Column(
@@ -87,6 +92,49 @@ fun SettingsScreen(
                 hint = "После включения система спросит, чем открывать кнопку «домой»",
                 checked = config.settings.homeScreen,
                 onChange = actions.onHomeScreen,
+            )
+        }
+
+        Section("Набор программ") {
+            Toggle(
+                title = "Показывать набор",
+                hint = "Плитка с набором на главном экране панели и содержимое виджета для домашнего экрана машины",
+                checked = config.appSet.enabled,
+                onChange = actions.onAppSetEnabled,
+            )
+            Spacer(Modifier.height(6.dp))
+
+            if (config.appSet.packages.isEmpty()) {
+                Text(
+                    "Набор пуст — добавьте в него программы.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                for (packageName in config.appSet.packages) {
+                    SetRow(
+                        title = remember(packageName, config.settings.russifyLabels) {
+                            catalog.labelOf(packageName, config.settings.russifyLabels)
+                        },
+                        onRemove = { actions.onRemoveFromSet(packageName) },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = onAddSetApp,
+                enabled = config.appSet.packages.size < AppSet.MAX,
+            ) {
+                Text("Добавить программу")
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Виджет «Набор программ» кладётся на штатный рабочий стол машины так же, как её " +
+                    "собственные виджеты — долгим нажатием по свободному месту. Если прошивка чужих " +
+                    "виджетов не принимает, набор всё равно остаётся плиткой в панели.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -144,6 +192,17 @@ fun SettingsScreen(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun SetRow(title: String, onRemove: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        TextButton(onClick = onRemove) { Text("Убрать") }
     }
 }
 

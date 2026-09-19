@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Панель L9</string>
+    <string name="widget_name">Набор программ</string>
+    <string name="widget_description">Набор программ панели: навигатор, музыка и всё, что вы в него положите</string>
+    <string name="widget_empty">Набор выключен — включите его в «Панели L9»</string>
 </resources>

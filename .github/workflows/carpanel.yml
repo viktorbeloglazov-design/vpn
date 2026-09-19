@@ -65,7 +65,7 @@ jobs:
           TOTAL="$(count tests)"
           BAD="$(( $(count failures) + $(count errors) ))"
           echo "тестов выполнено: $TOTAL, из них с ошибкой: $BAD"
-          if [ "$TOTAL" -lt 30 ] || [ "$BAD" -ne 0 ]; then
+          if [ "$TOTAL" -lt 40 ] || [ "$BAD" -ne 0 ]; then
             echo "Тесты не выполнились или упали." >&2
             exit 1
           fi
@@ -87,6 +87,12 @@ jobs:
           }
           grep -q "android.intent.category.HOME" "$MANIFEST" || {
             echo "В манифесте нет ярлыка домашнего экрана." >&2
+            exit 1
+          }
+          # Без объявленного получателя набор программ нечем положить
+          # на рабочий стол машины.
+          grep -q "AppSetWidget" "$MANIFEST" || {
+            echo "В манифесте нет виджета «Набор программ»." >&2
             exit 1
           }
 

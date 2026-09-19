@@ -63,11 +63,14 @@ class PanelActions(
     val onRussifyLabels: (Boolean) -> Unit,
     val onForceRussian: (Boolean) -> Unit,
     val onRename: (Long, String) -> Unit,
+    val onAppSetEnabled: (Boolean) -> Unit,
+    val onAddToSet: (String) -> Unit,
+    val onRemoveFromSet: (String) -> Unit,
     val onHomeScreen: (Boolean) -> Unit,
     val onResetBoard: () -> Unit,
 )
 
-private enum class Overlay { NONE, ADD, SETTINGS }
+private enum class Overlay { NONE, ADD, SETTINGS, SET_APPS }
 
 @Composable
 fun PanelScreen(
@@ -122,11 +125,27 @@ fun PanelScreen(
                 onClose = { overlay = Overlay.NONE },
             )
 
+            Overlay.SET_APPS -> AddTileScreen(
+                catalog = catalog,
+                widgets = widgets,
+                russify = config.settings.russifyLabels,
+                onlyApps = true,
+                onAddApp = { entry ->
+                    actions.onAddToSet(entry.packageName)
+                    overlay = Overlay.SETTINGS
+                },
+                onAddBuiltin = {},
+                onAddWidget = {},
+                onClose = { overlay = Overlay.SETTINGS },
+            )
+
             Overlay.SETTINGS -> SettingsScreen(
                 config = config,
                 speed = speed,
+                catalog = catalog,
                 mediaAccess = media.hasAccess(),
                 actions = actions,
+                onAddSetApp = { overlay = Overlay.SET_APPS },
                 onClose = { overlay = Overlay.NONE },
             )
 
@@ -317,6 +336,18 @@ private fun TileContent(
             modifier = modifier,
             enabled = !editing,
             onGrantAccess = actions.onNotificationAccess,
+            onLongClick = onEnterEdit,
+        )
+
+        TileKind.GROUP -> GroupTile(
+            packages = if (config.appSet.enabled) config.appSet.visible() else emptyList(),
+            catalog = catalog,
+            russify = config.settings.russifyLabels,
+            modifier = modifier,
+            enabled = !editing,
+            onLaunch = { packageName ->
+                actions.onLaunch(Tile(id = 0, kind = TileKind.APP, x = 0, y = 0, packageName = packageName))
+            },
             onLongClick = onEnterEdit,
         )
 

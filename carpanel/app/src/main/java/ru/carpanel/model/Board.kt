@@ -23,6 +23,37 @@ enum class TileKind {
 
     /** Управление тем, что играет сейчас: название трека и три кнопки. */
     @SerialName("media") MEDIA,
+
+    /** Набор программ: несколько значков в одной плитке. */
+    @SerialName("group") GROUP,
+}
+
+/**
+ * Набор программ — то, что включается одним переключателем.
+ *
+ * Тот же список показывают плитка на панели и системный виджет, который
+ * можно положить на домашний экран машины.
+ */
+@Serializable
+data class AppSet(
+    val enabled: Boolean = false,
+    val packages: List<String> = listOf(Defaults.NAVIGATOR, Defaults.MUSIC, Defaults.MAPS),
+) {
+    /** Добавить программу в набор: без повторов и не больше [MAX]. */
+    fun with(packageName: String): AppSet {
+        val name = packageName.trim()
+        if (name.isEmpty() || packages.contains(name) || packages.size >= MAX) return this
+        return copy(packages = packages + name)
+    }
+
+    fun without(packageName: String): AppSet = copy(packages = packages.filterNot { it == packageName })
+
+    /** Столько значков помещается в плитку и в виджет. */
+    fun visible(): List<String> = packages.take(MAX)
+
+    companion object {
+        const val MAX = 6
+    }
 }
 
 /**
@@ -82,6 +113,7 @@ data class Settings(
 data class PanelConfig(
     val board: Board = Defaults.board(),
     val settings: Settings = Settings(),
+    val appSet: AppSet = AppSet(),
 )
 
 /** Первая раскладка, которую видит хозяин машины сразу после установки. */

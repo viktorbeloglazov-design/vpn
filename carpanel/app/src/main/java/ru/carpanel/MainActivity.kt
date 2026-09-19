@@ -28,6 +28,7 @@ import ru.carpanel.model.TileKind
 import ru.carpanel.ui.PanelActions
 import ru.carpanel.ui.PanelScreen
 import ru.carpanel.ui.PanelTheme
+import ru.carpanel.widgets.AppSetWidget
 import ru.carpanel.widgets.WidgetHostController
 
 private const val REQUEST_BIND = 1001
@@ -127,7 +128,10 @@ class MainActivity : ComponentActivity() {
             applyKeepScreenOn(on)
         },
         onMiles = { miles -> store.updateSettings { it.copy(miles = miles) } },
-        onRussifyLabels = { on -> store.updateSettings { it.copy(russifyLabels = on) } },
+        onRussifyLabels = { on ->
+            store.updateSettings { it.copy(russifyLabels = on) }
+            AppSetWidget.refresh(this)
+        },
         onForceRussian = { on ->
             store.updateSettings { it.copy(forceRussian = on) }
             // Язык окружения задаётся при создании экрана — пересоздаём его.
@@ -142,9 +146,37 @@ class MainActivity : ComponentActivity() {
                 )
             }
         },
+        onAppSetEnabled = ::setAppSetEnabled,
+        onAddToSet = { packageName ->
+            store.update { it.copy(appSet = it.appSet.with(packageName)) }
+            AppSetWidget.refresh(this)
+        },
+        onRemoveFromSet = { packageName ->
+            store.update { it.copy(appSet = it.appSet.without(packageName)) }
+            AppSetWidget.refresh(this)
+        },
         onHomeScreen = ::setHomeScreen,
         onResetBoard = ::resetBoard,
     )
+
+    /**
+     * Переключатель набора программ.
+     *
+     * Включили — на главном экране панели появляется плитка с набором,
+     * и тот же набор показывает виджет, выложенный на рабочий стол машины.
+     */
+    private fun setAppSetEnabled(enabled: Boolean) {
+        store.update { config ->
+            config.copy(
+                appSet = config.appSet.copy(enabled = enabled),
+                board = Grid.ensureTile(config.board, TileKind.GROUP, enabled, w = 2, h = 1),
+            )
+        }
+        AppSetWidget.refresh(this)
+        if (enabled) {
+            toast("Набор на главном экране. Виджет «Набор программ» можно положить и на рабочий стол машины")
+        }
+    }
 
     private fun removeTile(id: Long) {
         val tile = store.board.tiles.firstOrNull { it.id == id }

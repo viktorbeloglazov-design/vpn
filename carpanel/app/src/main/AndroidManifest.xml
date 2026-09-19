@@ -54,6 +54,19 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Набор программ, который кладётся на домашний экран машины. -->
+        <receiver
+            android:name=".widgets.AppSetWidget"
+            android:exported="true"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/app_set_widget" />
+        </receiver>
+
         <!-- Служба нужна только ради разрешения «доступ к уведомлениям»:
              через него система отдаёт управление чужим проигрывателем. -->
         <service

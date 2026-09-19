@@ -66,12 +66,14 @@ fun AddTileScreen(
     catalog: AppCatalog,
     widgets: WidgetHostController,
     russify: Boolean = true,
+    /** Режим набора программ: только список программ, без приборов и виджетов. */
+    onlyApps: Boolean = false,
     onAddApp: (AppEntry) -> Unit,
     onAddBuiltin: (TileKind) -> Unit,
     onAddWidget: (AppWidgetProviderInfo) -> Unit,
     onClose: () -> Unit,
 ) {
-    var tab by remember { mutableStateOf(AddTab.BUILTIN) }
+    var tab by remember { mutableStateOf(if (onlyApps) AddTab.APPS else AddTab.BUILTIN) }
 
     val apps by produceState(initialValue = emptyList<Pair<AppEntry, Boolean>>(), russify) {
         value = withContext(Dispatchers.IO) {
@@ -84,18 +86,23 @@ fun AddTileScreen(
 
     Column(modifier = Modifier.fillMaxSize().padding(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("Добавить плитку", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                text = if (onlyApps) "Программа в набор" else "Добавить плитку",
+                style = MaterialTheme.typography.headlineSmall,
+            )
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onClose) { Text("Закрыть") }
         }
         Spacer(Modifier.height(12.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            for (item in AddTab.entries) {
-                Tab(title = item.title, selected = tab == item) { tab = item }
+        if (!onlyApps) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                for (item in AddTab.entries) {
+                    Tab(title = item.title, selected = tab == item) { tab = item }
+                }
             }
+            Spacer(Modifier.height(14.dp))
         }
-        Spacer(Modifier.height(14.dp))
 
         when (tab) {
             AddTab.BUILTIN -> LazyVerticalGrid(

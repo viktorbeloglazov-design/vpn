@@ -3,6 +3,7 @@ package ru.carpanel.ui
 import android.widget.FrameLayout
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -429,5 +430,111 @@ fun WidgetTile(
                 },
             )
         }
+    }
+}
+
+/** Набор программ: несколько значков в одной плитке. */
+@Composable
+fun GroupTile(
+    packages: List<String>,
+    catalog: AppCatalog,
+    russify: Boolean,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onLaunch: (String) -> Unit,
+    onLongClick: () -> Unit,
+) {
+    TileFrame(modifier = modifier, enabled = enabled, onLongClick = onLongClick) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(12.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = "Набор программ",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+
+            if (packages.isEmpty()) {
+                Text(
+                    text = "Пусто: программы набора выбираются в настройках",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                return@Column
+            }
+
+            for (row in packages.chunked(3)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    for (packageName in row) {
+                        GroupIcon(
+                            packageName = packageName,
+                            catalog = catalog,
+                            russify = russify,
+                            enabled = enabled,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onLaunch(packageName) },
+                        )
+                    }
+                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GroupIcon(
+    packageName: String,
+    catalog: AppCatalog,
+    russify: Boolean,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val label = remember(packageName, russify) { catalog.labelOf(packageName, russify) }
+    val icon = remember(packageName) {
+        catalog.icon(packageName)
+            ?.let { drawable -> runCatching { drawable.toBitmap(120, 120) }.getOrNull() }
+            ?.asImageBitmap()
+    }
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (icon != null) {
+            Image(
+                painter = BitmapPainter(icon),
+                contentDescription = label,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label.take(1).uppercase(ru), style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
     }
 }

@@ -97,6 +97,19 @@ object Grid {
         return board.copy(tiles = board.tiles.map { if (it.id == id) resized else it })
     }
 
+    /**
+     * Держать на панели ровно одну плитку такого рода.
+     *
+     * Так работает переключатель набора программ: включили — плитка
+     * появилась, выключили — исчезла, а остальная раскладка не тронута.
+     */
+    fun ensureTile(board: Board, kind: TileKind, present: Boolean, w: Int = 1, h: Int = 1): Board {
+        val existing = board.tiles.filter { it.kind == kind }
+        if (!present) return board.copy(tiles = board.tiles.filterNot { it.kind == kind })
+        if (existing.isNotEmpty()) return board
+        return add(board, Tile(id = 0, kind = kind, x = 0, y = 0, w = w, h = h))
+    }
+
     /** Сторона клетки в точках: под неё считается, сколько места просит чужой виджет. */
     const val CELL_DP = 170
 

@@ -2,6 +2,7 @@ package ru.carpanel
 
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import ru.carpanel.apps.KnownApps
@@ -38,6 +39,25 @@ class ConfigTest {
         assertTrue(board.tiles.any { it.packageName == Defaults.NAVIGATOR })
         assertTrue(board.tiles.any { it.packageName == Defaults.MUSIC })
         assertTrue(board.tiles.any { it.kind == TileKind.SPEED })
+    }
+
+    @Test
+    fun `набор программ переживает запись и чтение`() {
+        val config = PanelConfig().let { it.copy(appSet = it.appSet.copy(enabled = true)) }
+        val restored = json.decodeFromString(
+            PanelConfig.serializer(),
+            json.encodeToString(PanelConfig.serializer(), config),
+        )
+        assertEquals(config.appSet, restored.appSet)
+        assertTrue(restored.appSet.enabled)
+    }
+
+    @Test
+    fun `старый файл без набора читается с заводским набором`() {
+        val text = """{"board":{"columns":5,"rows":3,"tiles":[]},"settings":{}}"""
+        val config = json.decodeFromString(PanelConfig.serializer(), text)
+        assertFalse(config.appSet.enabled)
+        assertTrue(config.appSet.packages.contains(Defaults.NAVIGATOR))
     }
 
     @Test
