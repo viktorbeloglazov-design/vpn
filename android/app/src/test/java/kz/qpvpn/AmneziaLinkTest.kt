@@ -118,3 +118,29 @@ class AmneziaLinkTest {
         assertNull(AmneziaLink.extractConfig("vpn://не-база64!!!"))
     }
 }
+
+/** Отдельно: программа должна уметь назвать протокол, которого не понимает. */
+class AmneziaProtocolTest {
+
+    @Test
+    fun namesOpenVpnContainer() {
+        val json = """{"containers":[{"container":"amnezia-openvpn"}],"defaultContainer":"amnezia-openvpn"}"""
+        assertEquals("OpenVPN", kz.qpvpn.vpn.AmneziaLink.describeProtocol(json))
+    }
+
+    @Test
+    fun namesXrayContainer() {
+        val json = """{"defaultContainer":"amnezia-xray","containers":[{"container":"amnezia-xray"}]}"""
+        assertEquals("XRay (VLESS Reality)", kz.qpvpn.vpn.AmneziaLink.describeProtocol(json))
+    }
+
+    @Test
+    fun namesShadowsocksLink() {
+        assertEquals("Shadowsocks", kz.qpvpn.vpn.AmneziaLink.describeProtocol("ss://Y2hhY2hh@1.2.3.4:8388"))
+    }
+
+    @Test
+    fun saysNothingAboutPlainText() {
+        assertNull(kz.qpvpn.vpn.AmneziaLink.describeProtocol("просто текст"))
+    }
+}

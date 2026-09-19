@@ -16,6 +16,65 @@ object AmneziaLink {
 
     private const val INTERFACE_MARKER = "[Interface]"
 
+    /** Протоколы, которыми умеет делиться Amnezia. */
+    private val KNOWN_PROTOCOLS = listOf(
+        "amnezia-awg" to "AmneziaWG",
+        "amnezia-wireguard" to "WireGuard",
+        "amnezia-openvpn" to "OpenVPN",
+        "amnezia-openvpn-cloak" to "OpenVPN + Cloak",
+        "amnezia-shadowsocks" to "Shadowsocks",
+        "amnezia-xray" to "XRay (VLESS Reality)",
+        "amnezia-ikev2" to "IKEv2",
+        "amnezia-sftp" to "SFTP",
+        "amnezia-tor" to "Tor",
+        "amnezia-dns" to "DNS",
+    )
+
+    /**
+     * Называет протокол, спрятанный в ссылке.
+     *
+     * Нужно, чтобы на отказ отвечать по делу: не «настройки не подошли»,
+     * а «здесь OpenVPN, а программа понимает WireGuard и AmneziaWG».
+     */
+    fun describeProtocol(input: String): String? {
+        val decoded = decodeToText(input) ?: return null
+        val lower = decoded.lowercase()
+
+        // Сначала то, что объявлено контейнером по умолчанию.
+        val defaultMatch = Regex("\"defaultContainer\"\\s*:\\s*\"([a-z0-9-]+)\"").find(lower)
+        defaultMatch?.groupValues?.getOrNull(1)?.let { name ->
+            KNOWN_PROTOCOLS.firstOrNull { it.first == name }?.let { return it.second }
+        }
+
+        for ((key, title) in KNOWN_PROTOCOLS) {
+            if (lower.contains("\"$key\"")) return title
+        }
+        if (lower.contains("vless://") || lower.contains("\"reality\"")) return "XRay (VLESS Reality)"
+        if (lower.contains("ss://")) return "Shadowsocks"
+        if (lower.contains("remote ") && lower.contains("cipher ")) return "OpenVPN"
+        return null
+    }
+
+    /** Разворачивает ссылку до текста, не разбираясь, что внутри. */
+    private fun decodeToText(input: String): String? {
+        val text = input.trim()
+        if (text.isEmpty()) return null
+        if (text.contains(INTERFACE_MARKER) || text.contains("{")) return text
+
+        val payload = text
+            .removePrefix("vpn://")
+            .removePrefix("VPN://")
+            .removePrefix("amnezia://")
+            .trim()
+
+        val bytes = decodeBase64(payload) ?: return text
+        if (bytes.size > 4) {
+            inflate(bytes.copyOfRange(4, bytes.size))?.let { return it }
+        }
+        inflate(bytes)?.let { return it }
+        return String(bytes, Charsets.UTF_8)
+    }
+
     /** Достаёт текст конфигурации из чего угодно, чем поделились. */
     fun extractConfig(input: String): String? {
         val text = input.trim()

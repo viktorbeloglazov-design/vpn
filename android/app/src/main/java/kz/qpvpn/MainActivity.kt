@@ -291,7 +291,15 @@ class MainActivity : ComponentActivity() {
     private fun importFromText(text: String) {
         val config = AmneziaLink.extractConfig(text)
         if (config == null) {
-            showProfileError("В этом тексте нет настроек WireGuard или AmneziaWG.")
+            val protocol = AmneziaLink.describeProtocol(text)
+            showProfileError(
+                if (protocol != null) {
+                    "В ссылке протокол $protocol. Программа поднимает туннель только " +
+                        "по WireGuard и AmneziaWG — в Amnezia выберите один из них при экспорте."
+                } else {
+                    "В этом тексте нет настроек WireGuard или AmneziaWG."
+                }
+            )
             return
         }
         try {
