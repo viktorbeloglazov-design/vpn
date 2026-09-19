@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.sp
 import kz.carlink.LinkState
 import kz.carlink.Transport
 import kz.carlink.aa.Stage
+import kz.carlink.diag.GoogleCheck
+import kz.carlink.diag.GoogleStatus
 import kz.carlink.projection.ProjectionMode
 
 @Composable
@@ -52,6 +54,7 @@ fun CarLinkScreen(
     deskHost: String,
     deskPort: Int,
     localAddresses: List<String>,
+    google: GoogleStatus,
     mode: ProjectionMode,
     hasCredentials: Boolean,
     injectorEnabled: Boolean,
@@ -61,6 +64,8 @@ fun CarLinkScreen(
     onDeskHostChange: (String) -> Unit,
     onDeskPortChange: (Int) -> Unit,
     onModeChange: (ProjectionMode) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onCopyText: (String) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onPickCredentials: () -> Unit,
@@ -83,6 +88,7 @@ fun CarLinkScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     StatusCard(state, accessory, transport)
+                    GoogleCard(google, onOpenUrl, onCopyText)
                     ConnectionCard(
                         transport = transport,
                         host = deskHost,
@@ -134,6 +140,100 @@ private fun StatusCard(state: LinkState, accessory: String?, transport: Transpor
                 Text("Экран отдан машине", style = MaterialTheme.typography.bodySmall)
             }
         }
+    }
+}
+
+/**
+ * Путь к настоящему Android Auto: что уже стоит на телефоне и что осталось.
+ * Здесь же номер устройства — он нужен, если прошивка не сертифицирована.
+ */
+@Composable
+private fun GoogleCard(
+    google: GoogleStatus,
+    onOpenUrl: (String) -> Unit,
+    onCopyText: (String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (google.ready) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
+        ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Настоящий Android Auto на этом телефоне", style = MaterialTheme.typography.titleMedium)
+
+            PackageRow("Сервисы Google Play", google.playServices)
+            PackageRow("Play Маркет", google.playStore)
+            PackageRow("Android Auto", google.androidAuto)
+            PackageRow("Приложение Google (голос)", google.googleApp)
+
+            Text(
+                when {
+                    google.ready ->
+                        "Всё на месте. Подключите телефон к машине кабелем — она покажет штатный " +
+                            "Android Auto. Это приложение для такой связки уже не нужно."
+                    google.needsAuto ->
+                        "Сервисы есть, осталось поставить Android Auto из Play Маркета."
+                    google.playServices == null ->
+                        "Сервисов Google нет. Ставятся по порядку: Google Services Framework, " +
+                            "Google Play services, Play Маркет — и перезагрузка. Готовый скрипт: " +
+                            "scripts/carlink-gms.sh"
+                    else ->
+                        "Не хватает Play Маркета — без него Android Auto не поставить."
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+
+            if (google.deviceId != null) {
+                Text(
+                    "Номер устройства: ${google.deviceId}" +
+                        (google.deviceIdHex?.let { " (в шестнадцатеричном виде $it)" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "Если Play Маркет пишет «устройство не сертифицировано», введите этот номер " +
+                        "на странице регистрации, войдя тем же аккаунтом, и перезагрузите телефон.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else if (google.playServices != null) {
+                Text(
+                    "Номер устройства не читается: Android не дал доступ. Его показывает любое " +
+                        "приложение вида «Device ID».",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            val deviceId = google.deviceId
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (deviceId != null) {
+                    OutlinedButton(onClick = { onCopyText(deviceId) }) { Text("Скопировать номер") }
+                }
+                OutlinedButton(onClick = { onOpenUrl(GoogleCheck.REGISTRATION_URL) }) { Text("Регистрация") }
+                if (google.playStore != null && google.androidAuto == null) {
+                    OutlinedButton(
+                        onClick = { onOpenUrl("market://details?id=" + GoogleCheck.ANDROID_AUTO) },
+                    ) { Text("Поставить Android Auto") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PackageRow(title: String, version: String?) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            (if (version != null) "✓  " else "✗  ") + title,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(version ?: "нет", style = MaterialTheme.typography.bodySmall)
     }
 }
 

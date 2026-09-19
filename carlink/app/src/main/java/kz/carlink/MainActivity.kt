@@ -22,6 +22,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import kz.carlink.diag.EventLog
+import kz.carlink.diag.GoogleCheck
+import kz.carlink.diag.GoogleStatus
 import kz.carlink.projection.ProjectionMode
 import kz.carlink.projection.TouchInjector
 import kz.carlink.ui.CarLinkScreen
@@ -35,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private var deskHost by mutableStateOf("127.0.0.1")
     private var deskPort by mutableStateOf(5288)
     private var localAddresses by mutableStateOf(emptyList<String>())
+    private var google by mutableStateOf(GoogleStatus())
     private var mode by mutableStateOf(ProjectionMode.CAR_UI)
     private var hasCredentials by mutableStateOf(false)
     private var pendingCredentials by mutableStateOf<ByteArray?>(null)
@@ -104,6 +107,7 @@ class MainActivity : ComponentActivity() {
                 deskHost = deskHost,
                 deskPort = deskPort,
                 localAddresses = localAddresses,
+                google = google,
                 mode = mode,
                 hasCredentials = hasCredentials,
                 injectorEnabled = TouchInjector.instance != null,
@@ -124,6 +128,11 @@ class MainActivity : ComponentActivity() {
                 onModeChange = {
                     mode = it
                     Settings.setMode(this, it)
+                },
+                onOpenUrl = ::openUrl,
+                onCopyText = { text ->
+                    getSystemService(ClipboardManager::class.java)
+                        .setPrimaryClip(ClipData.newPlainText("CarLink", text))
                 },
                 onConnect = ::connect,
                 onDisconnect = { CarLinkService.stop(this) },
@@ -189,6 +198,16 @@ class MainActivity : ComponentActivity() {
         accessory = attached?.let { AoapTransport.describe(it) }
         hasCredentials = Settings.hasCredentials(this)
         localAddresses = LocalAddresses.list()
+        google = GoogleCheck.read(this)
+    }
+
+    private fun openUrl(url: String) {
+        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            EventLog.log("нечем открыть $url")
+        }
     }
 
     private fun connect() {
