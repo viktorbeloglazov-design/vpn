@@ -8,6 +8,8 @@
     <string>Kupibas VPN</string>
     <key>CFBundleExecutable</key>
     <string>KupibasVPN</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.kupibas.vpn</string>
     <key>CFBundlePackageType</key>

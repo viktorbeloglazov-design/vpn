@@ -38,6 +38,16 @@ install -m 0755 "$BIN_DIR/kupibasvpnd" "$APP/Contents/Library/Helpers/kupibasvpn
 install -m 0755 "$ROOT/scripts/install-helper.sh" "$APP/Contents/Resources/install-helper.sh"
 install -m 0644 "$ROOT/launchd/com.kupibas.vpn.helper.plist" "$APP/Contents/Resources/com.kupibas.vpn.helper.plist"
 
+# Иконка: на macOS собираем .icns из готового iconset.
+ICONSET="$ROOT/Resources/AppIcon.iconset"
+if [ -d "$ICONSET" ]; then
+    if command -v iconutil >/dev/null 2>&1; then
+        iconutil -c icns -o "$APP/Contents/Resources/AppIcon.icns" "$ICONSET"
+    else
+        echo "iconutil недоступен — приложение соберётся без иконки" >&2
+    fi
+fi
+
 if [ -n "$TOOLS_DIR" ]; then
     for tool in wireguard-go wg wg-quick; do
         if [ ! -f "$TOOLS_DIR/$tool" ]; then
