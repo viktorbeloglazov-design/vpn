@@ -67,7 +67,7 @@ QP VPN
   Android  $ANDROID_VERSION   (файл QPVPN-$ANDROID_VERSION.apk)
   Mac      $MAC_VERSION   (файл QPVPN-$MAC_VERSION.dmg)
   Windows  клиент AmneziaVPN, ставится с amnezia.org
-  iPhone   клиент AmneziaVPN, ставится из App Store
+  iPhone   клиент DefaultVPN, ставится из App Store
 
 Собрано: $(date -u '+%Y-%m-%d %H:%M UTC')
 TXT
