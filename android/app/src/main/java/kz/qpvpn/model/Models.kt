@@ -131,7 +131,9 @@ data class AppConfig(
      */
     val workFilter: Boolean = true,
 
-    val mode: TunnelMode = TunnelMode.FULL,
+    // Режим остался в настройках ради старых сохранённых файлов: выбрать
+    // его негде, приложение всегда работает как «всё через VPN, кроме правил».
+    val mode: TunnelMode = TunnelMode.EXCLUDE,
     val rules: List<RoutingRule> = emptyList(),
     val appsMode: AppsMode = AppsMode.OFF,
     val selectedApps: List<String> = emptyList(),
