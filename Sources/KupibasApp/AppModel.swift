@@ -21,10 +21,15 @@ final class AppModel: ObservableObject {
     private var saveWorkItem: DispatchWorkItem?
 
     init() {
+        Diagnostics.log("модель: читаю настройки")
         self.config = ConfigStore.loadConfig()
         self.status = ConfigStore.loadStatus()
-        self.launchAtLogin = SMAppService.mainApp.status == .enabled
+        // Про автозапуск спрашиваем систему не здесь: обращение к SMAppService
+        // на самом старте способно уронить приложение, подписанное своим
+        // сертификатом. Состояние подтянется, когда откроют «Настройки».
+        self.launchAtLogin = false
         startTimer()
+        Diagnostics.log("модель: готова")
     }
 
     // MARK: - Состояние службы
@@ -160,7 +165,26 @@ final class AppModel: ObservableObject {
 
     // MARK: - Автозапуск
 
+    /// Автозапуском управляет система, и она требует, чтобы приложение лежало
+    /// в «Программах». Из папки загрузок или с образа это не работает.
+    var canManageLaunchAtLogin: Bool {
+        Bundle.main.bundlePath.hasPrefix("/Applications")
+    }
+
+    /// Спрашивает систему о текущем состоянии автозапуска.
+    func refreshLaunchAtLogin() {
+        guard canManageLaunchAtLogin else {
+            launchAtLogin = false
+            return
+        }
+        launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+
     func setLaunchAtLogin(_ enabled: Bool) {
+        guard canManageLaunchAtLogin else {
+            saveError = "Автозапуск работает, только когда приложение лежит в папке «Программы»."
+            return
+        }
         do {
             if enabled {
                 try SMAppService.mainApp.register()
@@ -170,7 +194,7 @@ final class AppModel: ObservableObject {
             launchAtLogin = enabled
         } catch {
             saveError = "Не удалось изменить автозапуск: \(error.localizedDescription)"
-            launchAtLogin = SMAppService.mainApp.status == .enabled
+            refreshLaunchAtLogin()
         }
     }
 

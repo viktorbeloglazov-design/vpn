@@ -24,6 +24,12 @@ struct SettingsView: View {
                             get: { model.launchAtLogin },
                             set: { model.setLaunchAtLogin($0) }
                         ))
+                        .disabled(!model.canManageLaunchAtLogin)
+                        if !model.canManageLaunchAtLogin {
+                            Text("Доступно после переноса приложения в папку «Программы».")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
 
                     Section("Служба") {
@@ -64,6 +70,7 @@ struct SettingsView: View {
                     }
                 }
                 .formStyle(.grouped)
+                .onAppear { onAppearActions() }
 
                 GroupBox("Команды обслуживания (для сборки из исходников)") {
                     VStack(alignment: .leading, spacing: 8) {
@@ -77,6 +84,10 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private func onAppearActions() {
+        model.refreshLaunchAtLogin()
     }
 
     private var serviceState: String {

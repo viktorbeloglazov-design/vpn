@@ -7,6 +7,10 @@ struct KupibasVPNApp: App {
     @StateObject private var model = AppModel()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
+    init() {
+        Diagnostics.bootstrap()
+    }
+
     var body: some Scene {
         Window("Kupibas VPN", id: "main") {
             MainView()

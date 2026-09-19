@@ -62,6 +62,16 @@ if [ -n "$TOOLS_DIR" ]; then
 fi
 
 echo "==> Подписываю ad-hoc подписью"
-codesign --force --deep --sign - --timestamp=none "$APP"
+# Подписывать нужно изнутри наружу: сначала вложенные программы, затем бандл.
+# Ключ --deep для этого не предназначен и на вложенных утилитах даёт сбои.
+for binary in "$APP/Contents/Library/Helpers"/*; do
+    [ -f "$binary" ] || continue
+    if file "$binary" | grep -q "Mach-O"; then
+        codesign --force --sign - --timestamp=none "$binary"
+    fi
+done
+codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/KupibasVPN"
+codesign --force --sign - --timestamp=none "$APP"
+codesign --verify --strict "$APP"
 
 echo "Готово: $APP"
