@@ -275,7 +275,17 @@ class TunnelController(
 
         val apps = appsFor(config)
 
-        val text = profile.toConfigText(
+        // Без своего DNS толку от туннеля мало: провайдер отвечает на
+        // заблокированные имена подставным российским адресом, а тот идёт
+        // мимо VPN — и сайт всё равно не открывается. Если в ключе DNS не
+        // указан, подставляем публичный.
+        val effective = if (profile.dns.isEmpty()) {
+            profile.copy(dns = listOf("1.1.1.1", "8.8.8.8"))
+        } else {
+            profile
+        }
+
+        val text = effective.toConfigText(
             allowedIps = allowed,
             includeDns = config.options.useTunnelDns && config.effectiveMode != TunnelMode.INCLUDE,
             appsMode = if (apps.isEmpty()) AppsMode.OFF else config.appsMode,
