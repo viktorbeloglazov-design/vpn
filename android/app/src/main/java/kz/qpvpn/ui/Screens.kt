@@ -119,6 +119,7 @@ data class ScreenActions(
     val onToggle: () -> Unit,
     val onModeChange: (TunnelMode) -> Unit,
     val onMainFilterChange: (Boolean) -> Unit,
+    val onFullTunnelChange: (Boolean) -> Unit,
     val onWorkFilterChange: (Boolean) -> Unit,
     val onAddRule: (RuleKind, String) -> String?,
     val onToggleRule: (String, Boolean) -> Unit,
@@ -326,6 +327,29 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
             InfoCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
+                        Icons.Filled.Shield,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Весь трафик через VPN", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (state.config.fullTunnel)
+                                "В туннель уходит всё, включая российские сайты"
+                            else
+                                "Выключен: российские адреса идут напрямую",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.config.fullTunnel,
+                        onCheckedChange = { actions.onFullTunnelChange(it) },
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    Icon(
                         Icons.Filled.CallSplit,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
@@ -337,16 +361,18 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Text(
-                            if (state.config.mainFilter)
-                                "${state.masterCount} сервисов через VPN, остальное напрямую"
-                            else
-                                state.config.mode.subtitle,
+                            when {
+                                state.config.fullTunnel -> "Не действует, пока включён весь трафик"
+                                state.config.mainFilter -> "Зарубежное — через VPN, российское — напрямую"
+                                else -> state.config.mode.subtitle
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Switch(
                         checked = state.config.mainFilter,
+                        enabled = !state.config.fullTunnel,
                         onCheckedChange = { actions.onMainFilterChange(it) },
                     )
                 }
@@ -437,9 +463,54 @@ private fun RoutesSection(state: ScreenState, actions: ScreenActions) {
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        // ——— Весь трафик ———
+        item {
+            SectionHeader("Главное", "Два переключателя на все случаи")
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (state.config.fullTunnel) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surface
+                ),
+                border = BorderStroke(
+                    if (state.config.fullTunnel) 1.5.dp else 1.dp,
+                    if (state.config.fullTunnel) MaterialTheme.colorScheme.primary else colors.cardBorder,
+                ),
+                shape = RoundedCornerShape(18.dp),
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Весь трафик через VPN", style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                "Самый простой режим: в туннель уходит всё",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Switch(
+                            checked = state.config.fullTunnel,
+                            onCheckedChange = { actions.onFullTunnelChange(it) },
+                        )
+                    }
+
+                    Text(
+                        if (state.config.fullTunnel)
+                            "Включён: через VPN идёт всё, включая российские сайты. Банки и госуслуги при этом могут спрашивать подтверждение — они видят чужую страну."
+                        else
+                            "Выключен: российские адреса идут напрямую, остальное — по настройке ниже.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (state.config.fullTunnel) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
         // ——— Главный фильтр ———
         item {
-            SectionHeader("Главное", "Один переключатель на все заблокированные сервисы")
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -458,8 +529,7 @@ private fun RoutesSection(state: ScreenState, actions: ScreenActions) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Обход блокировок", style = MaterialTheme.typography.titleLarge)
                             Text(
-                                "${state.masterCount} ${plural(state.masterCount, "сервис", "сервиса", "сервисов")} · " +
-                                    "нейросети, соцсети, мессенджеры, видео, работа",
+                                "Зарубежный трафик — через VPN, российский — напрямую",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -472,17 +542,24 @@ private fun RoutesSection(state: ScreenState, actions: ScreenActions) {
                     }
 
                     Text(
-                        if (state.config.mainFilter)
-                            "Через VPN идут только эти сервисы. Всё остальное — банки, госуслуги, маркетплейсы, любой российский сайт — работает напрямую, как без VPN."
-                        else
-                            "Выключен: маршруты задаются вручную в расширенных настройках.",
+                        when {
+                            state.config.fullTunnel ->
+                                "Сейчас включён весь трафик — этот переключатель не действует."
+                            state.config.mainFilter ->
+                                "Через VPN идёт всё, кроме российских адресов: ${state.ruZoneCount} " +
+                                    plural(state.ruZoneCount, "подсеть", "подсети", "подсетей") +
+                                    " вычитаются из туннеля. Поэтому заблокированные сервисы открываются наверняка, " +
+                                    "а банки, госуслуги и маркетплейсы работают напрямую, как без VPN."
+                            else ->
+                                "Выключен: маршруты задаются вручную в расширенных настройках."
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (state.config.mainFilter) MaterialTheme.colorScheme.onPrimaryContainer
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
                     TextButton(onClick = { whatsInside = !whatsInside }) {
-                        Text(if (whatsInside) "Свернуть список" else "Что внутри")
+                        Text(if (whatsInside) "Свернуть список" else "Что этим открывается")
                     }
 
                     if (whatsInside) {
@@ -516,8 +593,8 @@ private fun RoutesSection(state: ScreenState, actions: ScreenActions) {
                             )
                         }
                         Text(
-                            "Если вы включите разбор по программам в расширенных настройках, " +
-                                "эти ${state.masterApps} приложений уже отмечены — отмечать вручную ничего не нужно.",
+                            "Это примеры: считать их по именам больше не нужно, адреса и так внутри туннеля. " +
+                                "А если вы включите разбор по программам, эти ${state.masterApps} приложений уже отмечены.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

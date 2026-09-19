@@ -87,9 +87,25 @@ class MasterFilterTest {
     fun mainFilterOverridesModeAndIsOnByDefault() {
         val fresh = AppConfig()
         assertTrue("главный фильтр должен быть включён сразу", fresh.mainFilter)
-        assertEquals(TunnelMode.INCLUDE, fresh.effectiveMode)
 
-        val manual = fresh.copy(mainFilter = false, mode = TunnelMode.EXCLUDE)
-        assertEquals(TunnelMode.EXCLUDE, manual.effectiveMode)
+        // Главный фильтр — это «всё через VPN, кроме российских адресов»:
+        // так заблокированные сервисы открываются, даже если их адрес
+        // приложение заранее не знает.
+        assertEquals(TunnelMode.EXCLUDE, fresh.effectiveMode)
+
+        val manual = fresh.copy(mainFilter = false, mode = TunnelMode.INCLUDE)
+        assertEquals(TunnelMode.INCLUDE, manual.effectiveMode)
+    }
+
+    @Test
+    fun fullTunnelWinsOverEverything() {
+        val fresh = AppConfig()
+        assertTrue("весь трафик по умолчанию выключен", !fresh.fullTunnel)
+
+        val all = fresh.copy(fullTunnel = true)
+        assertEquals(TunnelMode.FULL, all.effectiveMode)
+
+        val alsoWithManualMode = fresh.copy(fullTunnel = true, mainFilter = false, mode = TunnelMode.INCLUDE)
+        assertEquals(TunnelMode.FULL, alsoWithManualMode.effectiveMode)
     }
 }

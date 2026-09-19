@@ -85,7 +85,10 @@ class TunnelController(
         }
 
         val config = store.config.value
-        val wantsRuZone = config.options.bypassRuZone && config.effectiveMode == TunnelMode.EXCLUDE
+        // При включённом главном фильтре российская зона вычитается всегда:
+        // в этом и состоит его смысл, отдельная галочка тут ни при чём.
+        val wantsRuZone = (config.mainFilter || config.options.bypassRuZone) &&
+            config.effectiveMode == TunnelMode.EXCLUDE
         val wantsIpv6 = config.options.blockIpv6 || profile.hasIpv6Address
 
         // Попытки от полной к упрощённой. Российский список — это тысячи
@@ -148,7 +151,8 @@ class TunnelController(
         }
 
         val config = store.config.value
-        val useRuZone = config.options.bypassRuZone && config.effectiveMode == TunnelMode.EXCLUDE
+        val useRuZone = (config.mainFilter || config.options.bypassRuZone) &&
+            config.effectiveMode == TunnelMode.EXCLUDE
         val routes = routesFor(config, profile, useRuZone)
         if (routes == appliedRoutes) return
 
@@ -170,7 +174,10 @@ class TunnelController(
         withIpv6: Boolean,
     ) {
         val allowed = routes.toMutableList()
-        if (withIpv6 && config.effectiveMode != TunnelMode.INCLUDE) {
+        if (withIpv6) {
+            // IPv6 заворачиваем в туннель всегда: иначе телефон в мобильной
+            // сети откроет заблокированный сайт по IPv6 мимо VPN — и фильтр
+            // будет выглядеть неработающим.
             allowed += "::/0"
         }
 
@@ -281,10 +288,12 @@ class TunnelController(
     }
 
     /**
-     * Разворачивает правила в адреса.
+     * Разворачивает правила пользователя в адреса.
      *
-     * Когда включён главный фильтр, к правилам пользователя добавляется
-     * встроенный список сервисов, которые не работают с российского адреса.
+     * Встроенный список сервисов здесь не участвует. В режиме «всё через VPN,
+     * кроме российской зоны» правила означают обратное — что идёт мимо
+     * туннеля, — а заблокированные сервисы и так внутри: снаружи остаётся
+     * только российское адресное пространство.
      */
     private suspend fun resolveRules(config: AppConfig): List<Ipv4Net> {
         val result = mutableListOf<Ipv4Net>()
@@ -295,10 +304,6 @@ class TunnelController(
                 RuleKind.CIDR -> Cidr.parse(rule.value)?.let { result += it }
                 RuleKind.DOMAIN -> domains += rule.value.trim().lowercase()
             }
-        }
-
-        if (config.mainFilter) {
-            domains += MasterFilter.domains
         }
 
         if (domains.isNotEmpty()) {
@@ -330,8 +335,7 @@ class TunnelController(
                 sinceResolve += 2_000
                 val interval = store.config.value.options.reresolveMinutes.coerceIn(1, 60) * 60_000L
                 val current = store.config.value
-                val hasDomains = current.mainFilter ||
-                    current.activeRules.any { it.kind == RuleKind.DOMAIN }
+                val hasDomains = current.activeRules.any { it.kind == RuleKind.DOMAIN }
                 if (hasDomains && sinceResolve >= interval) {
                     sinceResolve = 0
                     refreshRoutes()

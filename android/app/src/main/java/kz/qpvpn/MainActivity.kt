@@ -144,6 +144,7 @@ class MainActivity : ComponentActivity() {
                         onToggle = ::toggleTunnel,
                         onModeChange = ::changeMode,
                         onMainFilterChange = ::changeMainFilter,
+                        onFullTunnelChange = ::changeFullTunnel,
                         onWorkFilterChange = ::changeWorkFilter,
                         onAddRule = ::addRule,
                         onToggleRule = ::toggleRule,
@@ -196,6 +197,12 @@ class MainActivity : ComponentActivity() {
     /** Главный фильтр сам задаёт маршруты, поэтому туннель пересобирается. */
     private fun changeMainFilter(enabled: Boolean) {
         app.store.update { it.copy(mainFilter = enabled) }
+        reapplyRoutes()
+    }
+
+    /** Весь трафик через VPN: перекрывает остальные переключатели. */
+    private fun changeFullTunnel(enabled: Boolean) {
+        app.store.update { it.copy(fullTunnel = enabled) }
         reapplyRoutes()
     }
 
