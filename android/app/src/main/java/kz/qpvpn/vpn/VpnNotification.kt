@@ -27,6 +27,18 @@ object VpnNotification {
     private const val ID = 1
     const val ACTION_DISCONNECT = "kz.qpvpn.action.DISCONNECT"
 
+    /**
+     * Счётчики в уведомлении обновляются не чаще этого.
+     *
+     * Состояние туннеля пересчитывается каждые две секунды, но перерисовывать
+     * шторку так часто незачем: это лишние обращения к системе, а глазу от них
+     * толку нет. Смена самого состояния показывается сразу, без задержки.
+     */
+    private const val REFRESH_MILLIS = 10_000L
+
+    private var shownKey = ""
+    private var shownAt = 0L
+
     /** Показывает или обновляет уведомление о работающем туннеле. */
     fun show(
         context: Context,
@@ -37,6 +49,12 @@ object VpnNotification {
     ) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         ensureChannel(manager)
+
+        val key = "$connected|$server"
+        val now = System.currentTimeMillis()
+        if (key == shownKey && now - shownAt < REFRESH_MILLIS) return
+        shownKey = key
+        shownAt = now
 
         val open = PendingIntent.getActivity(
             context,
@@ -79,6 +97,8 @@ object VpnNotification {
     }
 
     fun hide(context: Context) {
+        shownKey = ""
+        shownAt = 0
         context.getSystemService(NotificationManager::class.java)?.cancel(ID)
     }
 

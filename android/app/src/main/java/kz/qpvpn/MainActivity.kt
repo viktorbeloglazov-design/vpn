@@ -220,8 +220,21 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch { app.tunnel.refreshRoutes() }
     }
 
+    /**
+     * Размер пакета задаётся при подключении, поэтому туннель пересоздаётся.
+     *
+     * Иначе человек выбирает другое число, ничего не меняется, и он решает,
+     * что настройка не работает.
+     */
     private fun changeOptions(options: TunnelOptions) {
+        val was = app.store.config.value.options
         app.store.update { it.copy(options = options) }
+        if (was.mtu == options.mtu) return
+        if (app.tunnel.status.value.state != ConnectionState.CONNECTED) return
+        lifecycleScope.launch {
+            app.tunnel.disconnect()
+            app.tunnel.connect()
+        }
     }
 
     // MARK: - Профиль

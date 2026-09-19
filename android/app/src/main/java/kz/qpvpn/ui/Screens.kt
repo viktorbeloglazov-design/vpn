@@ -637,8 +637,9 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
         InfoCard {
             Text("Размер пакета (MTU)", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Единственное, что иногда приходится трогать: если туннель подключён, " +
-                    "а сайты не открываются — поставьте 1280.",
+                "От него зависит скорость. Чем больше — тем быстрее, но если сеть " +
+                    "не пропускает такие пакеты, страницы наоборот встают. Порядок " +
+                    "подбора: 1420 → из ключа → 1380 → 1280.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -646,7 +647,7 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
                 modifier = Modifier.padding(top = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf(0 to "Из ключа", 1380 to "1380", 1280 to "1280").forEach { (value, title) ->
+                listOf(1420 to "1420", 0 to "Из ключа", 1380 to "1380", 1280 to "1280").forEach { (value, title) ->
                     FilterChip(
                         selected = options.mtu == value,
                         onClick = { actions.onOptionsChange(options.copy(mtu = value)) },
@@ -654,6 +655,11 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
                     )
                 }
             }
+            Text(
+                "При смене туннель переподнимется сам — связь пропадёт на секунду.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         InfoCard {

@@ -59,6 +59,9 @@ class TunnelController(
 
         /** Шаги укрупнения: насколько большой промежуток между подсетями прощаем. */
         val GAPS = listOf(4_096L, 16_384L, 65_536L, 262_144L, 1_048_576L)
+
+        /** Столько ждём ответа, пока шлём, прежде чем поднимать туннель заново. */
+        const val SILENCE_MILLIS = 45_000L
     }
 
     private val backend: Backend by lazy { GoBackend(context) }
@@ -75,8 +78,19 @@ class TunnelController(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var watchJob: Job? = null
     private var appliedRoutes: List<String> = emptyList()
-    private var lastRepair = 0L
     private var lastZoneRoutes = 0
+
+    /**
+     * Готовая российская зона: считается один раз за запуск.
+     *
+     * Расчёт перебирает девять тысяч подсетей по нескольку раз. Файл при
+     * этом не меняется, так что второй раз считать нечего — а подключение
+     * от этого происходит заметно быстрее.
+     */
+    @Volatile
+    private var cachedZone: List<Ipv4Net>? = null
+
+    private val link = LinkWatch(silenceMillis = SILENCE_MILLIS)
 
     private val _status = MutableStateFlow(TunnelStatus())
     val status: StateFlow<TunnelStatus> = _status.asStateFlow()
@@ -413,6 +427,8 @@ class TunnelController(
      * могли бы случайно уйти мимо туннеля, возвращаются обратно.
      */
     private fun fittingRuZone(): List<Ipv4Net> {
+        cachedZone?.let { return it }
+
         val exact = RuZone.networks(context)
         if (exact.isEmpty()) return exact
 
@@ -428,6 +444,7 @@ class TunnelController(
         }
 
         lastZoneRoutes = routes
+        cachedZone = zone
         return zone
     }
 
@@ -504,49 +521,32 @@ class TunnelController(
     /** Фоновая работа, пока туннель поднят: счётчики и пересчёт доменов. */
     private fun startWatching() {
         watchJob?.cancel()
+        link.start(_status.value.rxBytes, _status.value.txBytes, System.currentTimeMillis())
+
         watchJob = scope.launch {
-            var sinceResolve = 0L
             while (isActive) {
                 delay(2_000)
 
+                // Одна выборка на круг: и счётчики, и время рукопожатия
+                // берутся из неё же. Раньше их запрашивали по отдельности,
+                // а каждый запрос дёргает движок туннеля.
                 val statistics = try {
                     backend.getStatistics(tunnel)
                 } catch (error: Exception) {
                     null
-                }
-                if (statistics != null) {
-                    publish(
-                        _status.value.copy(
-                            rxBytes = statistics.totalRx(),
-                            txBytes = statistics.totalTx(),
-                        )
-                    )
-                }
+                } ?: continue
 
-                // Связь могла пропасть: сервер перестал отвечать, а туннель
-                // при этом поднят — трафик уходит в никуда. Сначала пробуем
-                // поднять заново сами: чаще всего помогает, если телефон
-                // переехал с Wi-Fi на мобильную сеть.
-                val handshake = lastHandshakeMillis()
-                _status.value = _status.value.copy(lastHandshake = handshake)
+                val rx = statistics.totalRx()
+                val tx = statistics.totalTx()
+                val handshake = statistics.peers()
+                    .maxOfOrNull { statistics.peer(it)?.latestHandshakeEpochMillis() ?: 0L } ?: 0L
 
-                if (handshake > 0) {
-                    val silence = System.currentTimeMillis() - handshake
-                    if (silence > 150_000 && System.currentTimeMillis() - lastRepair > 120_000) {
-                        lastRepair = System.currentTimeMillis()
-                        _status.value = _status.value.copy(message = "Сервер молчит — переподключаюсь…")
-                        connect()
-                        return@launch
-                    }
-                }
+                publish(_status.value.copy(rxBytes = rx, txBytes = tx, lastHandshake = handshake))
 
-                sinceResolve += 2_000
-                val interval = store.config.value.options.reresolveMinutes.coerceIn(1, 60) * 60_000L
-                val current = store.config.value
-                val hasDomains = current.activeRules.any { it.kind == RuleKind.DOMAIN }
-                if (hasDomains && sinceResolve >= interval) {
-                    sinceResolve = 0
-                    refreshRoutes()
+                if (link.stalled(rx, tx, System.currentTimeMillis())) {
+                    publish(_status.value.copy(message = "Сервер молчит — переподключаюсь…"))
+                    connect()
+                    return@launch
                 }
             }
         }
