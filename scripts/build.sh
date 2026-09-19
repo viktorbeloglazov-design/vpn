@@ -21,10 +21,11 @@ done
 
 cd "$ROOT"
 
+# ${ARCH_FLAGS[@]+...} — чтобы пустой массив не ронял скрипт в bash 3.2 из macOS.
 echo "==> Собираю Swift-пакет (release)"
-swift build -c release "${ARCH_FLAGS[@]}"
+swift build -c release ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"}
 
-BIN_DIR="$(swift build -c release "${ARCH_FLAGS[@]}" --show-bin-path)"
+BIN_DIR="$(swift build -c release ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"} --show-bin-path)"
 
 echo "==> Собираю бандл приложения"
 mkdir -p "$DIST"

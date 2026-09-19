@@ -53,6 +53,14 @@ for tool in wireguard-go wg wg-quick; do
     fi
 done
 
+# macOS помечает всё скачанное карантином — со службы его нужно снять,
+# иначе launchd может отказаться её запускать.
+xattr -dr com.apple.quarantine "$HELPER_DIR" 2>/dev/null || true
+APP_PATH="$(cd "$CONTENTS/.." 2>/dev/null && pwd || true)"
+if [ -n "$APP_PATH" ] && [ "${APP_PATH##*.}" = "app" ]; then
+    xattr -dr com.apple.quarantine "$APP_PATH" 2>/dev/null || true
+fi
+
 # Утилиты WireGuard: либо вложены в приложение, либо стоят из Homebrew.
 MISSING=()
 for tool in wireguard-go wg wg-quick; do
