@@ -76,7 +76,8 @@ jobs:
 
       - name: Проверяю манифест пакета
         run: |
-          MANIFEST="$(find carpanel/app/build/intermediates -name AndroidManifest.xml -path "*merged*" | head -1)"
+          MANIFEST="$(find carpanel/app/build/intermediates -name AndroidManifest.xml -path "*merged*" -path "*release*" | head -1)"
+          test -n "$MANIFEST"
           echo "манифест: $MANIFEST"
           # Без службы уведомлений не будет кнопок проигрывателя,
           # без ярлыка домашнего экрана панель нечем сделать главным экраном.
