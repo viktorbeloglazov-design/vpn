@@ -147,13 +147,13 @@ final class TunnelManager: ObservableObject {
             do {
                 try session.sendProviderMessage(message) { response in
                     guard let response,
-                          let json = try? JSONSerialization.jsonObject(with: response) as? [String: Any],
-                          let rx = json["rx"] as? Int64 ?? (json["rx"] as? NSNumber)?.int64Value,
-                          let tx = json["tx"] as? Int64 ?? (json["tx"] as? NSNumber)?.int64Value
+                          let json = try? JSONSerialization.jsonObject(with: response) as? [String: Any]
                     else {
                         continuation.resume(returning: nil)
                         return
                     }
+                    let rx = (json["rx"] as? NSNumber)?.int64Value ?? 0
+                    let tx = (json["tx"] as? NSNumber)?.int64Value ?? 0
                     continuation.resume(returning: (rx, tx))
                 }
             } catch {

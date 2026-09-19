@@ -1,11 +1,12 @@
 import Foundation
+import Security
 import SwiftUI
 
 /// Состояние экрана и всё, что с ним делают.
 @MainActor
 final class AppModel: ObservableObject {
 
-    @Published var config: AppConfig {
+    @Published var config = AppConfig() {
         didSet {
             store.update { $0 = config }
             if oldValue != config { Task { await reapply() } }
@@ -26,7 +27,7 @@ final class AppModel: ObservableObject {
     private var profileText: String?
 
     init() {
-        config = Store().config
+        config = store.config
         profileText = Self.savedProfileText()
     }
 

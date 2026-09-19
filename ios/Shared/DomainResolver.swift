@@ -52,8 +52,8 @@ enum DomainResolver {
             }
         }
 
-        var unique_nets = Set<Ipv4Net>()
-        return result.filter { unique_nets.insert($0).inserted }
+        var seenNets = Set<Ipv4Net>()
+        return result.filter { seenNets.insert($0).inserted }
     }
 
     private static func resolve(_ host: String, useSecureDns: Bool) async -> [Ipv4Net] {
