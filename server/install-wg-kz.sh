@@ -76,4 +76,15 @@ systemctl restart wg-quick@wg0
 
 echo "==> Добавляю клиента «$CLIENT_NAME»"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# add-client.sh должен лежать рядом: сервер уже поднят, не хватает только клиента.
+if [ ! -f "$SCRIPT_DIR/add-client.sh" ]; then
+    echo
+    echo "Сервер настроен и запущен, но рядом нет add-client.sh, поэтому клиент не создан." >&2
+    echo "Скопируйте его в $SCRIPT_DIR и выполните:" >&2
+    echo "    PUBLIC_IP=$PUBLIC_IP PORT=$PORT bash $SCRIPT_DIR/add-client.sh $CLIENT_NAME" >&2
+    echo "Либо заведите сразу пачку клиентов: bash $SCRIPT_DIR/add-clients-bulk.sh 40 --qr" >&2
+    exit 1
+fi
+
 PUBLIC_IP="$PUBLIC_IP" PORT="$PORT" bash "$SCRIPT_DIR/add-client.sh" "$CLIENT_NAME"
