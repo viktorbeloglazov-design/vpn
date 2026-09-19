@@ -146,7 +146,7 @@ class MainActivity : ComponentActivity() {
                         masterCount = MasterFilter.count,
                         masterSections = MasterFilter.sections.map { it.title to it.domains.size },
                         masterApps = MasterFilter.packageCount,
-                        diagnostics = diagnostics(status),
+                        diagnostics = { diagnostics(status) },
                         ipText = ipText,
                         ipIsKazakhstan = ipIsKazakhstan,
                         checkingIp = checkingIp,

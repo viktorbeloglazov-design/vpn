@@ -93,6 +93,60 @@ object Cidr {
         return merged.flatMap { rangeToNets(it.first, it.second) }
     }
 
+    /**
+     * Схлопывает подсети, прощая небольшие промежутки между ними.
+     *
+     * Точный список России — это 8 649 подсетей, а туннелю приходится
+     * задавать дополнение к нему: больше двадцати тысяч маршрутов. Такой
+     * список Android передать системе уже не может — посылка не помещается
+     * в межпроцессное сообщение, и туннель не поднимается вовсе. Поэтому
+     * соседние куски склеиваются: маршрутов становится в несколько раз
+     * меньше, а мимо туннеля дополнительно уходит доля процента адресов.
+     */
+    fun mergeWithGap(nets: List<Ipv4Net>, gap: Long): List<Ipv4Net> {
+        if (nets.isEmpty()) return emptyList()
+        val ranges = nets.map { it.start to it.endInclusive }.sortedBy { it.first }
+        val merged = mutableListOf<Pair<Long, Long>>()
+        for (range in ranges) {
+            val last = merged.lastOrNull()
+            if (last != null && range.first - last.second - 1 <= gap) {
+                merged[merged.size - 1] = last.first to maxOf(last.second, range.second)
+            } else {
+                merged.add(range)
+            }
+        }
+        return merged.flatMap { rangeToNets(it.first, it.second) }
+    }
+
+    /** Вычитает одни подсети из других: «эти адреса — кроме вот этих». */
+    fun subtract(nets: List<Ipv4Net>, removed: List<Ipv4Net>): List<Ipv4Net> {
+        if (removed.isEmpty()) return merge(nets)
+
+        val holes = merge(removed).map { it.start to it.endInclusive }
+        val result = mutableListOf<Ipv4Net>()
+
+        for (net in merge(nets)) {
+            var pieces = listOf(net.start to net.endInclusive)
+            for (hole in holes) {
+                val next = mutableListOf<Pair<Long, Long>>()
+                for (piece in pieces) {
+                    if (hole.second < piece.first || hole.first > piece.second) {
+                        next += piece
+                        continue
+                    }
+                    if (hole.first > piece.first) next += piece.first to hole.first - 1
+                    if (hole.second < piece.second) next += hole.second + 1 to piece.second
+                }
+                pieces = next
+                if (pieces.isEmpty()) break
+            }
+            for (piece in pieces) {
+                result += rangeToNets(piece.first, piece.second)
+            }
+        }
+        return result
+    }
+
     /** Всё адресное пространство минус перечисленные подсети. */
     fun complement(excluded: List<Ipv4Net>): List<Ipv4Net> {
         if (excluded.isEmpty()) return listOf(Ipv4Net(0, 0))

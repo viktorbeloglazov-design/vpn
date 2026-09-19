@@ -22,6 +22,7 @@ import kz.qpvpn.model.AppConfig
 import kz.qpvpn.model.AppsMode
 import kz.qpvpn.model.ConnectionState
 import kz.qpvpn.model.RuleKind
+import kz.qpvpn.model.KeepInTunnel
 import kz.qpvpn.model.MasterFilter
 import kz.qpvpn.model.TunnelMode
 import kz.qpvpn.model.TunnelStatus
@@ -48,6 +49,18 @@ class TunnelController(
     private val store: Store,
 ) {
 
+    private companion object {
+        /**
+         * Столько маршрутов Android принимает спокойно. Дальше посылка
+         * системе разрастается до предела межпроцессного сообщения, и
+         * туннель не поднимается.
+         */
+        const val MAX_ROUTES = 4_000
+
+        /** Шаги укрупнения: насколько большой промежуток между подсетями прощаем. */
+        val GAPS = listOf(4_096L, 16_384L, 65_536L, 262_144L, 1_048_576L)
+    }
+
     private val backend: Backend by lazy { GoBackend(context) }
 
     private val tunnel = object : Tunnel {
@@ -63,6 +76,7 @@ class TunnelController(
     private var watchJob: Job? = null
     private var appliedRoutes: List<String> = emptyList()
     private var lastRepair = 0L
+    private var lastZoneRoutes = 0
 
     private val _status = MutableStateFlow(TunnelStatus())
     val status: StateFlow<TunnelStatus> = _status.asStateFlow()
@@ -331,7 +345,7 @@ class TunnelController(
                 // Кроме правил пользователя из туннеля вычитается вся
                 // российская зона, если это включено в настройках.
                 val excluded = if (useRuZone) {
-                    nets + RuZone.networks(context)
+                    nets + fittingRuZone()
                 } else {
                     nets
                 }
@@ -347,6 +361,34 @@ class TunnelController(
                 }
             }
         }
+    }
+
+    /**
+     * Российская зона, ужатая до размера, который Android способен принять.
+     *
+     * Точный список даёт больше двадцати тысяч маршрутов: такую посылку
+     * система не принимает — туннель молча не поднимается, значка VPN нет,
+     * а приложение думает, что всё хорошо. Поэтому список укрупняется, пока
+     * маршрутов не станет разумное количество. Сервисы, которые при этом
+     * могли бы случайно уйти мимо туннеля, возвращаются обратно.
+     */
+    private fun fittingRuZone(): List<Ipv4Net> {
+        val exact = RuZone.networks(context)
+        if (exact.isEmpty()) return exact
+
+        val keep = KeepInTunnel.nets()
+        var zone = Cidr.subtract(exact, keep)
+        var routes = Cidr.complement(zone).size
+        var step = 0
+
+        while (routes > MAX_ROUTES && step < GAPS.size) {
+            zone = Cidr.subtract(Cidr.mergeWithGap(exact, GAPS[step]), keep)
+            routes = Cidr.complement(zone).size
+            step++
+        }
+
+        lastZoneRoutes = routes
+        return zone
     }
 
     /** Адреса рабочих ресурсов: заложенные в приложение узлы. */

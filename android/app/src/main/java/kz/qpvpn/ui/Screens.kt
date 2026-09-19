@@ -111,7 +111,7 @@ data class ScreenState(
     val masterCount: Int,
     val masterSections: List<Pair<String, Int>>,
     val masterApps: Int,
-    val diagnostics: String,
+    val diagnostics: () -> String,
     val ipText: String,
     val ipIsKazakhstan: Boolean,
     val checkingIp: Boolean,
@@ -1222,7 +1222,7 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
 
             if (showDiagnostics) {
                 Text(
-                    state.diagnostics,
+                    remember(state.status) { state.diagnostics() },
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
