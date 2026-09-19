@@ -73,11 +73,28 @@ data class WgProfile(
 
         class ParseError(message: String) : Exception(message)
 
-        /** Имена параметров маскировки так, как их ждёт библиотека AmneziaWG. */
+        /**
+         * Имена параметров маскировки так, как их ждёт библиотека AmneziaWG.
+         *
+         * Список полный: свежие версии Amnezia выдают не только размеры
+         * мусорных пакетов и заголовки, но и «особый мусор» I1–I5, защиту
+         * заголовка и тайминги. Потеряется хоть один — сервер не ответит
+         * на рукопожатие, и туннель будет подниматься в пустоту.
+         */
         private val AMNEZIA_FIELDS = listOf(
             "jc" to "Jc", "jmin" to "Jmin", "jmax" to "Jmax",
-            "s1" to "S1", "s2" to "S2",
+            "s1" to "S1", "s2" to "S2", "s3" to "S3", "s4" to "S4",
             "h1" to "H1", "h2" to "H2", "h3" to "H3", "h4" to "H4",
+            "i1" to "I1", "i2" to "I2", "i3" to "I3", "i4" to "I4", "i5" to "I5",
+            "headerprotectionkey" to "HeaderProtectionKey",
+            "contentpaddingaddition" to "ContentPaddingAddition",
+            "rekeyaftertime" to "RekeyAfterTime",
+            "rekeytimeout" to "RekeyTimeout",
+            "rejectaftertime" to "RejectAfterTime",
+            "keepalivetimeout" to "KeepaliveTimeout",
+            "maxhandshakeattempts" to "MaxHandshakeAttempts",
+            "randomtrailers" to "RandomTrailers",
+            "disablecookies" to "DisableCookies",
         )
 
         private fun isKey(value: String): Boolean =

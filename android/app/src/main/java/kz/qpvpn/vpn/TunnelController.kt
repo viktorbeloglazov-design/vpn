@@ -110,6 +110,28 @@ class TunnelController(
                 applyConfig(profile, config, routes, withIpv6 = withIpv6)
                 appliedRoutes = routes
                 _status.value = TunnelStatus(
+                    state = ConnectionState.CONNECTING,
+                    routeCount = routes.size,
+                    serverName = profile.endpointHost,
+                    message = "Устанавливаю связь с сервером…",
+                )
+
+                // Поднятый туннель — ещё не связь. Пока сервер не ответил на
+                // рукопожатие, трафик уходит в пустоту, а телефон при этом
+                // уже считает, что VPN работает: интернета нет, и непонятно
+                // почему. Поэтому дожидаемся ответа и только тогда говорим
+                // «подключён».
+                if (!awaitHandshake()) {
+                    takeDown()
+                    fail(
+                        "Сервер ${profile.endpointHost} не ответил. Обычно это значит одно из трёх: " +
+                            "ключ выдан для другого протокола (нужен AmneziaWG или WireGuard), " +
+                            "сервер недоступен, или эта сеть режет VPN — попробуйте мобильный интернет вместо Wi-Fi."
+                    )
+                    return
+                }
+
+                _status.value = TunnelStatus(
                     state = ConnectionState.CONNECTED,
                     connectedSince = System.currentTimeMillis(),
                     routeCount = routes.size,
@@ -124,6 +146,76 @@ class TunnelController(
         }
 
         fail(lastError?.message ?: "Не удалось поднять туннель.")
+    }
+
+    /**
+     * Ждёт первого рукопожатия с сервером.
+     *
+     * WireGuard повторяет попытку примерно раз в пять секунд, поэтому
+     * двадцати секунд хватает на четыре захода. Молчание дольше — это уже
+     * не «медленная сеть», а несовпадение ключа или недоступный сервер.
+     */
+    private suspend fun awaitHandshake(timeoutMillis: Long = 20_000): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            delay(1_000)
+            if (lastHandshakeMillis() > 0) return true
+        }
+        return false
+    }
+
+    /** Время последнего рукопожатия по данным туннеля, 0 — его ещё не было. */
+    private suspend fun lastHandshakeMillis(): Long = try {
+        withContext(Dispatchers.IO) {
+            val statistics = backend.getStatistics(tunnel)
+            statistics.peers().maxOfOrNull { statistics.peer(it)?.latestHandshakeEpochMillis() ?: 0L } ?: 0L
+        }
+    } catch (error: Exception) {
+        0L
+    }
+
+    /** Опускает туннель, не трогая показанное состояние. */
+    private suspend fun takeDown() {
+        try {
+            withContext(Dispatchers.IO) {
+                backend.setState(tunnel, Tunnel.State.DOWN, null)
+            }
+        } catch (error: Exception) {
+            // Туннель мог не подняться вовсе — тогда и опускать нечего.
+        }
+        appliedRoutes = emptyList()
+    }
+
+    /**
+     * Сверяет показанное состояние с настоящим.
+     *
+     * Приложение могли закрыть или выгрузить из памяти, а туннель при этом
+     * остаётся поднятым системой. Без сверки экран показывает «Выключен»,
+     * пока телефон сидит в туннеле — и человек не понимает, почему нет сети.
+     */
+    suspend fun syncState() {
+        val up = try {
+            withContext(Dispatchers.IO) { backend.getState(tunnel) } == Tunnel.State.UP
+        } catch (error: Exception) {
+            false
+        }
+
+        if (up && _status.value.state != ConnectionState.CONNECTED) {
+            val profile = store.profileText()?.let { text ->
+                runCatching { WgProfile.parse(text) }.getOrNull()
+            }
+            _status.value = TunnelStatus(
+                state = ConnectionState.CONNECTED,
+                connectedSince = System.currentTimeMillis(),
+                routeCount = appliedRoutes.size,
+                serverName = profile?.endpointHost.orEmpty(),
+            )
+            startWatching()
+        } else if (!up && _status.value.state == ConnectionState.CONNECTED) {
+            watchJob?.cancel()
+            watchJob = null
+            _status.value = TunnelStatus()
+        }
     }
 
     suspend fun disconnect() {
@@ -329,6 +421,18 @@ class TunnelController(
                     _status.value = _status.value.copy(
                         rxBytes = statistics.totalRx(),
                         txBytes = statistics.totalTx(),
+                    )
+                }
+
+                // Связь могла пропасть: сервер перестал отвечать, а туннель
+                // при этом поднят — трафик уходит в никуда.
+                val handshake = lastHandshakeMillis()
+                if (handshake > 0) {
+                    val silence = System.currentTimeMillis() - handshake
+                    _status.value = _status.value.copy(
+                        message = if (silence > 180_000)
+                            "Сервер молчит больше трёх минут — связь потеряна."
+                        else _status.value.message.takeIf { !it.startsWith("Сервер молчит") }.orEmpty(),
                     )
                 }
 

@@ -96,6 +96,10 @@ class MainActivity : ComponentActivity() {
 
         handleSharedIntent(intent)
 
+        // Туннель мог остаться поднятым с прошлого запуска: сверяем, что
+        // показано на экране, с тем, что на самом деле держит система.
+        lifecycleScope.launch { app.tunnel.syncState() }
+
         setContent {
             QpVpnTheme {
                 val config by app.store.config.collectAsStateWithLifecycle()
@@ -163,6 +167,11 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch { app.tunnel.syncState() }
     }
 
     // MARK: - Туннель
@@ -389,7 +398,9 @@ class MainActivity : ComponentActivity() {
             val profile = WgProfile.parse(text)
             buildString {
                 if (profile.isAmnezia) {
-                    append("протокол AmneziaWG — обычный WireGuard-сервер его не примет\n")
+                    append("протокол AmneziaWG, параметров маскировки: ${profile.amneziaParams.size}\n")
+                } else {
+                    append("протокол WireGuard без маскировки\n")
                 }
                 append("сервер ${profile.endpoint}")
                 append("\nадрес ${profile.addresses.joinToString(", ")}")
@@ -412,8 +423,19 @@ class MainActivity : ComponentActivity() {
             result.onSuccess { info ->
                 ipText = info.summary
                 ipIsKazakhstan = info.isKazakhstan
-            }.onFailure {
-                ipText = "Не удалось проверить адрес: ${it.message}"
+            }.onFailure { error ->
+                val message = error.message.orEmpty()
+                // Когда весь трафик уходит в неработающий туннель, телефон
+                // теряет даже DNS — «unable to resolve host» означает именно
+                // это, а не поломку проверки.
+                ipText = if (message.contains("resolve host", ignoreCase = true) ||
+                    message.contains("Unable to resolve", ignoreCase = true)
+                ) {
+                    "Интернета нет: имена сайтов не разрешаются. Если туннель включён — выключите его кнопкой; " +
+                        "похоже, сервер не отвечает."
+                } else {
+                    "Не удалось проверить адрес: $message"
+                }
                 ipIsKazakhstan = false
             }
         }
