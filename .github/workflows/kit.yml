@@ -31,6 +31,7 @@ jobs:
           scripts/make-kit.sh \
             --android "${{ github.event.inputs.android_version }}" \
             --mac "${{ github.event.inputs.mac_version }}" \
+            --kit "${{ github.event.inputs.kit_version }}" \
             --with-admin
           ls -lh dist
 

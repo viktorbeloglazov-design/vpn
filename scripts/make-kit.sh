@@ -11,6 +11,7 @@ REPO="viktorbeloglazov-design/vpn"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANDROID_VERSION=""
 MAC_VERSION=""
+KIT_VERSION="1.0"
 OUT="$ROOT/dist"
 KEEP_ADMIN="no"
 
@@ -18,6 +19,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --android) ANDROID_VERSION="$2"; shift 2 ;;
         --mac) MAC_VERSION="$2"; shift 2 ;;
+        --kit) KIT_VERSION="$2"; shift 2 ;;
         --out) OUT="$2"; shift 2 ;;
         --without-admin) KEEP_ADMIN="no"; shift ;;
         --with-admin) KEEP_ADMIN="yes"; shift ;;
@@ -30,7 +32,7 @@ if [ -z "$ANDROID_VERSION" ] || [ -z "$MAC_VERSION" ]; then
     exit 1
 fi
 
-NAME="QP-VPN-$MAC_VERSION"
+NAME="QP-VPN-$KIT_VERSION"
 STAGE="$OUT/$NAME"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"/{Windows,Mac,Android,iPhone}
