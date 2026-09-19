@@ -41,7 +41,21 @@ jobs:
         run: |
           cd "$RUNNER_TEMP/awg"
           chmod +x gradlew 2>/dev/null || true
-          ./gradlew :tunnel:assembleRelease --no-daemon --stacktrace 2>&1 | tail -60
+          set +e
+          ./gradlew :tunnel:assembleRelease --no-daemon > "$RUNNER_TEMP/build.log" 2>&1
+          STATUS=$?
+          set -e
+          if [ $STATUS -ne 0 ]; then
+            echo "=== Gradle упал, код $STATUS ==="
+            echo "--- что именно пошло не так ---"
+            sed -n "/What went wrong/,/Try:/p" "$RUNNER_TEMP/build.log" | head -40
+            echo "--- строки с ошибками ---"
+            grep -iE "error|failed|not found|unsupported|requires" "$RUNNER_TEMP/build.log" | grep -v "^\s*at " | head -25
+            echo "--- последние строки ---"
+            grep -v "^\s*at " "$RUNNER_TEMP/build.log" | tail -25
+            exit 1
+          fi
+          echo "Сборка прошла"
 
       - name: Что получилось
         run: |
