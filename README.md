@@ -56,7 +56,18 @@
 Под капотом — WireGuard (`wireguard-go` + `wg-quick`), самый быстрый и
 предсказуемый вариант для Mac.
 
-## Скачать готовое приложение
+## Установка на Mac одной командой
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/viktorbeloglazov-design/vpn/claude/mac-vpn-app-routes-7jv8o7/scripts/install-mac.sh | bash
+```
+
+Скачает свежую сборку, поставит в «Программы» и откроет. Так надёжнее, чем
+через браузер: файлы из браузера macOS помечает как «скачанные из интернета»,
+и приложение без сертификата Apple за 99 долларов в год после первого отказа
+перестаёт открываться совсем — значок прыгает в Dock и гаснет без сообщений.
+
+## Скачать образ вручную
 
 Свежий образ — на странице [релизов](https://github.com/viktorbeloglazov-design/vpn/releases).
 Внутри один файл `KupibasVPN.dmg` для Apple Silicon и Intel сразу; всё нужное
