@@ -17,6 +17,8 @@ final class AppModel: ObservableObject {
     @Published var isInstallingHelper = false
     @Published var installMessage: String?
 
+    private var ruZoneCountCache: Int?
+
     private var timer: Timer?
     private var saveWorkItem: DispatchWorkItem?
 
@@ -69,6 +71,37 @@ final class AppModel: ObservableObject {
     func setMode(_ mode: TunnelMode) {
         config.mode = mode
         scheduleSave()
+    }
+
+    /// Весь трафик через VPN — перекрывает остальные переключатели.
+    func setFullTunnel(_ enabled: Bool) {
+        config.fullTunnel = enabled
+        scheduleSave()
+    }
+
+    /// Главный фильтр: через VPN идёт всё, кроме российских адресов.
+    func setMainFilter(_ enabled: Bool) {
+        config.mainFilter = enabled
+        scheduleSave()
+    }
+
+    /// Рабочие ресурсы: через VPN или напрямую.
+    func setWorkFilter(_ enabled: Bool) {
+        config.workFilter = enabled
+        scheduleSave()
+    }
+
+    /// Сколько подсетей России знает программа — показываем в подписи.
+    var ruZoneCount: Int {
+        if let cached = ruZoneCountCache { return cached }
+
+        var paths = [RuZone.installedPath]
+        if let bundled = Bundle.main.path(forResource: "ru_ipv4", ofType: "txt") {
+            paths.append(bundled)
+        }
+        let count = RuZone.networks(extraPaths: paths).count
+        ruZoneCountCache = count
+        return count
     }
 
     func addRule(kind: RuleKind, value: String, note: String = "") -> String? {

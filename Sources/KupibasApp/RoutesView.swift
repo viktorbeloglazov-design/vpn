@@ -8,15 +8,91 @@ struct RoutesView: View {
     @State private var newValue = ""
     @State private var addError: String?
     @State private var selection = Set<String>()
+    @State private var advanced = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            modeSection
-            Divider()
-            addSection
-            rulesList
-            footer
+            switchesSection
+            DisclosureGroup("Расширенные настройки", isExpanded: $advanced) {
+                VStack(alignment: .leading, spacing: 12) {
+                    if model.config.fullTunnel || model.config.mainFilter {
+                        Text("Сейчас маршруты задают переключатели выше. Настройки ниже начнут действовать, когда вы их выключите.")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                    modeSection
+                    Divider()
+                    addSection
+                    rulesList
+                    footer
+                }
+                .padding(.top, 8)
+            }
         }
+    }
+
+    /// Три переключателя — те же, что в версии для телефона.
+    private var switchesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: Binding(
+                get: { model.config.fullTunnel },
+                set: { model.setFullTunnel($0) }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Весь трафик через VPN").font(.headline)
+                    Text(model.config.fullTunnel
+                         ? "В туннель уходит всё, включая российские сайты."
+                         : "Выключен: российские адреса идут напрямую.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+
+            Toggle(isOn: Binding(
+                get: { model.config.mainFilter },
+                set: { model.setMainFilter($0) }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Обход блокировок").font(.headline)
+                    Text(mainFilterSubtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+            .disabled(model.config.fullTunnel)
+
+            Toggle(isOn: Binding(
+                get: { model.config.workFilter },
+                set: { model.setWorkFilter($0) }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Рабочие ресурсы").font(.headline)
+                    Text(model.config.workFilter
+                         ? "Идут через VPN: " + WorkFilter.resources.map(\.url).joined(separator: ", ")
+                         : "Идут напрямую.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+        }
+    }
+
+    private var mainFilterSubtitle: String {
+        if model.config.fullTunnel {
+            return "Не действует, пока включён весь трафик."
+        }
+        if model.config.mainFilter {
+            let count = model.ruZoneCount
+            return count > 0
+                ? "Через VPN идёт всё, кроме российских адресов: \(count) подсетей вычитаются из туннеля. Банки, госуслуги и маркетплейсы работают напрямую."
+                : "Через VPN идёт всё, кроме российских адресов."
+        }
+        return "Выключен: маршруты задаются вручную ниже."
     }
 
     private var modeSection: some View {

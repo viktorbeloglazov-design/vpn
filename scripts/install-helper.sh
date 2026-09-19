@@ -60,6 +60,14 @@ for tool in wireguard-go wg wg-quick; do
     fi
 done
 
+# Список подсетей России кладём туда, где его прочитает служба: по нему
+# главный фильтр решает, что идёт мимо туннеля.
+if [ -f "$RESOURCES/ru_ipv4.txt" ]; then
+    install -d -m 0755 "/Library/Application Support/QPVPN"
+    install -m 0644 "$RESOURCES/ru_ipv4.txt" "/Library/Application Support/QPVPN/ru_ipv4.txt"
+    echo "Список подсетей России: $(grep -vc '^#' "$RESOURCES/ru_ipv4.txt") записей"
+fi
+
 # macOS помечает всё скачанное карантином — со службы его нужно снять,
 # иначе launchd может отказаться её запускать.
 xattr -dr com.apple.quarantine "$HELPER_DIR" 2>/dev/null || true

@@ -23,7 +23,10 @@ final class TunnelManager {
     private var servicesWithIPv6Disabled: [String] = []
 
     // Маршруты, которыми управляет демон
-    private var bypassRoutes: Set<String> = []   // exclude: мимо туннеля, через физический шлюз
+    private var bypassRoutes: Set<String> = []
+    /// Крупный список обхода: российская зона. Хранится подсетями, а не
+    /// строками, — его тысячи, и снимать его нужно так же быстро.
+    private var bulkBypass: Set<Ipv4Net> = []
     private var tunnelRoutes: Set<String> = []   // include: в туннель
     private var realInterfaceName = ""
 
@@ -121,7 +124,7 @@ final class TunnelManager {
 
         let includeDNS = config.options.useTunnelDNS
             && !config.server.dns.isEmpty
-            && config.mode != .include
+            && config.effectiveMode != .include
         let text = WireGuardConfig.render(server: config.server,
                                           allowedIPs: allowedIPs,
                                           includeDNS: includeDNS)
@@ -158,28 +161,31 @@ final class TunnelManager {
         bypassRoutes = []
         tunnelRoutes = []
 
-        switch config.mode {
+        switch config.effectiveMode {
         case .full:
             break
         case .include:
             // Маршруты для AllowedIPs wg-quick уже поставил — фиксируем их как свои.
             tunnelRoutes = resolved
         case .exclude:
-            installBypassRoutes(resolved)
+            // Правила пользователя по IPv6 — прежним путём, поштучно.
+            installBypassRoutes(resolved.filter { $0.contains(":") })
+            installBulkBypass(bypassNets(config, resolved: resolved))
         }
 
-        if config.options.disableIPv6 && !config.server.hasIPv6Address && config.mode != .include {
+        if config.options.disableIPv6 && !config.server.hasIPv6Address && config.effectiveMode != .include {
             disableIPv6()
         }
 
         state = .connecting
         message = ""
-        log.info("Туннель поднят (\(config.mode.rawValue), интерфейс \(realInterfaceName.isEmpty ? Paths.interfaceName : realInterfaceName), правил: \(resolved.count)).")
+        log.info("Туннель поднят (\(config.effectiveMode.rawValue), интерфейс \(realInterfaceName.isEmpty ? Paths.interfaceName : realInterfaceName), правил: \(resolved.count)).")
     }
 
     // MARK: - Опускание туннеля
 
     private func bringDown() {
+        removeBulkBypass()
         for cidr in bypassRoutes {
             _ = NetworkTool.deleteRoute(cidr)
         }
@@ -216,7 +222,7 @@ final class TunnelManager {
         var result: Set<String> = []
         // В режиме include адрес должен быть достижим через туннель, в остальных —
         // через физический канал, которого при отключённом IPv6 просто нет.
-        let allowIPv6 = config.mode == .include
+        let allowIPv6 = config.effectiveMode == .include
             ? config.server.hasIPv6Address
             : (savedDefaultRouteV6 != nil && !config.options.disableIPv6)
 
@@ -247,7 +253,7 @@ final class TunnelManager {
     }
 
     private func allowedIPsFor(config: TunnelConfig, resolved: Set<String>) -> [String] {
-        switch config.mode {
+        switch config.effectiveMode {
         case .full, .exclude:
             var list = ["0.0.0.0/0"]
             if config.server.hasIPv6Address { list.append("::/0") }
@@ -267,20 +273,38 @@ final class TunnelManager {
         lastResolveAt = Date()
         appliedRulesSignature = config.rulesSignature
 
-        switch config.mode {
+        switch config.effectiveMode {
         case .full:
             return
 
         case .exclude:
-            let toAdd = desired.subtracting(bypassRoutes)
-            let toRemove = bypassRoutes.subtracting(desired)
+            let ipv6Rules = desired.filter { $0.contains(":") }
+            let toAdd = ipv6Rules.subtracting(bypassRoutes)
+            let toRemove = bypassRoutes.subtracting(ipv6Rules)
             for cidr in toRemove {
                 _ = NetworkTool.deleteRoute(cidr)
                 bypassRoutes.remove(cidr)
             }
             installBypassRoutes(toAdd)
-            if !toAdd.isEmpty || !toRemove.isEmpty {
-                log.info("Исключения обновлены: +\(toAdd.count) / -\(toRemove.count).")
+
+            // Крупный список пересобираем разницей: снимать и ставить
+            // тысячи маршрутов заново незачем.
+            let wanted = Set(bypassNets(config, resolved: desired))
+            let netsToAdd = wanted.subtracting(bulkBypass)
+            let netsToRemove = bulkBypass.subtracting(wanted)
+
+            if let via = savedDefaultRoute, !via.gateway.isEmpty {
+                if !netsToRemove.isEmpty {
+                    _ = RouteSocket.delete(Array(netsToRemove), gateway: via.gateway)
+                }
+                if !netsToAdd.isEmpty {
+                    _ = RouteSocket.add(Array(netsToAdd), gateway: via.gateway)
+                }
+                bulkBypass = wanted
+            }
+
+            if !toAdd.isEmpty || !toRemove.isEmpty || !netsToAdd.isEmpty || !netsToRemove.isEmpty {
+                log.info("Исключения обновлены: +\(toAdd.count + netsToAdd.count) / -\(toRemove.count + netsToRemove.count).")
             }
 
         case .include:
@@ -312,6 +336,57 @@ final class TunnelManager {
             }
             log.info("Маршруты в туннель обновлены: +\(toAdd.count) / -\(toRemove.count).")
         }
+    }
+
+    /// Подсети, которые должны идти мимо туннеля.
+    ///
+    /// При включённом главном фильтре это вся российская зона плюс правила
+    /// пользователя. Рабочие ресурсы из списка вычитаются: их адрес лежит
+    /// в российской зоне, но уходить мимо VPN он не должен.
+    private func bypassNets(_ config: TunnelConfig, resolved: Set<String>) -> [Ipv4Net] {
+        var nets: [Ipv4Net] = resolved.compactMap { cidr in
+            cidr.contains(":") ? nil : Cidr.parse(cidr)
+        }
+
+        if config.mainFilter {
+            nets += RuZone.networks()
+        }
+
+        guard !nets.isEmpty else { return [] }
+
+        if config.workFilter {
+            let work = WorkFilter.hosts.compactMap { Cidr.parse($0) }
+            if !work.isEmpty {
+                return Cidr.subtract(nets, work)
+            }
+        }
+        return Cidr.merge(nets)
+    }
+
+    /// Прокладывает крупный список обхода одним заходом.
+    private func installBulkBypass(_ nets: [Ipv4Net]) {
+        guard !nets.isEmpty, let via = savedDefaultRoute, !via.gateway.isEmpty else { return }
+
+        let started = Date()
+        let outcome = RouteSocket.add(nets, gateway: via.gateway)
+        bulkBypass = Set(nets)
+
+        let seconds = String(format: "%.1f", Date().timeIntervalSince(started))
+        log.info("Обход российской зоны: маршрутов \(outcome.handled) из \(nets.count) за \(seconds) с (ошибок \(outcome.failed)).")
+
+        if outcome.handled == 0 && outcome.failed > 0 {
+            log.error("Сокет маршрутизации не принял список — обход не работает.")
+        }
+    }
+
+    private func removeBulkBypass() {
+        guard !bulkBypass.isEmpty, let via = savedDefaultRoute, !via.gateway.isEmpty else {
+            bulkBypass = []
+            return
+        }
+        let outcome = RouteSocket.delete(Array(bulkBypass), gateway: via.gateway)
+        log.info("Обход снят: маршрутов \(outcome.handled), ошибок \(outcome.failed).")
+        bulkBypass = []
     }
 
     private func installBypassRoutes(_ cidrs: Set<String>) {
@@ -390,7 +465,7 @@ final class TunnelManager {
     private func publishStatus(config: TunnelConfig) {
         var status = TunnelStatus()
         status.state = state
-        status.mode = config.mode
+        status.mode = config.effectiveMode
         status.interfaceName = realInterfaceName.isEmpty ? Paths.interfaceName : realInterfaceName
         status.serverName = config.server.name
         status.endpoint = config.server.endpoint
@@ -404,7 +479,7 @@ final class TunnelManager {
             status.txBytes = stats.txBytes
         }
 
-        switch config.mode {
+        switch config.effectiveMode {
         case .full: status.routeCount = 0
         case .include: status.routeCount = tunnelRoutes.count
         case .exclude: status.routeCount = bypassRoutes.count

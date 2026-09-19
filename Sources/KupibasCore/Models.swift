@@ -187,6 +187,20 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
     public var version: Int
     /// Желаемое состояние: true — туннель должен быть поднят.
     public var enabled: Bool
+
+    /// Весь трафик через VPN, включая российские сайты. Перекрывает остальное.
+    public var fullTunnel: Bool
+
+    /// Главный фильтр: через VPN идёт всё, кроме российских адресов.
+    ///
+    /// Заблокированный сервис открывается, даже если его адрес программе
+    /// незнаком: снаружи туннеля остаётся только российская зона. Банки,
+    /// госуслуги и маркетплейсы при этом работают напрямую.
+    public var mainFilter: Bool
+
+    /// Рабочие ресурсы компании идут через VPN.
+    public var workFilter: Bool
+
     public var mode: TunnelMode
     public var server: ServerConfig
     public var rules: [RoutingRule]
@@ -194,12 +208,18 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
 
     public init(version: Int = 1,
                 enabled: Bool = false,
+                fullTunnel: Bool = false,
+                mainFilter: Bool = true,
+                workFilter: Bool = true,
                 mode: TunnelMode = .full,
                 server: ServerConfig = ServerConfig(),
                 rules: [RoutingRule] = [],
                 options: TunnelOptions = TunnelOptions()) {
         self.version = version
         self.enabled = enabled
+        self.fullTunnel = fullTunnel
+        self.mainFilter = mainFilter
+        self.workFilter = workFilter
         self.mode = mode
         self.server = server
         self.rules = rules
@@ -210,6 +230,9 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.version = (try? c.decode(Int.self, forKey: .version)) ?? 1
         self.enabled = (try? c.decode(Bool.self, forKey: .enabled)) ?? false
+        self.fullTunnel = (try? c.decode(Bool.self, forKey: .fullTunnel)) ?? false
+        self.mainFilter = (try? c.decode(Bool.self, forKey: .mainFilter)) ?? true
+        self.workFilter = (try? c.decode(Bool.self, forKey: .workFilter)) ?? true
         self.mode = (try? c.decode(TunnelMode.self, forKey: .mode)) ?? .full
         self.server = (try? c.decode(ServerConfig.self, forKey: .server)) ?? ServerConfig()
         self.rules = (try? c.decode([RoutingRule].self, forKey: .rules)) ?? []
@@ -220,9 +243,16 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
         rules.filter { $0.enabled && !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 
+    /// Режим, который действительно применяется с учётом переключателей.
+    public var effectiveMode: TunnelMode {
+        if fullTunnel { return .full }
+        if mainFilter { return .exclude }
+        return mode
+    }
+
     /// Всё, что требует полного пересоздания туннеля при изменении.
     public var restartSignature: String {
-        var parts: [String] = [String(version), mode.rawValue]
+        var parts: [String] = [String(version), effectiveMode.rawValue]
         parts.append(server.endpoint)
         parts.append(server.publicKey)
         parts.append(server.presharedKey)
@@ -238,10 +268,13 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
 
     /// Изменения здесь можно применить без перезапуска туннеля — только правкой маршрутов.
     public var rulesSignature: String {
-        activeRules
+        var parts = activeRules
             .map { "\($0.kind.rawValue):\($0.value.lowercased())" }
             .sorted()
-            .joined(separator: ",")
+        // Переключатели меняют набор исключений так же, как правила.
+        parts.append(mainFilter ? "ru-zone" : "no-ru-zone")
+        parts.append(workFilter ? "work-in" : "work-out")
+        return parts.joined(separator: ",")
     }
 }
 

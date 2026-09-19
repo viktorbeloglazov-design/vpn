@@ -112,14 +112,14 @@ struct PowerHeader: View {
                     .font(.callout)
                     .foregroundColor(.secondary)
                 HStack(spacing: 8) {
-                    Text(model.config.mode.title)
+                    Text(routingTitle)
                         .font(.caption)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Color.secondary.opacity(0.15))
                         .cornerRadius(6)
-                    if model.config.mode != .full {
-                        Text("правил активно: \(model.config.activeRules.count) · маршрутов: \(model.status.routeCount)")
+                    if model.config.effectiveMode != .full {
+                        Text(routingDetails)
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -137,6 +137,20 @@ struct PowerHeader: View {
                 statLine("Отправлено", Formatting.bytes(model.status.txBytes))
             }
         }
+    }
+
+    /// Как называется то, что сейчас происходит с трафиком.
+    private var routingTitle: String {
+        if model.config.fullTunnel { return "Весь трафик через VPN" }
+        if model.config.mainFilter { return "Обход блокировок" }
+        return model.config.mode.title
+    }
+
+    private var routingDetails: String {
+        if model.config.mainFilter {
+            return "мимо VPN: российская зона · маршрутов: \(model.status.routeCount)"
+        }
+        return "правил активно: \(model.config.activeRules.count) · маршрутов: \(model.status.routeCount)"
     }
 
     private var ipRow: some View {
