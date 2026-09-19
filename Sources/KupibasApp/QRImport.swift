@@ -1,6 +1,7 @@
 import AppKit
 import CoreImage
 import Foundation
+import KupibasCore
 
 /// Чтение QR-кодов с картинок.
 ///

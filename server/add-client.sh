@@ -84,10 +84,30 @@ echo "================ конфиг клиента «$NAME» ================"
 cat "$CONFIG"
 echo "========================================================"
 echo
-echo "Скопируйте текст выше и вставьте в Kupibas VPN: вкладка «Сервер» → «Вставить конфиг WireGuard…»."
+echo "Скопируйте текст выше и вставьте в QP VPN: вкладка «Сервер» → «Открыть файл или QR-код…»."
 echo "Файл также сохранён на сервере: $CONFIG"
+
+# QR-код: его отправляют человеку картинкой, поэтому кроме показа в терминале
+# сохраняем PNG — такой файл можно просто переслать в мессенджере.
+if ! command -v qrencode >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get install -y -qq qrencode >/dev/null 2>&1 || true
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y -q qrencode >/dev/null 2>&1 || true
+    fi
+fi
+
 if command -v qrencode >/dev/null 2>&1; then
+    QR_PNG="$CLIENT_DIR/$NAME.png"
+    qrencode -o "$QR_PNG" -s 8 -m 2 < "$CONFIG"
+    chmod 0600 "$QR_PNG"
     echo
     echo "QR-код (для телефона):"
     qrencode -t ansiutf8 < "$CONFIG"
+    echo "Картинка с кодом: $QR_PNG"
+    echo "Заберите её к себе:  scp root@$PUBLIC_IP:$QR_PNG ."
+else
+    echo
+    echo "Утилиты qrencode нет — QR-код не нарисован. Поставьте её командой:"
+    echo "  apt-get install -y qrencode   # или dnf install -y qrencode"
 fi
