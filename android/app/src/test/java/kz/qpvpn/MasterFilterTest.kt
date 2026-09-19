@@ -52,6 +52,38 @@ class MasterFilterTest {
     }
 
     @Test
+    fun everyPackageLooksLikeAndroidPackage() {
+        val shape = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
+        for (name in MasterFilter.packages) {
+            assertTrue("«$name» не похоже на имя пакета", shape.matches(name))
+        }
+    }
+
+    @Test
+    fun packagesHaveNoDuplicates() {
+        val all = MasterFilter.appSections.flatMap { it.packages }
+        assertEquals("в списке программ есть повторы", all.size, all.distinct().size)
+    }
+
+    @Test
+    fun packagesCoverWhatPeopleActuallyHave() {
+        val packages = MasterFilter.packages
+        listOf(
+            "com.openai.chatgpt",                      // нейросети
+            "com.instagram.android", "com.facebook.katana",
+            "com.whatsapp", "com.discord",             // мессенджеры
+            "com.google.android.youtube", "com.netflix.mediaclient", "com.spotify.music",
+            "com.canva.editor", "com.figma.mirror",    // работа
+            "com.android.chrome", "com.sec.android.app.sbrowser", // браузеры Samsung
+            "com.amazon.mShop.android.shopping", "com.paypal.android.p2pmobile",
+            "com.booking", "com.airbnb.android",
+            "com.valvesoftware.android.steam.community",
+        ).forEach { assertTrue("не хватает $it", it in packages) }
+
+        assertTrue("список программ мал: ${packages.size}", packages.size >= 80)
+    }
+
+    @Test
     fun mainFilterOverridesModeAndIsOnByDefault() {
         val fresh = AppConfig()
         assertTrue("главный фильтр должен быть включён сразу", fresh.mainFilter)

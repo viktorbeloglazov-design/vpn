@@ -102,6 +102,13 @@ data class AppConfig(
      */
     val mainFilter: Boolean = true,
 
+    /**
+     * Рабочие ресурсы: заложенные в приложение адреса идут через VPN.
+     *
+     * Выключен — те же адреса идут напрямую.
+     */
+    val workFilter: Boolean = true,
+
     val mode: TunnelMode = TunnelMode.FULL,
     val rules: List<RoutingRule> = emptyList(),
     val appsMode: AppsMode = AppsMode.OFF,

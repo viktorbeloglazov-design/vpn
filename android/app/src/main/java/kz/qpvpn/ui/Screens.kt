@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -76,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import kz.qpvpn.R
 import kz.qpvpn.model.AppConfig
 import kz.qpvpn.model.AppsMode
+import kz.qpvpn.model.MasterFilter
 import kz.qpvpn.model.ConnectionState
 import kz.qpvpn.model.PresetDirection
 import kz.qpvpn.model.Presets
@@ -85,6 +87,7 @@ import kz.qpvpn.model.RulePreset
 import kz.qpvpn.model.TunnelMode
 import kz.qpvpn.model.TunnelOptions
 import kz.qpvpn.model.TunnelStatus
+import kz.qpvpn.model.WorkFilter
 
 data class AppEntry(val packageName: String, val label: String, val icon: ImageBitmap?)
 
@@ -106,6 +109,7 @@ data class ScreenState(
     val ruZoneCount: Int,
     val masterCount: Int,
     val masterSections: List<Pair<String, Int>>,
+    val masterApps: Int,
     val ipText: String,
     val ipIsKazakhstan: Boolean,
     val checkingIp: Boolean,
@@ -115,6 +119,7 @@ data class ScreenActions(
     val onToggle: () -> Unit,
     val onModeChange: (TunnelMode) -> Unit,
     val onMainFilterChange: (Boolean) -> Unit,
+    val onWorkFilterChange: (Boolean) -> Unit,
     val onAddRule: (RuleKind, String) -> String?,
     val onToggleRule: (String, Boolean) -> Unit,
     val onDeleteRule: (String) -> Unit,
@@ -345,6 +350,26 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                         onCheckedChange = { actions.onMainFilterChange(it) },
                     )
                 }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    Icon(
+                        Icons.Filled.Work,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Рабочие ресурсы", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (state.config.workFilter) "Идут через VPN" else "Идут напрямую",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.config.workFilter,
+                        onCheckedChange = { actions.onWorkFilterChange(it) },
+                    )
+                }
                 if (state.config.effectiveMode != TunnelMode.FULL) {
                     if (!state.config.mainFilter) {
                         KeyValueRow("Активных правил", state.config.activeRules.size.toString())
@@ -475,6 +500,87 @@ private fun RoutesSection(state: ScreenState, actions: ScreenActions) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                "Программы",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                state.masterApps.toString(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            "Если вы включите разбор по программам в расширенных настройках, " +
+                                "эти ${state.masterApps} приложений уже отмечены — отмечать вручную ничего не нужно.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+
+        // ——— Рабочие ресурсы ———
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (state.config.workFilter) MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surface
+                ),
+                border = BorderStroke(
+                    if (state.config.workFilter) 1.5.dp else 1.dp,
+                    if (state.config.workFilter) MaterialTheme.colorScheme.secondary else colors.cardBorder,
+                ),
+                shape = RoundedCornerShape(18.dp),
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Рабочие ресурсы", style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                "${WorkFilter.count} ${plural(WorkFilter.count, "адрес", "адреса", "адресов")} · заложены в приложение",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Switch(
+                            checked = state.config.workFilter,
+                            onCheckedChange = { actions.onWorkFilterChange(it) },
+                        )
+                    }
+
+                    Text(
+                        if (state.config.workFilter)
+                            "Включён: эти ресурсы идут через VPN — даже если всё остальное идёт напрямую."
+                        else
+                            "Выключен: эти ресурсы идут напрямую, с домашнего адреса.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (state.config.workFilter) MaterialTheme.colorScheme.onSecondaryContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    WorkFilter.resources.forEach { resource ->
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                resource.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.width(72.dp),
+                            )
+                            Text(
+                                resource.url,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                            )
                         }
                     }
                 }
@@ -736,6 +842,19 @@ private fun AppsSection(state: ScreenState, actions: ScreenActions) {
                     Text(mode.title, style = MaterialTheme.typography.bodyLarge)
                 }
             }
+        }
+
+        if (state.config.mainFilter && state.config.appsMode == AppsMode.ONLY_SELECTED) {
+            val covered = remember(state.apps) {
+                state.apps.count { it.packageName in MasterFilter.packages }
+            }
+            Text(
+                "Главный фильтр уже добавил $covered ${plural(covered, "программу", "программы", "программ")} " +
+                    "из встроенного списка — отмечать их вручную не нужно.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
 
         if (state.config.appsMode != AppsMode.OFF) {

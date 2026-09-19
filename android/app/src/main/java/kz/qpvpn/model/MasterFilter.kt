@@ -137,6 +137,118 @@ object MasterFilter {
     val summary: String
         get() = sections.take(5).joinToString(", ") { it.title.lowercase() } + " и другое"
 
+
+    // ——— Программы ———
+
+    /**
+     * Приложения, которым нужен зарубежный адрес.
+     *
+     * Список нужен для режима «только выбранные программы»: там Android требует
+     * перечислить программы поимённо, и человек не должен отмечать их вручную.
+     * Сюда собрано то, что стоит на телефонах чаще всего — по статистике
+     * установок в Google Play и Galaxy Store.
+     *
+     * Имена пакетов, которых на телефоне нет, просто пропускаются.
+     */
+    data class AppSection(val title: String, val packages: List<String>)
+
+    val appSections: List<AppSection> = listOf(
+        AppSection(
+            "Нейросети",
+            listOf(
+                "com.openai.chatgpt", "com.anthropic.claude", "ai.perplexity.app.android",
+                "com.google.android.apps.bard", "com.microsoft.copilot", "ai.x.grok",
+                "com.deepseek.chat", "ai.character.app", "com.midjourney.android",
+                "io.elevenlabs.app", "com.leonardo.ai", "com.quora.poe",
+            ),
+        ),
+        AppSection(
+            "Соцсети",
+            listOf(
+                "com.instagram.android", "com.instagram.barcelona", "com.facebook.katana",
+                "com.facebook.lite", "com.twitter.android", "com.linkedin.android",
+                "com.pinterest", "com.reddit.frontpage", "com.snapchat.android",
+                "com.zhiliaoapp.musically", "com.ss.android.ugc.trill", "com.tumblr",
+                "xyz.blueskyweb.app", "com.medium.reader", "com.quora.android",
+            ),
+        ),
+        AppSection(
+            "Мессенджеры",
+            listOf(
+                "com.whatsapp", "com.whatsapp.w4b", "com.facebook.orca",
+                "org.thoughtcrime.securesms", "com.discord", "com.viber.voip",
+                "com.skype.raider", "com.microsoft.teams", "com.Slack",
+                "us.zoom.videomeetings", "com.google.android.apps.tachyon",
+                "com.google.android.apps.meetings", "com.signal.android",
+            ),
+        ),
+        AppSection(
+            "Видео и музыка",
+            listOf(
+                "com.google.android.youtube", "com.google.android.apps.youtube.music",
+                "com.netflix.mediaclient", "com.spotify.music", "com.disney.disneyplus",
+                "tv.twitch.android.app", "com.amazon.avod.thirdpartyclient", "com.wbd.stream",
+                "com.soundcloud.android", "com.vimeo.android.videoapp", "deezer.android.app",
+                "com.apple.android.music", "com.bandcamp.android",
+            ),
+        ),
+        AppSection(
+            "Работа и дизайн",
+            listOf(
+                "com.canva.editor", "com.figma.mirror", "com.notion.id", "com.miro.android",
+                "com.adobe.lrmobile", "com.adobe.psmobile", "com.adobe.reader",
+                "com.trello", "com.atlassian.android.jira.core", "com.asana.app",
+                "com.dropbox.android", "com.microsoft.office.outlook", "com.upwork.android.apps.main",
+                "com.fiverr.fiverr", "com.github.android", "com.stackexchange.marvin",
+            ),
+        ),
+        AppSection(
+            "Браузеры",
+            listOf(
+                "com.android.chrome", "com.sec.android.app.sbrowser", "org.mozilla.firefox",
+                "com.opera.browser", "com.brave.browser", "com.microsoft.emmx",
+                "com.duckduckgo.mobile.android", "org.torproject.torbrowser",
+            ),
+        ),
+        AppSection(
+            "Покупки и платежи",
+            listOf(
+                "com.amazon.mShop.android.shopping", "com.paypal.android.p2pmobile",
+                "com.ebay.mobile", "com.etsy.android", "com.revolut.revolut",
+                "com.wise.android", "com.binance.dev", "com.coinbase.android",
+            ),
+        ),
+        AppSection(
+            "Путешествия",
+            listOf(
+                "com.booking", "com.airbnb.android", "com.expedia.bookings",
+                "net.skyscanner.android.main", "com.tripadvisor.tripadvisor",
+                "com.ubercab", "com.kayak.android",
+            ),
+        ),
+        AppSection(
+            "Игры",
+            listOf(
+                "com.valvesoftware.android.steam.community", "com.epicgames.portal",
+                "com.roblox.client", "com.blizzard.messenger", "com.playstation.remoteplay",
+                "com.microsoft.xcloud", "com.nintendo.znca", "com.ea.gp.fifamobile",
+            ),
+        ),
+        AppSection(
+            "Новости и обучение",
+            listOf(
+                "bbc.mobile.news.ww", "com.cnn.mobile.android.phone", "com.nytimes.android",
+                "com.guardian", "com.bloomberg.android.plus", "org.coursera.android",
+                "com.udemy.android", "org.edx.mobile", "org.khanacademy.android", "com.duolingo",
+            ),
+        ),
+    )
+
+    /** Все программы одним списком. */
+    val packages: List<String> = appSections.flatMap { it.packages }.distinct()
+
+    val packageCount: Int get() = packages.size
+
     fun rules(): List<RoutingRule> = domains.map { domain ->
         RoutingRule(kind = RuleKind.DOMAIN, value = domain, note = "Обход блокировок")
     }

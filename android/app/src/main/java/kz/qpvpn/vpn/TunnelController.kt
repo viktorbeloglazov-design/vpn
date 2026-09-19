@@ -1,6 +1,7 @@
 package kz.qpvpn.vpn
 
 import android.content.Context
+import android.content.pm.PackageManager
 import org.amnezia.awg.backend.Backend
 import org.amnezia.awg.backend.GoBackend
 import org.amnezia.awg.backend.Tunnel
@@ -18,11 +19,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kz.qpvpn.data.Store
 import kz.qpvpn.model.AppConfig
+import kz.qpvpn.model.AppsMode
 import kz.qpvpn.model.ConnectionState
 import kz.qpvpn.model.RuleKind
 import kz.qpvpn.model.MasterFilter
 import kz.qpvpn.model.TunnelMode
 import kz.qpvpn.model.TunnelStatus
+import kz.qpvpn.model.WorkFilter
 import kz.qpvpn.net.Cidr
 import kz.qpvpn.net.DomainResolver
 import kz.qpvpn.net.Ipv4Net
@@ -171,11 +174,13 @@ class TunnelController(
             allowed += "::/0"
         }
 
+        val apps = appsFor(config)
+
         val text = profile.toConfigText(
             allowedIps = allowed,
             includeDns = config.options.useTunnelDns && config.effectiveMode != TunnelMode.INCLUDE,
-            appsMode = config.appsMode,
-            apps = config.selectedApps,
+            appsMode = if (apps.isEmpty()) AppsMode.OFF else config.appsMode,
+            apps = apps,
         )
 
         val parsed = Config.parse(BufferedReader(StringReader(text)))
@@ -187,16 +192,25 @@ class TunnelController(
     /** Считает список подсетей, которые должны уходить в туннель. */
     private suspend fun routesFor(config: AppConfig, profile: WgProfile, useRuZone: Boolean): List<String> {
         val nets = resolveRules(config)
+        val work = workNets()
 
         return when (config.effectiveMode) {
-            TunnelMode.FULL -> listOf("0.0.0.0/0")
-
-            TunnelMode.INCLUDE -> if (nets.isEmpty()) {
-                // Пустой список туннель не примет: оставляем адрес самого клиента,
-                // фактически в туннель не уходит ничего.
-                listOf(profile.addresses.firstOrNull()?.substringBefore('/')?.plus("/32") ?: "0.0.0.0/32")
+            TunnelMode.FULL -> if (config.workFilter || work.isEmpty()) {
+                listOf("0.0.0.0/0")
             } else {
-                Cidr.merge(nets).map { it.toString() }
+                // Рабочие ресурсы выключены — вычитаем их из полного туннеля.
+                Cidr.complement(work).map { it.toString() }
+            }
+
+            TunnelMode.INCLUDE -> {
+                val included = if (config.workFilter) nets + work else nets
+                if (included.isEmpty()) {
+                    // Пустой список туннель не примет: оставляем адрес самого клиента,
+                    // фактически в туннель не уходит ничего.
+                    listOf(profile.addresses.firstOrNull()?.substringBefore('/')?.plus("/32") ?: "0.0.0.0/32")
+                } else {
+                    Cidr.merge(included).map { it.toString() }
+                }
             }
 
             TunnelMode.EXCLUDE -> {
@@ -207,13 +221,63 @@ class TunnelController(
                 } else {
                     nets
                 }
-                if (excluded.isEmpty()) {
-                    listOf("0.0.0.0/0")
+                if (config.workFilter) {
+                    // Рабочие ресурсы сильнее исключений: возвращаем их в туннель,
+                    // даже если они попали в российскую зону.
+                    val base = if (excluded.isEmpty()) listOf(Ipv4Net(0, 0)) else Cidr.complement(excluded)
+                    Cidr.merge(base + work).map { it.toString() }
                 } else {
-                    Cidr.complement(excluded).map { it.toString() }
+                    val all = excluded + work
+                    if (all.isEmpty()) listOf("0.0.0.0/0")
+                    else Cidr.complement(all).map { it.toString() }
                 }
             }
         }
+    }
+
+    /** Адреса рабочих ресурсов: заложенные в приложение узлы. */
+    private suspend fun workNets(): List<Ipv4Net> {
+        val result = mutableListOf<Ipv4Net>()
+        val domains = mutableListOf<String>()
+        for (host in WorkFilter.hosts) {
+            val net = Cidr.parse(host)
+            if (net != null) result += net else domains += host.lowercase()
+        }
+        if (domains.isNotEmpty()) {
+            result += DomainResolver.resolveAll(domains)
+        }
+        return result.distinct()
+    }
+
+    /**
+     * Какие программы перечислять туннелю.
+     *
+     * Когда включён главный фильтр, к выбранным вручную добавляется встроенный
+     * список программ, которым нужен зарубежный адрес: иначе в режиме «только
+     * выбранные» человеку пришлось бы отмечать их по одной. Имена, которых на
+     * телефоне нет, отсеиваются — система откажется поднимать туннель с чужим
+     * пакетом в списке.
+     */
+    private fun appsFor(config: AppConfig): List<String> {
+        if (config.appsMode == AppsMode.OFF) return emptyList()
+
+        val wanted = if (config.appsMode == AppsMode.ONLY_SELECTED && config.mainFilter) {
+            config.selectedApps + MasterFilter.packages
+        } else {
+            config.selectedApps
+        }
+
+        val manager = context.packageManager
+        return wanted.distinct().filter { name ->
+            name != context.packageName && isInstalled(manager, name)
+        }
+    }
+
+    private fun isInstalled(manager: PackageManager, name: String): Boolean = try {
+        manager.getPackageInfo(name, 0)
+        true
+    } catch (error: PackageManager.NameNotFoundException) {
+        false
     }
 
     /**
@@ -265,7 +329,9 @@ class TunnelController(
 
                 sinceResolve += 2_000
                 val interval = store.config.value.options.reresolveMinutes.coerceIn(1, 60) * 60_000L
-                val hasDomains = store.config.value.activeRules.any { it.kind == RuleKind.DOMAIN }
+                val current = store.config.value
+                val hasDomains = current.mainFilter ||
+                    current.activeRules.any { it.kind == RuleKind.DOMAIN }
                 if (hasDomains && sinceResolve >= interval) {
                     sinceResolve = 0
                     refreshRoutes()

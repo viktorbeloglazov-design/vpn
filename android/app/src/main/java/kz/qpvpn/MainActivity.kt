@@ -135,6 +135,7 @@ class MainActivity : ComponentActivity() {
                         ruZoneCount = ruZoneCount,
                         masterCount = MasterFilter.count,
                         masterSections = MasterFilter.sections.map { it.title to it.domains.size },
+                        masterApps = MasterFilter.packageCount,
                         ipText = ipText,
                         ipIsKazakhstan = ipIsKazakhstan,
                         checkingIp = checkingIp,
@@ -143,6 +144,7 @@ class MainActivity : ComponentActivity() {
                         onToggle = ::toggleTunnel,
                         onModeChange = ::changeMode,
                         onMainFilterChange = ::changeMainFilter,
+                        onWorkFilterChange = ::changeWorkFilter,
                         onAddRule = ::addRule,
                         onToggleRule = ::toggleRule,
                         onDeleteRule = ::deleteRule,
@@ -194,6 +196,12 @@ class MainActivity : ComponentActivity() {
     /** Главный фильтр сам задаёт маршруты, поэтому туннель пересобирается. */
     private fun changeMainFilter(enabled: Boolean) {
         app.store.update { it.copy(mainFilter = enabled) }
+        reapplyRoutes()
+    }
+
+    /** Рабочие ресурсы: включён — через VPN, выключен — напрямую. */
+    private fun changeWorkFilter(enabled: Boolean) {
+        app.store.update { it.copy(workFilter = enabled) }
         reapplyRoutes()
     }
 
