@@ -18,6 +18,24 @@
 
 Открыть проект в Xcode можно напрямую: `open Package.swift`.
 
+### Самодостаточный образ, как в релизах
+
+```bash
+./scripts/ci/build-wireguard.sh /tmp/wg-tools        # wireguard-go, wg, wg-quick (universal)
+./scripts/build.sh --universal --tools /tmp/wg-tools # утилиты уедут внутрь бандла
+./scripts/make-dmg.sh 1.0.0                          # dist/KupibasVPN-1.0.0.dmg
+```
+
+У такой сборки служба ставится кнопкой в самом приложении, Homebrew не нужен.
+Внутри `KupibasVPN.app` лежат:
+
+| Путь в бандле | Что это |
+|---|---|
+| `Contents/MacOS/KupibasVPN` | интерфейс |
+| `Contents/Library/Helpers/kupibasvpnd` | служба, которую установщик кладёт в `/usr/local/libexec/kupibas-vpn` |
+| `Contents/Library/Helpers/{wireguard-go,wg,wg-quick}` | утилиты WireGuard |
+| `Contents/Resources/install-helper.sh` | установщик, который запускает само приложение |
+
 ## Установка службы
 
 ```bash

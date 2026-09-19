@@ -48,6 +48,19 @@
 Под капотом — WireGuard (`wireguard-go` + `wg-quick`), самый быстрый и
 предсказуемый вариант для Mac.
 
+## Скачать готовое приложение
+
+Свежий образ — на странице [релизов](https://github.com/viktorbeloglazov-design/vpn/releases).
+Внутри один файл `KupibasVPN.dmg` для Apple Silicon и Intel сразу; всё нужное
+для работы туннеля уже внутри приложения — Homebrew и терминал не нужны.
+
+1. Откройте образ, перетащите `KupibasVPN.app` в «Программы».
+2. Первый запуск: правой кнопкой по значку → «Открыть» → «Открыть».
+3. Нажмите «Установить службу» и введите пароль администратора.
+4. Вкладка «Сервер» → «Вставить конфиг WireGuard…» → конфиг вашего сервера.
+
+Дальше нужен сам сервер в Казахстане — о нём следующий раздел.
+
 ## Быстрый старт
 
 ### 1. Сервер в Казахстане
@@ -65,6 +78,8 @@ ssh root@ВАШ_СЕРВЕР 'bash /root/install-wg-kz.sh --client mac'
 
 ### 2. Зависимости на Mac
 
+Нужны только для сборки из исходников — в готовом образе они уже внутри:
+
 ```bash
 brew install wireguard-tools wireguard-go
 ```
@@ -77,6 +92,14 @@ cd vpn
 ./scripts/build.sh          # соберёт dist/KupibasVPN.app
 sudo ./scripts/install.sh   # поставит службу kupibasvpnd
 open dist/KupibasVPN.app
+```
+
+Чтобы собрать такой же самодостаточный образ, как в релизах:
+
+```bash
+./scripts/ci/build-wireguard.sh /tmp/wg-tools       # утилиты WireGuard
+./scripts/build.sh --universal --tools /tmp/wg-tools
+./scripts/make-dmg.sh 1.0.0                          # dist/KupibasVPN-1.0.0.dmg
 ```
 
 Подробности: [docs/BUILD.md](docs/BUILD.md).
