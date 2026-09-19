@@ -1,0 +1,111 @@
+name: windows
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия, например 1.0.0"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  app:
+    name: Сборка под Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: windows/tunnel/go.sum
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Служба туннеля
+        working-directory: windows/tunnel
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          go build -trimpath -ldflags "-s -w" -o "$env:GITHUB_WORKSPACE\dist\qpvpn-tunnel.exe" .
+          if (-not (Test-Path "$env:GITHUB_WORKSPACE\dist\qpvpn-tunnel.exe")) { throw "туннель не собрался" }
+
+      - name: Драйвер Wintun
+        run: |
+          # Адаптер Wintun подписан WireGuard LLC: берём официальную сборку.
+          $url = "https://www.wintun.net/builds/wintun-0.14.1.zip"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\wintun.zip"
+          Expand-Archive "$env:RUNNER_TEMP\wintun.zip" -DestinationPath "$env:RUNNER_TEMP\wintun"
+          Copy-Item "$env:RUNNER_TEMP\wintun\wintun\bin\amd64\wintun.dll" "$env:GITHUB_WORKSPACE\dist\wintun.dll"
+
+      - name: Приложение
+        working-directory: windows/app
+        run: |
+          dotnet publish QPVPN.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=${{ github.event.inputs.version || '1.0.0' }} `
+            -o "$env:GITHUB_WORKSPACE\publish"
+          Copy-Item "$env:GITHUB_WORKSPACE\publish\QPVPN.exe" "$env:GITHUB_WORKSPACE\dist\QPVPN.exe"
+
+      - name: Проверить сборку
+        run: |
+          Get-ChildItem "$env:GITHUB_WORKSPACE\dist" | Format-Table Name, Length
+          foreach ($name in @("QPVPN.exe", "qpvpn-tunnel.exe", "wintun.dll")) {
+            if (-not (Test-Path "$env:GITHUB_WORKSPACE\dist\$name")) { throw "в сборке нет $name" }
+          }
+          # Служба должна отвечать на неизвестную команду подсказкой, а не падать.
+          $output = & "$env:GITHUB_WORKSPACE\dist\qpvpn-tunnel.exe" 2>&1
+          Write-Host $output
+          if ($LASTEXITCODE -ne 2) { throw "туннель не отвечает на запуск без параметров" }
+          # И рассказывать о состоянии службы, которой нет.
+          $status = & "$env:GITHUB_WORKSPACE\dist\qpvpn-tunnel.exe" /status qpvpn
+          Write-Host $status
+          if ($status -notmatch '"running":false') { throw "состояние читается неправильно" }
+
+      - name: Собрать архив
+        id: pack
+        run: |
+          $version = "${{ github.event.inputs.version || '1.0.0' }}"
+          $name = "QPVPN-windows-$version"
+          New-Item -ItemType Directory -Path "$env:GITHUB_WORKSPACE\pack\$name" | Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE\dist\*" "$env:GITHUB_WORKSPACE\pack\$name"
+          Copy-Item "windows\ЧИТАЙ-МЕНЯ.txt" "$env:GITHUB_WORKSPACE\pack\$name"
+          Compress-Archive -Path "$env:GITHUB_WORKSPACE\pack\$name" -DestinationPath "$env:GITHUB_WORKSPACE\dist\$name.zip"
+          echo "path=dist/$name.zip" >> $env:GITHUB_OUTPUT
+          echo "name=$name" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.name }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+      - name: Опубликовать
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "${{ github.event.inputs.version }}"
+          $tag = "windows-v$version"
+          $archive = "${{ steps.pack.outputs.path }}"
+          $exists = gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $archive --clobber
+            gh release edit $tag --notes-file .github/release-notes-windows.md
+          } else {
+            gh release create $tag $archive --target $env:GITHUB_SHA `
+              --title "QP VPN для Windows $version" --notes-file .github/release-notes-windows.md
+          }
+          Copy-Item $archive "dist\QPVPN-windows.zip"
+          gh release upload latest "dist\QPVPN-windows.zip" --clobber

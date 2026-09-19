@@ -1,0 +1,85 @@
+<Application x:Class="QPVPN.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Фирменные цвета: те же, что в версиях для Android и Mac. -->
+            <Color x:Key="SkyColor">#FF3ABEE8</Color>
+            <Color x:Key="OceanColor">#FF0E7FA8</Color>
+            <Color x:Key="DeepColor">#FF084A6A</Color>
+
+            <SolidColorBrush x:Key="Sky" Color="{StaticResource SkyColor}" />
+            <SolidColorBrush x:Key="Ocean" Color="{StaticResource OceanColor}" />
+            <SolidColorBrush x:Key="Connected" Color="#FF2FBF87" />
+            <SolidColorBrush x:Key="Waiting" Color="#FFE2A33C" />
+            <SolidColorBrush x:Key="Danger" Color="#FFE2695C" />
+            <SolidColorBrush x:Key="Background" Color="#FF0A1015" />
+            <SolidColorBrush x:Key="Surface" Color="#FF141C24" />
+            <SolidColorBrush x:Key="SurfaceVariant" Color="#FF1E2932" />
+            <SolidColorBrush x:Key="OnSurface" Color="#FFE6EDF3" />
+            <SolidColorBrush x:Key="Muted" Color="#FF9FB2BF" />
+            <SolidColorBrush x:Key="Outline" Color="#FF32424E" />
+
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource OnSurface}" />
+                <Setter Property="FontFamily" Value="Segoe UI" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <Style x:Key="Card" TargetType="Border">
+                <Setter Property="Background" Value="{StaticResource Surface}" />
+                <Setter Property="BorderBrush" Value="{StaticResource Outline}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="14" />
+                <Setter Property="Padding" Value="16" />
+                <Setter Property="Margin" Value="0,0,0,10" />
+            </Style>
+
+            <Style x:Key="Title" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{StaticResource OnSurface}" />
+            </Style>
+
+            <Style x:Key="Hint" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Foreground" Value="{StaticResource Muted}" />
+                <Setter Property="Margin" Value="0,4,0,0" />
+            </Style>
+
+            <Style TargetType="Button">
+                <Setter Property="Background" Value="{StaticResource SurfaceVariant}" />
+                <Setter Property="Foreground" Value="{StaticResource OnSurface}" />
+                <Setter Property="BorderBrush" Value="{StaticResource Outline}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="12,8" />
+                <Setter Property="Margin" Value="0,4,0,0" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Shape"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="10"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Shape" Property="BorderBrush" Value="{StaticResource Sky}" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Shape" Property="Opacity" Value="0.45" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
