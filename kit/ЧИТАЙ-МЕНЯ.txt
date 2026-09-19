@@ -7,7 +7,7 @@ Premium VPN · Special for Kupibas Group
 
   Android  — приложение QP VPN (файл .apk) + инструкция
   Mac      — приложение QP VPN (файл .dmg) + инструкция
-  Windows  — инструкция: ставится клиент AmneziaVPN
+  Windows  — инструкция: наше приложение QP VPN, качается по ссылке
   iPhone   — инструкция: ставится DefaultVPN из App Store
 
 Что вам пришлют отдельно: QR-код или ссылку вида vpn://…
@@ -22,6 +22,6 @@ Premium VPN · Special for Kupibas Group
   Android  https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-android.apk
   Mac      https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-mac.dmg
   iPhone   https://apps.apple.com/app/defaultvpn/id6744725017
-  Windows  https://amnezia.org/ru/downloads
+  Windows  https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-windows.zip
 
 Вопросы: пишите тому, кто прислал вам этот архив.

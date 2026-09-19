@@ -6,7 +6,7 @@ Premium VPN · Special for Kupibas Group
 |---|---|---|
 | **Android** | `QPVPN.apk` + инструкция | наше приложение QP VPN |
 | **Mac** | `QPVPN.dmg` + инструкция | наше приложение QP VPN |
-| **Windows** | инструкция + ярлык на загрузку | AmneziaVPN (бесплатный клиент) |
+| **Windows** | инструкция + ярлык и QR на загрузку | наше приложение QP VPN |
 | **iPhone** | инструкция + QR на загрузку | DefaultVPN из App Store |
 
 Ключ доступа приходит отдельно — картинкой с QR-кодом или ссылкой

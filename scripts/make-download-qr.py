@@ -20,7 +20,7 @@ apk = "https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/Q
 links = {
     "Android/QR-скачать-приложение.png": apk,
     "iPhone/QR-скачать-приложение.png": "https://apps.apple.com/app/defaultvpn/id6744725017",
-    "Windows/QR-скачать-AmneziaVPN.png": "https://amnezia.org/ru/downloads",
+    "Windows/QR-скачать-приложение.png": "https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-windows.zip",
 }
 
 for name, url in links.items():
