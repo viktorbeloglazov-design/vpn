@@ -16,8 +16,9 @@ struct ServerView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 8) {
-                    Button("Открыть файл конфига…") { chooseConfigFile() }
+                    Button("Открыть файл или QR-код…") { chooseConfigFile() }
                         .keyboardShortcut("o")
+                    Button("Вставить из буфера") { pasteFromClipboard() }
                     Button("Вставить текстом…") { showImport = true }
                     Spacer()
                     if let error = model.config.server.validationError {
@@ -102,7 +103,7 @@ struct ServerView: View {
                 .foregroundColor(isDropTarget ? .accentColor : .secondary)
             Text(isDropTarget
                  ? "Отпустите — прочитаю конфиг"
-                 : "Перетащите сюда файл .conf от вашего сервера или нажмите «Открыть файл конфига…»")
+                 : "Перетащите сюда файл .conf или картинку с QR-кодом — прочитаю и то, и другое")
                 .font(.callout)
                 .foregroundColor(.secondary)
             Spacer()
@@ -130,13 +131,13 @@ struct ServerView: View {
     private func chooseConfigFile() {
         let panel = NSOpenPanel()
         panel.title = "Конфигурация WireGuard"
-        panel.message = "Выберите файл .conf, который выдал ваш сервер"
+        panel.message = "Выберите файл .conf или картинку с QR-кодом"
         panel.prompt = "Открыть"
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.showsHiddenFiles = true
-        var types: [UTType] = [.plainText, .text, .data]
+        var types: [UTType] = [.plainText, .text, .image, .data]
         if let conf = UTType(filenameExtension: "conf") {
             types.insert(conf, at: 0)
         }
@@ -147,13 +148,22 @@ struct ServerView: View {
     }
 
     /// Читает файл и подставляет параметры сервера.
+    ///
+    /// Принимает и картинку с QR-кодом: код разворачивается в тот же текст
+    /// конфигурации, что лежит в файле .conf.
     private func load(from url: URL) {
         let needsAccess = url.startAccessingSecurityScopedResource()
         defer { if needsAccess { url.stopAccessingSecurityScopedResource() } }
 
+        if QRImport.isImage(url) {
+            loadFromImage(at: url)
+            return
+        }
+
         do {
             let text = try readText(at: url)
-            let server = try WireGuardConfig.parse(text, name: serverName(for: url))
+            let config = SharedLink.extractConfig(text) ?? text
+            let server = try WireGuardConfig.parse(config, name: serverName(for: url))
             model.applyServer(server)
             importNote = "Загружено из «\(url.lastPathComponent)»."
             importFailed = false
@@ -161,6 +171,58 @@ struct ServerView: View {
             importNote = "«\(url.lastPathComponent)»: \(error.localizedDescription)"
             importFailed = true
         }
+    }
+
+    /// Картинка с QR-кодом: сначала код, потом обычный разбор конфигурации.
+    private func loadFromImage(at url: URL) {
+        let payloads = QRImport.payloads(at: url)
+        guard !payloads.isEmpty else {
+            importNote = "«\(url.lastPathComponent)»: QR-код на картинке не нашёлся. Снимок должен быть чётким и целиком."
+            importFailed = true
+            return
+        }
+        apply(payloads: payloads, source: "«\(url.lastPathComponent)»")
+    }
+
+    /// Буфер обмена: там может быть и картинка с кодом, и ссылка, и сам конфиг.
+    private func pasteFromClipboard() {
+        let payloads = QRImport.payloadsFromPasteboard()
+        if !payloads.isEmpty {
+            apply(payloads: payloads, source: "картинки из буфера")
+            return
+        }
+
+        let text = NSPasteboard.general.string(forType: .string) ?? ""
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            importNote = "В буфере обмена пусто — скопируйте QR-код, ссылку vpn:// или текст конфига."
+            importFailed = true
+            return
+        }
+        apply(payloads: [text], source: "буфера обмена")
+    }
+
+    /// Общий путь для всего, чем делятся: ссылка, QR-код, готовый конфиг.
+    private func apply(payloads: [String], source: String) {
+        for payload in payloads {
+            guard let config = SharedLink.extractConfig(payload) else { continue }
+            do {
+                let server = try WireGuardConfig.parse(config, name: model.config.server.name)
+                model.applyServer(server)
+                importNote = "Загружено из \(source)."
+                importFailed = false
+                return
+            } catch {
+                importNote = "\(source): \(error.localizedDescription)"
+                importFailed = true
+                return
+            }
+        }
+
+        let link = payloads.contains { SharedLink.looksLikeLink($0) }
+        importNote = link
+            ? "\(source): это ссылка Amnezia не с WireGuard — программа понимает WireGuard и AmneziaWG."
+            : "\(source): настройки WireGuard не нашлись."
+        importFailed = true
     }
 
     /// Конфиги иногда сохраняют не в UTF-8 — пробуем запасные кодировки.
@@ -237,7 +299,7 @@ struct ImportConfigSheet: View {
 
     private func importConfig() {
         do {
-            let server = try WireGuardConfig.parse(text)
+            let server = try WireGuardConfig.parse(SharedLink.extractConfig(text) ?? text)
             error = nil
             onImport(server)
         } catch {
