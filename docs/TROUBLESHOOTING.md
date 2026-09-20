@@ -96,7 +96,10 @@ sudo wg show
 ## После выключения VPN пропал интернет
 
 ```bash
-sudo wg-quick down /var/run/kupibas-vpn/kb0.conf
+# Служба поднимает туннель сама: снимаем его, удалив сокет.
+IFACE="$(cat /var/run/amneziawg/kb0.name 2>/dev/null)"
+sudo rm -f "/var/run/amneziawg/$IFACE.sock" /var/run/amneziawg/kb0.name
+sudo ifconfig "$IFACE" down
 sudo launchctl kickstart -k system/com.kupibas.vpn.helper
 networksetup -setv6automatic Wi-Fi
 ```

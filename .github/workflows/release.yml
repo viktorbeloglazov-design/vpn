@@ -55,7 +55,7 @@ jobs:
           # запускается и отвечает системе, а не падает сразу.
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist"
           test -f "$APP/Contents/Resources/com.kupibas.vpn.helper.plist"
-          for tool in kupibasvpnd amneziawg-go awg awg-quick wireguard-go wg wg-quick; do
+          for tool in kupibasvpnd amneziawg-go awg wireguard-go wg; do
             test -x "$APP/Contents/Library/Helpers/$tool"
           done
           echo "Архитектуры приложения: $(lipo -archs "$APP/Contents/MacOS/QPVPN")"

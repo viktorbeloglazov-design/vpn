@@ -21,7 +21,7 @@
 ### Самодостаточный образ, как в релизах
 
 ```bash
-./scripts/ci/build-wireguard.sh /tmp/wg-tools        # wireguard-go, wg, wg-quick (universal)
+./scripts/ci/build-wireguard.sh /tmp/wg-tools        # wireguard-go, wg (universal)
 ./scripts/build.sh --universal --tools /tmp/wg-tools # утилиты уедут внутрь бандла
 ./scripts/make-dmg.sh 1.0.0                          # dist/KupibasVPN-1.0.0.dmg
 ```
@@ -33,7 +33,7 @@
 |---|---|
 | `Contents/MacOS/KupibasVPN` | интерфейс |
 | `Contents/Library/Helpers/kupibasvpnd` | служба, которую установщик кладёт в `/usr/local/libexec/kupibas-vpn` |
-| `Contents/Library/Helpers/{wireguard-go,wg,wg-quick}` | утилиты WireGuard |
+| `Contents/Library/Helpers/{wireguard-go,wg}` | утилиты WireGuard |
 | `Contents/Resources/install-helper.sh` | установщик, который запускает само приложение |
 
 ## Установка службы
@@ -44,7 +44,7 @@ sudo ./scripts/install.sh
 
 Что делает скрипт:
 
-1. проверяет наличие `wg`, `wg-quick`, `wireguard-go`;
+1. проверяет наличие `wg` и `wireguard-go`;
 2. копирует демон в `/usr/local/libexec/kupibas-vpn/kupibasvpnd`;
 3. создаёт `/Library/Application Support/KupibasVPN` (`root:staff`, права `0770`)
    и стартовый `config.json`;
