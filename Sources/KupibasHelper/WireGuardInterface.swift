@@ -29,8 +29,16 @@ enum WireGuardInterface {
 
     // MARK: - Подъём
 
+    /// Чем кончилась попытка поднять туннель.
+    enum Outcome {
+        /// Настоящее имя интерфейса: utun4, utun5 и так далее.
+        case started(String)
+        /// Что показать человеку и записать в журнал.
+        case failed(String)
+    }
+
     /// Создаёт туннель и возвращает настоящее имя интерфейса (utunN).
-    static func start(logicalName: String) -> Result<String, String> {
+    static func start(logicalName: String) -> Outcome {
         try? FileManager.default.createDirectory(atPath: socketDir,
                                                  withIntermediateDirectories: true,
                                                  attributes: [.posixPermissions: NSNumber(value: Int16(0o755))])
@@ -38,7 +46,7 @@ enum WireGuardInterface {
         try? FileManager.default.removeItem(atPath: nameFile(logicalName))
 
         guard let tunnel = Shell.which("amneziawg-go") ?? Shell.which("wireguard-go") else {
-            return .failure("Не найден amneziawg-go — переустановите службу из приложения.")
+            return .failed("Не найден amneziawg-go — переустановите службу из приложения.")
         }
 
         var environment = ProcessInfo.processInfo.environment
@@ -47,15 +55,15 @@ enum WireGuardInterface {
         environment["WG_TUN_NAME_FILE"] = nameFile(logicalName)
 
         if let failure = launch(tunnel, environment: environment) {
-            return .failure(failure)
+            return .failed(failure)
         }
 
         // Имя и сокет появляются не мгновенно: туннель сначала заводит
         // устройство, и только потом уходит в фон.
         guard let name = waitForName(logicalName: logicalName, seconds: 10) else {
-            return .failure("Туннель создан, но интерфейс не появился за 10 секунд.")
+            return .failed("Туннель создан, но интерфейс не появился за 10 секунд.")
         }
-        return .success(name)
+        return .started(name)
     }
 
     /// Куда туннель пишет свои жалобы: читаем их, если он не поднялся.

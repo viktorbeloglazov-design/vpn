@@ -156,13 +156,14 @@ final class TunnelManager {
         }
 
         // 1. Создаём интерфейс. Имя utun выдаёт система, оно заранее неизвестно.
-        let started = WireGuardInterface.start(logicalName: Paths.interfaceName)
-        guard case .success(let interfaceName) = started else {
-            if case .failure(let reason) = started {
-                state = .error
-                message = reason
-                log.error(message)
-            }
+        let interfaceName: String
+        switch WireGuardInterface.start(logicalName: Paths.interfaceName) {
+        case .started(let name):
+            interfaceName = name
+        case .failed(let reason):
+            state = .error
+            message = reason
+            log.error(message)
             WireGuardInterface.stop(interface: nil, logicalName: Paths.interfaceName)
             return
         }
