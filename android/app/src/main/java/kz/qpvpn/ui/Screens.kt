@@ -371,13 +371,16 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Мимо VPN целиком", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                state.directApps.joinToString(", "),
+                                if (state.directApps.size <= 6) state.directApps.joinToString(", ")
+                                else state.directApps.take(6).joinToString(", ") +
+                                    " и ещё ${state.directApps.size - 6}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                "Эти программы сами отказываются работать при включённом VPN — " +
-                                    "для них его как будто нет.",
+                                "Российские программы: туннель им не нужен, а некоторые — МАХ, " +
+                                    "банки, госуслуги — при включённом VPN просто отказываются работать. " +
+                                    "Для них его как будто нет.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

@@ -58,8 +58,39 @@ class DirectAppsTest {
             "com.rockstargames.gtasa" to "Max Payne Mobile",
             "org.telegram.messenger" to "Telegram",
             "com.openai.chatgpt" to "ChatGPT",
+            "com.anthropic.claude" to "Claude",
+            "com.facebook.katana" to "Facebook",
+            "com.twitter.android" to "X",
+            "com.linkedin.android" to "LinkedIn",
+            "com.spotify.music" to "Spotify",
+            "com.discord" to "Discord",
+            "com.netflix.mediaclient" to "Netflix",
+            "com.microsoft.teams" to "Teams",
+            "kz.qpvpn" to "QP VPN",
         )) {
             assertFalse("$name ($label) не должен уходить мимо VPN", DirectApps.matches(name, label))
+        }
+    }
+
+    @Test
+    fun russianAppsAreRecognisedWithoutBeingListed() {
+        // Перечислять их поимённо бессмысленно: список никогда не будет
+        // полным, а каждая пропущенная программа — очередное «Отключите VPN».
+        // Российской программе туннель не нужен: её адреса и так прямые.
+        for ((name, label) in listOf(
+            "ru.vtb24.mobilebanking.android" to "ВТБ Онлайн",
+            "com.idamob.tinkoff.android" to "Т-Банк",
+            "com.wildberries.ru" to "Wildberries",
+            "com.avito.android" to "Авито",
+            "ru.ozon.app.android" to "Ozon",
+            "ru.yandex.searchplugin" to "Яндекс",
+            "com.vkontakte.android" to "ВКонтакте",
+            "ru.kinopoisk" to "Кинопоиск",
+            "ru.dublgis.dgismobile" to "2ГИС",
+            "ru.rzd.pass" to "РЖД Пассажирам",
+            "ru.sberbankmobile.oplata" to "СберБанк",
+        )) {
+            assertTrue("$name ($label) должен идти мимо VPN", DirectApps.matches(name, label))
         }
     }
 
@@ -94,6 +125,14 @@ class DirectAppsTest {
         assertTrue(
             "куски имени тоже",
             DirectApps.fragments.all { it == it.lowercase() },
+        )
+        assertTrue(
+            "начала имён тоже",
+            DirectApps.prefixes.all { it == it.lowercase() },
+        )
+        assertTrue(
+            "окончания имён тоже",
+            DirectApps.suffixes.all { it == it.lowercase() },
         )
         assertFalse("нельзя выключать VPN для самого себя", "kz.qpvpn" in DirectApps.packages)
     }

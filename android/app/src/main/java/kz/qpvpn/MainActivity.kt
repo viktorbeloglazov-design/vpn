@@ -171,11 +171,17 @@ class MainActivity : ComponentActivity() {
      */
     private fun directAppLabels(): List<String> {
         val manager = packageManager
-        return app.tunnel.directAppNames().map { name ->
-            runCatching {
+        val labels = app.tunnel.directAppNames().map { name ->
+            name to runCatching {
                 manager.getApplicationLabel(manager.getApplicationInfo(name, 0)).toString()
             }.getOrDefault(name)
         }
+        // МАХ впереди: ради него всё и затевалось, его и должно быть видно.
+        return labels
+            .sortedBy { (name, label) ->
+                if (name.contains("oneme") || label.equals("max", ignoreCase = true)) "" else label.lowercase()
+            }
+            .map { it.second }
     }
 
     private fun hasNotificationPermission(): Boolean =

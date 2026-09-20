@@ -57,18 +57,64 @@ object DirectApps {
     )
 
     /**
-     * Куски имени пакета. Установленная программа, в имени которой есть
-     * такой кусок, тоже пойдёт мимо VPN.
+     * Начала имён пакетов российских программ.
      *
-     * Нужно, чтобы МАХ опознался, даже если его пересоберут под другим
-     * именем: бета, региональная сборка, предустановленная версия.
+     * Перечислять их поимённо бессмысленно: список никогда не будет полным,
+     * а каждая пропущенная программа — это очередное «Отключите VPN».
+     * Российской программе туннель и не нужен: её адреса и так идут
+     * напрямую, так что мимо VPN она ничего не теряет.
+     */
+    val prefixes: List<String> = listOf("ru.")
+
+    /**
+     * Куски имени пакета.
+     *
+     * Первые четыре — чтобы МАХ опознался в любом виде: бета, сборка для
+     * RuStore, предустановленная версия. Остальные — российские программы,
+     * чьё имя начинается не с «ru.»: Т-Банк живёт в com.idamob, Wildberries
+     * в com.wildberries.ru, Авито в com.avito.
      */
     val fragments: List<String> = listOf(
+        // МАХ в любом написании
         "oneme",
         "max.messenger",
         "maxmessenger",
         "messenger.max",
+
+        // Банки и платежи
+        "sberbank",
+        "tinkoff",
+        "alfabank",
+        "gazprombank",
+        "raiffeisen",
+        "rosbank",
+        "sovcombank",
+        "uralsib",
+        "otpbank",
+        "psbank",
+        "vtb",
+        "mirpay",
+        "sbpay",
+        "nspk",
+
+        // Государство
+        "gosuslugi",
+        "goskey",
+        "nalog",
+
+        // Торговля и сервисы
+        "wildberries",
+        "ozon",
+        "avito",
+        "yandex",
+        "vkontakte",
+        "megafon",
+        "beeline",
+        "tele2",
     )
+
+    /** Окончания имён: так пишутся com.wildberries.ru и подобные. */
+    val suffixes: List<String> = listOf(".ru")
 
     /**
      * Названия на экране. Сравниваются целиком, без учёта регистра, —
@@ -95,6 +141,8 @@ object DirectApps {
     fun matches(packageName: String, label: String): Boolean {
         val name = packageName.trim().lowercase()
         if (name in lowercased) return true
+        if (prefixes.any { name.startsWith(it) }) return true
+        if (suffixes.any { name.endsWith(it) }) return true
         if (fragments.any { name.contains(it) }) return true
         return label.trim().lowercase() in labels
     }
