@@ -99,15 +99,6 @@ enum NetworkTool {
 
     // MARK: - Состояние WireGuard
 
-    /// Реальное имя utun-интерфейса, созданного wg-quick для kb0.
-    static func realInterfaceName(for name: String) -> String? {
-        let path = "/var/run/wireguard/\(name).name"
-        guard let data = FileManager.default.contents(atPath: path),
-              let text = String(data: data, encoding: .utf8) else { return nil }
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
-
     struct PeerStats {
         var lastHandshake: Double = 0
         var rxBytes: Int = 0

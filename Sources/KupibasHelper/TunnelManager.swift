@@ -28,6 +28,17 @@ final class TunnelManager {
     /// строками, — его тысячи, и снимать его нужно так же быстро.
     private var bulkBypass: Set<Ipv4Net> = []
     private var tunnelRoutes: Set<String> = []   // include: в туннель
+
+    /// Маршруты, направленные в сам туннель, — их ставим вместо wg-quick.
+    private var interfaceRoutes: Set<String> = []
+
+    /// Маршрут до сервера через настоящий канал: без него зашифрованные
+    /// пакеты пошли бы в туннель, который их же и несёт.
+    private var endpointRoute = ""
+
+    /// DNS сетевых служб до нашего вмешательства — их надо вернуть.
+    private var savedDNS: [String: String] = [:]
+
     private var realInterfaceName = ""
 
     private var connectedSince: Double = 0
@@ -44,11 +55,10 @@ final class TunnelManager {
 
     /// После падения или перезагрузки демона в системе мог остаться поднятый туннель.
     func recoverOnStartup() {
-        if FileManager.default.fileExists(atPath: Paths.wgConfigFile),
-           NetworkTool.interfaceExists(Paths.interfaceName) {
-            log.info("Обнаружен туннель от прошлого запуска — опускаю его.")
-            _ = Shell.runTool("wg-quick", ["down", Paths.wgConfigFile])
-        }
+        guard let name = WireGuardInterface.existingInterface(logicalName: Paths.interfaceName) else { return }
+        log.info("Обнаружен туннель от прошлого запуска (\(name)) — опускаю его.")
+        realInterfaceName = name
+        tearDownInterface()
     }
 
     func shutdown() {
@@ -97,15 +107,15 @@ final class TunnelManager {
         message = ""
         publishStatus(config: config)
 
-        guard Shell.which("wg-quick") != nil, Shell.which("wg") != nil else {
+        guard Shell.which("wg") != nil else {
             state = .error
-            message = "Не найдены wg-quick и wg. Установите: brew install wireguard-tools"
+            message = "Не найдена утилита wg — переустановите службу из приложения."
             log.error(message)
             return
         }
-        guard Shell.which("wireguard-go") != nil else {
+        guard Shell.which("amneziawg-go") != nil || Shell.which("wireguard-go") != nil else {
             state = .error
-            message = "Не найден wireguard-go. Установите: brew install wireguard-go"
+            message = "Не найден amneziawg-go — переустановите службу из приложения."
             log.error(message)
             return
         }
@@ -145,19 +155,77 @@ final class TunnelManager {
             return
         }
 
-        let result = Shell.runTool("wg-quick", ["up", Paths.wgConfigFile], timeout: 60)
-        guard result.succeeded else {
-            state = .error
-            message = "wg-quick up: \(result.failureText)"
-            log.error(message)
-            _ = Shell.runTool("wg-quick", ["down", Paths.wgConfigFile], timeout: 30)
+        // 1. Создаём интерфейс. Имя utun выдаёт система, оно заранее неизвестно.
+        let started = WireGuardInterface.start(logicalName: Paths.interfaceName)
+        guard case .success(let interfaceName) = started else {
+            if case .failure(let reason) = started {
+                state = .error
+                message = reason
+                log.error(message)
+            }
+            WireGuardInterface.stop(interface: nil, logicalName: Paths.interfaceName)
             return
+        }
+        realInterfaceName = interfaceName
+        log.info("Интерфейс \(Paths.interfaceName) — это \(interfaceName).")
+
+        // 2. Ключи и список AllowedIPs.
+        let setconf = WireGuardInterface.setConfig(
+            interface: interfaceName,
+            text: WireGuardConfig.renderForSetConf(server: config.server, allowedIPs: allowedIPs)
+        )
+        guard setconf.succeeded else {
+            state = .error
+            message = "Настройки туннеля не приняты: \(setconf.failureText)"
+            log.error(message)
+            tearDownInterface()
+            return
+        }
+
+        // 3. Адрес клиента и размер пакета.
+        for address in config.server.addresses {
+            let result = WireGuardInterface.addAddress(interface: interfaceName, address: address)
+            if !result.succeeded {
+                log.error("ifconfig \(interfaceName) \(address): \(result.failureText)")
+            }
+        }
+        let mtu = config.options.mtu > 0 ? config.options.mtu : config.server.mtu
+        WireGuardInterface.setMTU(interface: interfaceName, mtu: mtu)
+        WireGuardInterface.bringUp(interface: interfaceName)
+
+        // 4. Маршрут до самого сервера — мимо туннеля, иначе он замкнётся сам на себя.
+        if let via = savedDefaultRoute {
+            let host = config.server.endpointHost
+            if !host.isEmpty, !host.contains(":") {
+                let destination = host + "/32"
+                let result = NetworkTool.addRoute(destination, via: via)
+                if result.succeeded || result.failureText.contains("File exists") {
+                    endpointRoute = destination
+                } else {
+                    log.error("маршрут до сервера \(destination): \(result.failureText)")
+                }
+            }
+        }
+
+        // 5. Маршруты в туннель.
+        interfaceRoutes = []
+        for destination in WireGuardConfig.routeDestinations(for: allowedIPs) {
+            let result = NetworkTool.addRoute(destination, interfaceName: interfaceName)
+            if result.succeeded || result.failureText.contains("File exists") {
+                interfaceRoutes.insert(destination)
+            } else {
+                log.error("маршрут \(destination) -> \(interfaceName): \(result.failureText)")
+            }
+        }
+
+        // 6. DNS туннеля.
+        if includeDNS {
+            applyDNS(config.server.dns)
         }
 
         isUp = true
         connectedSince = Date().timeIntervalSince1970
         link.start(rx: 0, tx: 0, now: connectedSince)
-        realInterfaceName = NetworkTool.realInterfaceName(for: Paths.interfaceName) ?? ""
         appliedRestartSignature = config.restartSignature
         appliedRulesSignature = config.rulesSignature
         lastResolveAt = Date()
@@ -168,7 +236,7 @@ final class TunnelManager {
         case .full:
             break
         case .include:
-            // Маршруты для AllowedIPs wg-quick уже поставил — фиксируем их как свои.
+            // Маршруты для AllowedIPs уже проложены выше — фиксируем их как свои.
             tunnelRoutes = resolved
         case .exclude:
             // Правила пользователя по IPv6 — прежним путём, поштучно.
@@ -195,21 +263,68 @@ final class TunnelManager {
         bypassRoutes = []
         tunnelRoutes = []
 
-        if FileManager.default.fileExists(atPath: Paths.wgConfigFile) {
-            let result = Shell.runTool("wg-quick", ["down", Paths.wgConfigFile], timeout: 60)
-            if !result.succeeded {
-                log.error("wg-quick down: \(result.failureText)")
-            }
-        }
-
+        tearDownInterface()
         restoreIPv6()
 
         isUp = false
-        realInterfaceName = ""
         connectedSince = 0
         appliedRestartSignature = ""
         appliedRulesSignature = ""
         log.info("Туннель опущен.")
+    }
+
+    /// Снимает интерфейс и всё, что мы вокруг него поставили.
+    private func tearDownInterface() {
+        restoreDNS()
+
+        for destination in interfaceRoutes {
+            _ = NetworkTool.deleteRoute(destination)
+        }
+        interfaceRoutes = []
+
+        if !endpointRoute.isEmpty {
+            _ = NetworkTool.deleteRoute(endpointRoute)
+            endpointRoute = ""
+        }
+
+        WireGuardInterface.stop(interface: realInterfaceName, logicalName: Paths.interfaceName)
+        realInterfaceName = ""
+    }
+
+    // MARK: - DNS
+
+    /// Переводит сетевые службы на DNS туннеля, запомнив прежние.
+    ///
+    /// Без своего DNS толку от туннеля мало: провайдер отвечает на
+    /// заблокированные имена подставным российским адресом, а тот идёт мимо
+    /// VPN — и сайт всё равно не открывается.
+    private func applyDNS(_ servers: [String]) {
+        guard !servers.isEmpty else { return }
+        savedDNS = [:]
+
+        for service in NetworkTool.networkServices() {
+            let current = Shell.runTool("networksetup", ["-getdnsservers", service], timeout: 15)
+            // Когда своих серверов нет, утилита отвечает целой фразой —
+            // её нельзя записывать как адрес, вернуть надо слово Empty.
+            let text = current.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            savedDNS[service] = text.contains(" ") || text.isEmpty ? "Empty" : text
+
+            let result = Shell.runTool("networksetup", ["-setdnsservers", service] + servers, timeout: 20)
+            if !result.succeeded {
+                log.error("DNS для «\(service)»: \(result.failureText)")
+            }
+        }
+        if !savedDNS.isEmpty {
+            log.info("DNS туннеля: \(servers.joined(separator: ", ")) для \(savedDNS.count) служб.")
+        }
+    }
+
+    private func restoreDNS() {
+        for (service, previous) in savedDNS {
+            let values = previous == "Empty" ? ["Empty"] : previous.split(separator: "\n").map(String.init)
+            _ = Shell.runTool("networksetup", ["-setdnsservers", service] + values, timeout: 20)
+        }
+        savedDNS = [:]
     }
 
     // MARK: - Правила маршрутизации
@@ -263,7 +378,7 @@ final class TunnelManager {
             return list
         case .include:
             if resolved.isEmpty {
-                // Пустой AllowedIPs wg-quick не примет: ставим адрес самого клиента —
+                // Пустой AllowedIPs туннель не примет: ставим адрес самого клиента —
                 // он никуда не ведёт, туннель просто стоит пустым.
                 return [Validation.normalizeCIDR(config.server.addresses.first ?? "10.0.0.1/32") ?? "10.0.0.1/32"]
             }
@@ -316,7 +431,7 @@ final class TunnelManager {
             guard !toAdd.isEmpty || !toRemove.isEmpty else { return }
 
             let allowed = allowedIPsFor(config: config, resolved: desired)
-            let result = NetworkTool.setAllowedIPs(interface: Paths.interfaceName,
+            let result = NetworkTool.setAllowedIPs(interface: realInterfaceName,
                                                    peerKey: config.server.publicKey,
                                                    allowedIPs: allowed)
             if !result.succeeded {
@@ -408,9 +523,12 @@ final class TunnelManager {
     // MARK: - Контроль соединения
 
     private func monitorHealth(_ config: TunnelConfig) {
-        guard let stats = NetworkTool.peerStats(interface: Paths.interfaceName) else {
+        // Утилита управления знает туннель по настоящему имени (utunN),
+        // а не по нашему «kb0»: по «kb0» она ничего не найдёт.
+        guard !realInterfaceName.isEmpty,
+              let stats = NetworkTool.peerStats(interface: realInterfaceName) else {
             // Интерфейс исчез (например, его снесли вручную) — поднимаем заново.
-            log.error("Интерфейс \(Paths.interfaceName) недоступен — переподключение.")
+            log.error("Туннель недоступен — переподключение.")
             bringDown()
             return
         }
@@ -482,7 +600,8 @@ final class TunnelManager {
         status.message = message
         status.updatedAt = Date().timeIntervalSince1970
 
-        if isUp, let stats = NetworkTool.peerStats(interface: Paths.interfaceName) {
+        if isUp, !realInterfaceName.isEmpty,
+           let stats = NetworkTool.peerStats(interface: realInterfaceName) {
             status.lastHandshake = stats.lastHandshake
             status.rxBytes = stats.rxBytes
             status.txBytes = stats.txBytes

@@ -86,7 +86,8 @@ public enum WireGuardConfig {
         return config
     }
 
-    /// Собирает .conf для wg-quick. AllowedIPs подставляет вызывающая сторона —
+    /// Собирает .conf в привычном формате — его показывают и хранят на диске.
+    /// AllowedIPs подставляет вызывающая сторона —
     /// именно они определяют, что пойдёт в туннель.
     /// - Parameter mtuOverride: размер пакета вместо записанного в ключе; 0 — из ключа.
     public static func render(server: ServerConfig,
@@ -120,6 +121,51 @@ public enum WireGuardConfig {
         }
         lines.append("")
         return lines.joined(separator: "\n")
+    }
+
+    /// Настройки для `wg setconf`: только то, что понимает сам туннель.
+    ///
+    /// Address, DNS и MTU утилита управления не понимает и на них ругается:
+    /// адрес и размер пакета служба вешает сама, поэтому здесь их нет.
+    public static func renderForSetConf(server: ServerConfig, allowedIPs: [String]) -> String {
+        var lines: [String] = []
+        lines.append("[Interface]")
+        lines.append("PrivateKey = \(server.privateKey)")
+        for (key, name) in ServerConfig.amneziaFields {
+            if let value = server.amneziaParams[key] {
+                lines.append("\(name) = \(value)")
+            }
+        }
+        lines.append("")
+        lines.append("[Peer]")
+        lines.append("PublicKey = \(server.publicKey)")
+        if !server.presharedKey.isEmpty {
+            lines.append("PresharedKey = \(server.presharedKey)")
+        }
+        lines.append("Endpoint = \(server.endpoint)")
+        lines.append("AllowedIPs = \(allowedIPs.joined(separator: ", "))")
+        if server.persistentKeepalive > 0 {
+            lines.append("PersistentKeepalive = \(server.persistentKeepalive)")
+        }
+        lines.append("")
+        return lines.joined(separator: "\n")
+    }
+
+    /// Во что превращается AllowedIPs при прокладке маршрутов.
+    ///
+    /// Маршрут «весь интернет» задаётся двумя половинами, а не 0.0.0.0/0:
+    /// так он не спорит с маршрутом по умолчанию, и настоящий канал остаётся
+    /// на месте — через него уходит сам зашифрованный трафик.
+    public static func routeDestinations(for allowedIPs: [String]) -> [String] {
+        var result: [String] = []
+        for cidr in allowedIPs {
+            switch cidr {
+            case "0.0.0.0/0": result += ["0.0.0.0/1", "128.0.0.0/1"]
+            case "::/0": result += ["::/1", "8000::/1"]
+            default: result.append(cidr)
+            }
+        }
+        return result
     }
 
     public static func splitList(_ value: String) -> [String] {

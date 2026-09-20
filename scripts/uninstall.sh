@@ -14,7 +14,12 @@ fi
 
 echo "==> Выключаю туннель, если он поднят"
 if [ -f /var/run/kupibas-vpn/kb0.conf ]; then
-    PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" wg-quick down /var/run/kupibas-vpn/kb0.conf 2>/dev/null || true
+    NAME_FILE="/var/run/amneziawg/kb0.name"
+    if [ -f "$NAME_FILE" ]; then
+        IFACE="$(cat "$NAME_FILE" 2>/dev/null || true)"
+        [ -n "$IFACE" ] && rm -f "/var/run/amneziawg/$IFACE.sock" && ifconfig "$IFACE" down 2>/dev/null || true
+        rm -f "$NAME_FILE"
+    fi
 fi
 
 echo "==> Снимаю службу"

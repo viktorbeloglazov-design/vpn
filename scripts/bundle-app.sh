@@ -57,7 +57,7 @@ if [ -d "$ICONSET" ]; then
 fi
 
 if [ -n "$TOOLS_DIR" ]; then
-    for tool in amneziawg-go awg awg-quick wireguard-go wg wg-quick; do
+    for tool in amneziawg-go awg wireguard-go wg; do
         if [ ! -f "$TOOLS_DIR/$tool" ]; then
             echo "В каталоге утилит нет $tool" >&2
             exit 1

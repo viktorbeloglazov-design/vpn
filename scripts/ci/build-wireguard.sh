@@ -8,9 +8,9 @@
 # и ключи с маскировкой (Jc, S1, H1 и прочие). Обычный wg такие настройки
 # считает ошибкой и туннель не поднимает.
 #
-# Файлы кладутся под двумя именами — своими и привычными (wg, wg-quick,
-# wireguard-go): служба ищет их по вторым, а каталог службы стоит в PATH
-# первым, поэтому подхватываются именно наши.
+# Файлы кладутся под двумя именами — своими и привычными (wg, wireguard-go):
+# служба ищет их по вторым, а каталог службы стоит в PATH первым, поэтому
+# подхватываются именно наши.
 set -euo pipefail
 
 OUT="${1:?укажите каталог для результата}"
@@ -37,20 +37,19 @@ make -j4 CC="clang -arch x86_64" wg
 cp wg "$WORK/awg-amd64"
 lipo -create -output "$OUT/awg" "$WORK/awg-arm64" "$WORK/awg-amd64"
 
-# Сам awg-quick — это скрипт. В форке он зовёт управляющую утилиту как «wg»,
-# а бинарник ставится как «awg»: кладём оба имени, чтобы сходилось.
-install -m 0755 "$WORK/amneziawg-tools/src/wg-quick/darwin.bash" "$OUT/awg-quick"
+# awg-quick намеренно не кладём: это скрипт на bash, которому нужен bash 4+,
+# а macOS поставляет 3.2 и другого не будет. Туннель поднимает сама служба —
+# несколько вызовов ifconfig и route вместо пятисот строк скрипта.
 install -m 0644 "$WORK/amneziawg-tools/COPYING" "$OUT/LICENSE-amneziawg-tools.txt"
 
 echo "==> привычные имена"
 cp "$OUT/amneziawg-go" "$OUT/wireguard-go"
 cp "$OUT/awg" "$OUT/wg"
-cp "$OUT/awg-quick" "$OUT/wg-quick"
-chmod 0755 "$OUT/wireguard-go" "$OUT/wg" "$OUT/wg-quick"
+chmod 0755 "$OUT/wireguard-go" "$OUT/wg"
 
 echo
 echo "Готово:"
-for tool in amneziawg-go awg awg-quick wireguard-go wg wg-quick; do
+for tool in amneziawg-go awg wireguard-go wg; do
     printf "  %-14s %s\n" "$tool" "$(lipo -archs "$OUT/$tool" 2>/dev/null || echo 'скрипт')"
 done
 

@@ -24,10 +24,17 @@ touch "$LOG" 2>/dev/null || true
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG" 2>/dev/null || true; }
 log "=== запуск установщика: $* ==="
 
+# Служба поднимает туннель сама, поэтому и снимается он вручную: удаляем
+# сокет — процесс туннеля видит это и уходит.
 stop_tunnel() {
-    if [ -f "$RUNTIME_DIR/kb0.conf" ]; then
-        PATH="$HELPER_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH" \
-            wg-quick down "$RUNTIME_DIR/kb0.conf" >/dev/null 2>&1 || true
+    NAME_FILE="/var/run/amneziawg/kb0.name"
+    if [ -f "$NAME_FILE" ]; then
+        IFACE="$(cat "$NAME_FILE" 2>/dev/null || true)"
+        if [ -n "$IFACE" ]; then
+            rm -f "/var/run/amneziawg/$IFACE.sock"
+            ifconfig "$IFACE" down >/dev/null 2>&1 || true
+        fi
+        rm -f "$NAME_FILE"
     fi
 }
 
@@ -54,7 +61,7 @@ launchctl bootout "system/$LABEL" 2>/dev/null || true
 echo "Ставлю файлы службы"
 install -d -m 0755 "$HELPER_DIR"
 install -m 0755 "$HELPERS/kupibasvpnd" "$HELPER_DIR/kupibasvpnd"
-for tool in amneziawg-go awg awg-quick wireguard-go wg wg-quick; do
+for tool in amneziawg-go awg wireguard-go wg; do
     if [ -f "$HELPERS/$tool" ]; then
         install -m 0755 "$HELPERS/$tool" "$HELPER_DIR/$tool"
     fi
@@ -77,8 +84,10 @@ if [ -n "$APP_PATH" ] && [ "${APP_PATH##*.}" = "app" ]; then
 fi
 
 # Утилиты WireGuard: либо вложены в приложение, либо стоят из Homebrew.
+# wg-quick не нужен: это скрипт на bash 4+, которого в macOS нет, — туннель
+# служба поднимает сама через ifconfig и route.
 MISSING=()
-for tool in wireguard-go wg wg-quick; do
+for tool in wireguard-go wg; do
     if [ ! -x "$HELPER_DIR/$tool" ] \
         && ! PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" command -v "$tool" >/dev/null 2>&1; then
         MISSING+=("$tool")
@@ -94,7 +103,7 @@ else
 fi
 if [ ${#MISSING[@]} -gt 0 ]; then
     echo "Не хватает утилит WireGuard: ${MISSING[*]}" >&2
-    echo "Установите их командой: brew install wireguard-tools wireguard-go" >&2
+    echo "Переустановите приложение — утилиты лежат внутри него." >&2
     exit 1
 fi
 

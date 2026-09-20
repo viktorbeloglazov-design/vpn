@@ -14,7 +14,7 @@ warn() { printf "  \033[33m!\033[0m %s\n" "$1"; }
 echo "Kupibas VPN — диагностика"
 echo
 echo "Зависимости:"
-for tool in wg wg-quick wireguard-go; do
+for tool in wg wireguard-go; do
     if command -v "$tool" >/dev/null 2>&1; then
         ok "$tool → $(command -v "$tool")"
     else

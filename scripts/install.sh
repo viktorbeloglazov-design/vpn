@@ -18,7 +18,7 @@ ADMIN_USER="${SUDO_USER:-$(stat -f "%Su" /dev/console)}"
 
 echo "==> Проверяю зависимости WireGuard"
 MISSING=()
-for tool in wg wg-quick wireguard-go; do
+for tool in wg wireguard-go; do
     if ! PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" command -v "$tool" >/dev/null 2>&1; then
         MISSING+=("$tool")
     fi
@@ -27,6 +27,7 @@ if [ ${#MISSING[@]} -gt 0 ]; then
     echo "Не найдены: ${MISSING[*]}" >&2
     echo "Установите их и повторите:" >&2
     echo "    brew install wireguard-tools wireguard-go" >&2
+    echo "wg-quick не нужен: туннель поднимается без него." >&2
     exit 1
 fi
 

@@ -11,7 +11,8 @@ public enum Paths {
     public static let runtimeDir = "/var/run/kupibas-vpn"
     public static let wgConfigFile = runtimeDir + "/kb0.conf"
 
-    /// Имя WireGuard-интерфейса (wg-quick создаёт utunN и связывает его с этим именем).
+    /// Наше имя туннеля. Система выдаёт настоящее (utunN) при создании,
+    /// а это остаётся внутренним: по нему служба находит файл с именем.
     public static let interfaceName = "kb0"
 
     public static let logFile = "/var/log/kupibas-vpn.log"
