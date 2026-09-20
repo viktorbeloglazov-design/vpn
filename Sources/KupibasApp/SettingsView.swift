@@ -81,6 +81,11 @@ struct SettingsView: View {
                                 }
                             }
                         }
+                        LabeledContent("Версия") {
+                            Text(model.installedHelperVersion.map { "служба \($0) · приложение \(model.appVersion)" }
+                                 ?? "служба от старой версии · приложение \(model.appVersion)")
+                                .foregroundColor(model.helperNeedsUpdate ? .orange : .secondary)
+                        }
                         LabeledContent("Интерфейс") {
                             Text(model.status.interfaceName.isEmpty ? "—" : model.status.interfaceName)
                                 .font(.body.monospaced())
@@ -115,6 +120,7 @@ struct SettingsView: View {
 
     private func onAppearActions() {
         model.refreshLaunchAtLogin()
+        model.refreshHelperVersion()
     }
 
     private var serviceState: String {

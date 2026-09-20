@@ -17,6 +17,11 @@ final class AppModel: ObservableObject {
     @Published var isInstallingHelper = false
     @Published var installMessage: String?
 
+    /// Служба осталась от прошлой версии приложения.
+    @Published var helperNeedsUpdate = false
+
+    private var helperUpdateAttempted = false
+
     private var ruZoneCountCache: Int?
 
     private var timer: Timer?
@@ -196,6 +201,47 @@ final class AppModel: ObservableObject {
     /// Можно ли поставить службу кнопкой (приложение запущено из собранного бандла).
     var canInstallHelper: Bool { HelperInstaller.isBundled }
 
+    var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+    }
+
+    /// Из какой версии приложения поставлена служба. nil — отметки нет.
+    var installedHelperVersion: String? {
+        guard let text = try? String(contentsOfFile: Paths.helperVersionFile, encoding: .utf8) else {
+            return nil
+        }
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    func refreshHelperVersion() {
+        guard isHelperInstalled, !appVersion.isEmpty else {
+            helperNeedsUpdate = false
+            return
+        }
+        helperNeedsUpdate = installedHelperVersion != appVersion
+    }
+
+    /// Обновляет службу сама, если приложение обновили, а её — нет.
+    ///
+    /// Иначе получается худшее из возможного: в приложении новая логика, а
+    /// работает старая служба — и человек видит ошибку, которой в новом коде
+    /// уже нет. Спрашиваем пароль один раз за обновление.
+    func updateHelperIfNeeded() {
+        guard !helperUpdateAttempted, canInstallHelper else { return }
+        refreshHelperVersion()
+        guard helperNeedsUpdate else { return }
+
+        helperUpdateAttempted = true
+        installMessage = "Обновляю службу до версии \(appVersion)…"
+        installHelper()
+        refreshHelperVersion()
+        if !helperNeedsUpdate {
+            installMessage = "Служба обновлена до версии \(appVersion)."
+            status = ConfigStore.loadStatus()
+        }
+    }
+
     func installHelper() {
         guard !isInstallingHelper else { return }
         isInstallingHelper = true
@@ -208,6 +254,7 @@ final class AppModel: ObservableObject {
             config = ConfigStore.loadConfig()
             installMessage = "Служба установлена."
         }
+        refreshHelperVersion()
     }
 
     func uninstallHelper() {

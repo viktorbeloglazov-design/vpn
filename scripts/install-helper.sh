@@ -67,6 +67,15 @@ for tool in amneziawg-go awg wireguard-go wg; do
     fi
 done
 
+# Отметка о версии: по ней приложение понимает, что служба осталась от
+# прошлой версии, и обновляет её само — иначе она молча работает по-старому.
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$CONTENTS/Info.plist" 2>/dev/null || true)"
+if [ -n "$VERSION" ]; then
+    printf '%s' "$VERSION" > "$HELPER_DIR/version"
+    chmod 0644 "$HELPER_DIR/version"
+    echo "Версия службы: $VERSION"
+fi
+
 # Список подсетей России кладём туда, где его прочитает служба: по нему
 # главный фильтр решает, что идёт мимо туннеля.
 if [ -f "$RESOURCES/ru_ipv4.txt" ]; then

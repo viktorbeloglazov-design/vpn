@@ -9,6 +9,11 @@ struct MainView: View {
         VStack(spacing: 0) {
             if !model.isHelperInstalled {
                 InstallBanner(text: "Служба QP VPN не установлена — без неё переключатель не сработает.")
+            } else if model.helperNeedsUpdate {
+                InstallBanner(
+                    text: "Служба осталась от прошлой версии приложения — обновите её, "
+                        + "иначе VPN будет работать по-старому."
+                )
             } else if !model.isDaemonRunning {
                 InstallBanner(text: "Служба не отвечает. Переустановите её или проверьте журнал.")
             }

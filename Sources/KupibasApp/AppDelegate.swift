@@ -28,6 +28,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showWindow()
         NSApp.activate(ignoringOtherApps: true)
         Diagnostics.log("окно показано — запуск завершён")
+
+        // Приложение обновляют перетаскиванием, а служба остаётся прежней.
+        // Догоняем её сами: иначе в приложении новая логика, а работает
+        // старая служба — и человек видит ошибку, которой уже нет в коде.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak model] in
+            model?.updateHelperIfNeeded()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

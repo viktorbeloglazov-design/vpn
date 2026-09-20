@@ -20,4 +20,10 @@ public enum Paths {
     public static let daemonPlist = "/Library/LaunchDaemons/com.kupibas.vpn.helper.plist"
     public static let helperDir = "/usr/local/libexec/kupibas-vpn"
     public static let helperBinary = helperDir + "/kupibasvpnd"
+
+    /// Версия приложения, из которого поставили службу.
+    ///
+    /// Приложение обновляют перетаскиванием, а служба остаётся прежней —
+    /// и продолжает работать по-старому. По этому файлу видно расхождение.
+    public static let helperVersionFile = helperDir + "/version"
 }
