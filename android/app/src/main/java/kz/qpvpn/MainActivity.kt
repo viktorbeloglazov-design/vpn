@@ -29,6 +29,7 @@ import kz.qpvpn.model.MasterFilter
 import kz.qpvpn.model.ConnectionState
 import kz.qpvpn.model.TunnelOptions
 import kz.qpvpn.net.IpCheck
+import kz.qpvpn.net.SpeedTest
 import kz.qpvpn.net.RuZone
 import kz.qpvpn.ui.Format
 import kz.qpvpn.ui.QrScannerScreen
@@ -49,6 +50,9 @@ class MainActivity : ComponentActivity() {
     private var checkingIp by mutableStateOf(false)
     private var ruZoneCount by mutableStateOf(0)
     private var directApps by mutableStateOf<List<String>>(emptyList())
+    private var speedText by mutableStateOf("")
+    private var speedHint by mutableStateOf("")
+    private var measuringSpeed by mutableStateOf(false)
     private var notificationsAllowed by mutableStateOf(true)
     private var showScanner by mutableStateOf(false)
 
@@ -139,6 +143,9 @@ class MainActivity : ComponentActivity() {
                         ipText = ipText,
                         ipIsKazakhstan = ipIsKazakhstan,
                         checkingIp = checkingIp,
+                        speedText = speedText,
+                        speedHint = speedHint,
+                        measuringSpeed = measuringSpeed,
                     ),
                     actions = ScreenActions(
                         onToggle = ::toggleTunnel,
@@ -148,6 +155,7 @@ class MainActivity : ComponentActivity() {
                         onClearProfile = ::clearProfile,
                         onOptionsChange = ::changeOptions,
                         onCheckIp = ::checkIp,
+                        onMeasureSpeed = ::measureSpeed,
                         onCopyDiagnostics = ::copyDiagnostics,
                         onScanQr = { showScanner = true },
                         onPickQrImage = { pickQrImage.launch("image/*") },
@@ -444,6 +452,38 @@ class MainActivity : ComponentActivity() {
     }
 
     // MARK: - Прочее
+
+    /**
+     * Замер скорости двумя путями сразу.
+     *
+     * Одно число ничего не говорит: в кафе Wi-Fi бывает медленнее любого
+     * VPN. Сравнение с прямой закачкой отвечает, виноват туннель или сеть.
+     */
+    private fun measureSpeed() {
+        if (measuringSpeed) return
+        measuringSpeed = true
+        speedText = ""
+        speedHint = ""
+        lifecycleScope.launch {
+            val result = SpeedTest.measure(this@MainActivity)
+            measuringSpeed = false
+            speedText = if (result.hasAny) {
+                "через VPN ${SpeedTest.format(result.throughTunnel)}  ·  " +
+                    "без VPN ${SpeedTest.format(result.direct)}"
+            } else {
+                ""
+            }
+            speedHint = when {
+                result.note.isNotEmpty() -> result.note
+                result.tunnelIsSlower ->
+                    "Туннель заметно медленнее прямой закачки. Попробуйте «Ещё» → MTU → 1420, " +
+                        "а если не поможет — дело в сервере или в этой сети."
+                result.throughTunnel > 0 && result.direct > 0 ->
+                    "Туннель не режет скорость — она такая же, как без него. Значит, упирается сама сеть."
+                else -> ""
+            }
+        }
+    }
 
     private fun checkIp() {
         if (checkingIp) return

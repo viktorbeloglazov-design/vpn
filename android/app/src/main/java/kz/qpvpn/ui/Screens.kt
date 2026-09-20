@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.AlertDialog
@@ -94,6 +95,11 @@ data class ScreenState(
     val ipText: String,
     val ipIsKazakhstan: Boolean,
     val checkingIp: Boolean,
+
+    /** Замер скорости: строка с двумя числами и подсказка под ней. */
+    val speedText: String,
+    val speedHint: String,
+    val measuringSpeed: Boolean,
 )
 
 data class ScreenActions(
@@ -106,6 +112,7 @@ data class ScreenActions(
     val onClearProfile: () -> Unit,
     val onOptionsChange: (TunnelOptions) -> Unit,
     val onCheckIp: () -> Unit,
+    val onMeasureSpeed: () -> Unit,
     val onCopyDiagnostics: () -> Unit,
     val onScanQr: () -> Unit,
     val onPickQrImage: () -> Unit,
@@ -419,6 +426,59 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
 
             SectionHeader("Рабочие ресурсы")
             WorkFilterCard(state, actions)
+
+            SectionHeader("Скорость", "Через VPN и без него — на одной и той же закачке")
+            InfoCard {
+                if (state.speedText.isNotEmpty()) {
+                    Text(
+                        state.speedText,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+                if (state.speedHint.isNotEmpty()) {
+                    Text(
+                        state.speedHint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                OutlinedButton(
+                    onClick = actions.onMeasureSpeed,
+                    enabled = !state.measuringSpeed,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (state.measuringSpeed) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text("Измеряю…")
+                    } else {
+                        Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Замерить скорость")
+                    }
+                }
+
+                // Размер пакета — единственное, чем скорость лечится со
+                // стороны телефона, поэтому он здесь же, а не в настройках.
+                Text(
+                    "Размер пакета (MTU). В гостевых сетях — в кафе, гостиницах — " +
+                        "большие пакеты часто не проходят целиком, и скорость падает в разы. " +
+                        "Если замер расстроил, пробуйте по порядку.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(1420 to "1420", 0 to "Из ключа", 1380 to "1380", 1280 to "1280")
+                        .forEach { (value, title) ->
+                            FilterChip(
+                                selected = state.config.options.mtu == value,
+                                onClick = { actions.onOptionsChange(state.config.options.copy(mtu = value)) },
+                                label = { Text(title) },
+                            )
+                        }
+                }
+            }
 
             SectionHeader("Проверка")
             InfoCard {
