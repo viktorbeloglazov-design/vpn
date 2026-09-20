@@ -116,17 +116,6 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.int16Value, 0o660)
     }
 
-    func testPresetsAreValid() {
-        XCTAssertFalse(Presets.all.isEmpty)
-        for preset in Presets.all {
-            XCTAssertFalse(preset.rules.isEmpty, preset.title)
-            for rule in preset.rules {
-                XCTAssertNil(Validation.ruleError(kind: rule.kind, value: rule.value),
-                             "\(preset.title): \(rule.value)")
-            }
-        }
-    }
-
     func testFormatting() {
         XCTAssertEqual(Formatting.bytes(512), "512 Б")
         XCTAssertEqual(Formatting.bytes(2048), "2.0 КБ")

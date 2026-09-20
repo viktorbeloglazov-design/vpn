@@ -8,15 +8,30 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Form {
-                    Section("Поведение туннеля") {
-                        Toggle("Использовать DNS-серверы VPN", isOn: $model.config.options.useTunnelDNS)
-                            .help("В режиме «только правила» системный DNS не трогается, чтобы не ломать локальную сеть.")
-                        Toggle("Отключать IPv6, пока VPN включён", isOn: $model.config.options.disableIPv6)
-                            .help("Без этого сайты могут увидеть ваш настоящий IPv6-адрес в обход туннеля.")
-                        Toggle("Переподключаться автоматически", isOn: $model.config.options.autoReconnect)
-                        Stepper("Пересчитывать IP доменов каждые \(model.config.options.reresolveMinutes) мин",
-                                value: $model.config.options.reresolveMinutes,
-                                in: 1...60)
+                    Section("Размер пакета (MTU)") {
+                        Picker("", selection: Binding(
+                            get: { model.config.options.mtu },
+                            set: { model.setMTU($0) }
+                        )) {
+                            Text("1420").tag(1420)
+                            Text("Из ключа").tag(0)
+                            Text("1380").tag(1380)
+                            Text("1280").tag(1280)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+
+                        Text("От него зависит скорость. Чем больше — тем быстрее, но если сеть "
+                             + "не пропускает такие пакеты, страницы наоборот встают. Порядок "
+                             + "подбора: 1420 → из ключа → 1380 → 1280. "
+                             + "Сейчас в ключе: \(model.config.server.mtu).")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text("При смене туннель переподнимется сам — связь пропадёт на секунду.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
 
                     Section("Приложение") {
@@ -30,6 +45,18 @@ struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
+                    }
+
+                    Section("Диагностика") {
+                        Text(model.diagnosticsReport())
+                            .font(.caption.monospaced())
+                            .foregroundColor(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Скопировать отчёт") { model.copyDiagnostics() }
+                        Text("Отчёт можно переслать тому, кто выдал ключ: в нём нет самих ключей, только состояние.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
 
                     Section("Служба") {

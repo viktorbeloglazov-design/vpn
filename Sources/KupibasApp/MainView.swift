@@ -23,13 +23,13 @@ struct MainView: View {
 
             TabView(selection: $selectedTab) {
                 RoutesView()
-                    .tabItem { Label("Маршруты", systemImage: "arrow.triangle.branch") }
+                    .tabItem { Label("Главная", systemImage: "shield.lefthalf.filled") }
                     .tag(0)
                 ServerView()
                     .tabItem { Label("Сервер", systemImage: "server.rack") }
                     .tag(1)
                 SettingsView()
-                    .tabItem { Label("Настройки", systemImage: "gearshape") }
+                    .tabItem { Label("Ещё", systemImage: "gearshape") }
                     .tag(2)
             }
             .padding(12)
@@ -140,17 +140,12 @@ struct PowerHeader: View {
     }
 
     /// Как называется то, что сейчас происходит с трафиком.
-    private var routingTitle: String {
-        if model.config.fullTunnel { return "Весь трафик через VPN" }
-        if model.config.mainFilter { return "Обход блокировок" }
-        return model.config.mode.title
-    }
+    ///
+    /// Выбирать тут нечего: маршрутизация зашита, это просто подпись.
+    private var routingTitle: String { "Обход блокировок" }
 
     private var routingDetails: String {
-        if model.config.mainFilter {
-            return "мимо VPN: российская зона · маршрутов: \(model.status.routeCount)"
-        }
-        return "правил активно: \(model.config.activeRules.count) · маршрутов: \(model.status.routeCount)"
+        "мимо VPN: российская зона · маршрутов: \(model.status.routeCount)"
     }
 
     private var ipRow: some View {

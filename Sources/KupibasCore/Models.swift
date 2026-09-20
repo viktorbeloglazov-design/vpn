@@ -191,17 +191,26 @@ public struct TunnelOptions: Codable, Hashable, Sendable {
     public var disableIPv6: Bool
     /// Как часто перепроверять IP-адреса доменов из правил, минут.
     public var reresolveMinutes: Int
-    /// Перезапускать туннель, если давно не было handshake.
+    /// Перезапускать туннель, если связь оборвалась.
     public var autoReconnect: Bool
+
+    /// Размер пакета. 0 — как записано в ключе.
+    ///
+    /// От него зависит скорость: чем больше, тем лучше, но если сеть такие
+    /// пакеты не пропускает, страницы наоборот встают. Ключ при этом не
+    /// трогается, поэтому «из ключа» всегда можно вернуть.
+    public var mtu: Int
 
     public init(useTunnelDNS: Bool = true,
                 disableIPv6: Bool = true,
                 reresolveMinutes: Int = 5,
-                autoReconnect: Bool = true) {
+                autoReconnect: Bool = true,
+                mtu: Int = 0) {
         self.useTunnelDNS = useTunnelDNS
         self.disableIPv6 = disableIPv6
         self.reresolveMinutes = reresolveMinutes
         self.autoReconnect = autoReconnect
+        self.mtu = mtu
     }
 
     public init(from decoder: Decoder) throws {
@@ -210,6 +219,7 @@ public struct TunnelOptions: Codable, Hashable, Sendable {
         self.disableIPv6 = (try? c.decode(Bool.self, forKey: .disableIPv6)) ?? true
         self.reresolveMinutes = (try? c.decode(Int.self, forKey: .reresolveMinutes)) ?? 5
         self.autoReconnect = (try? c.decode(Bool.self, forKey: .autoReconnect)) ?? true
+        self.mtu = (try? c.decode(Int.self, forKey: .mtu)) ?? 0
     }
 }
 
@@ -242,7 +252,7 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
                 fullTunnel: Bool = false,
                 mainFilter: Bool = true,
                 workFilter: Bool = true,
-                mode: TunnelMode = .full,
+                mode: TunnelMode = .exclude,
                 server: ServerConfig = ServerConfig(),
                 rules: [RoutingRule] = [],
                 options: TunnelOptions = TunnelOptions()) {
@@ -264,7 +274,7 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
         self.fullTunnel = (try? c.decode(Bool.self, forKey: .fullTunnel)) ?? false
         self.mainFilter = (try? c.decode(Bool.self, forKey: .mainFilter)) ?? true
         self.workFilter = (try? c.decode(Bool.self, forKey: .workFilter)) ?? true
-        self.mode = (try? c.decode(TunnelMode.self, forKey: .mode)) ?? .full
+        self.mode = (try? c.decode(TunnelMode.self, forKey: .mode)) ?? .exclude
         self.server = (try? c.decode(ServerConfig.self, forKey: .server)) ?? ServerConfig()
         self.rules = (try? c.decode([RoutingRule].self, forKey: .rules)) ?? []
         self.options = (try? c.decode(TunnelOptions.self, forKey: .options)) ?? TunnelOptions()
@@ -281,6 +291,26 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
         return mode
     }
 
+    /// Настройки, приведённые к зашитому поведению.
+    ///
+    /// Маршрутизация не настраивается: заблокированные сервисы всегда идут
+    /// через VPN, российские адреса — всегда напрямую. Единственное, что
+    /// человек выбирает сам, — рабочие ресурсы, поэтому `workFilter` здесь
+    /// не трогается; MTU к маршрутизации не относится и тоже остаётся.
+    /// Остальное приводится к заводскому виду, в том числе настройки,
+    /// сохранённые прежними версиями программы.
+    public func pinned() -> TunnelConfig {
+        var copy = self
+        copy.fullTunnel = false
+        copy.mainFilter = true
+        copy.mode = .exclude
+        copy.rules = []
+        copy.options.useTunnelDNS = true
+        copy.options.disableIPv6 = true
+        copy.options.autoReconnect = true
+        return copy
+    }
+
     /// Всё, что требует полного пересоздания туннеля при изменении.
     public var restartSignature: String {
         var parts: [String] = [String(version), effectiveMode.rawValue]
@@ -290,7 +320,7 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
         parts.append(server.privateKey)
         parts.append(server.addresses.joined(separator: ","))
         parts.append(server.dns.joined(separator: ","))
-        parts.append(String(server.mtu))
+        parts.append(String(options.mtu > 0 ? options.mtu : server.mtu))
         parts.append(String(server.persistentKeepalive))
         parts.append(server.amneziaParams.sorted { $0.key < $1.key }
             .map { "\($0.key)=\($0.value)" }

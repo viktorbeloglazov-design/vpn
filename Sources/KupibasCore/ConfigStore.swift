@@ -32,16 +32,19 @@ public enum ConfigStore {
             && FileManager.default.fileExists(atPath: Paths.daemonPlist)
     }
 
+    /// Маршрутизация зашита: что бы ни лежало в файле от прошлых версий,
+    /// в работу уходит одно и то же поведение. Иначе включённый когда-то
+    /// переключатель остался бы навсегда — выключить его больше негде.
     public static func loadConfig() -> TunnelConfig {
         guard let data = FileManager.default.contents(atPath: Paths.configFile),
               let config = try? JSONDecoder().decode(TunnelConfig.self, from: data) else {
-            return TunnelConfig()
+            return TunnelConfig().pinned()
         }
-        return config
+        return config.pinned()
     }
 
     public static func saveConfig(_ config: TunnelConfig) throws {
-        let data = try encoder.encode(config)
+        let data = try encoder.encode(config.pinned())
         try writeAtomically(data: data, to: Paths.configFile, permissions: 0o660)
     }
 

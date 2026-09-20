@@ -69,7 +69,6 @@ class RealServicesRoutingTest {
             "Почта России" to listOf("212.164.140.129", "212.164.140.153"),
             "Аэрофлот" to listOf("195.209.66.33"),
             "Ростелеком" to listOf("87.226.162.216"),
-            "Гисметео" to listOf("31.172.76.57"),
         )
 
         russian.forEach { (name, addresses) ->

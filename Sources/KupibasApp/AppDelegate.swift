@@ -138,25 +138,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
     }
 
+    /// Значок вверху экрана: сразу видно, работает VPN или нет.
+    ///
+    /// Подключённый туннель — сплошной щит, всё остальное — контур, поэтому
+    /// состояние читается боковым зрением, не наводя курсор.
     private func updateStatusIcon(for state: TunnelState, enabled: Bool) {
         let symbol: String
+        let tooltip: String
         switch state {
-        case .connected: symbol = "shield.lefthalf.filled"
-        case .connecting: symbol = "shield.lefthalf.filled.slash"
-        case .error: symbol = "exclamationmark.shield"
-        case .disconnected: symbol = enabled ? "shield.lefthalf.filled.slash" : "shield"
+        case .connected:
+            symbol = "shield.fill"
+            tooltip = "QP VPN подключён"
+        case .connecting:
+            symbol = "shield.lefthalf.filled"
+            tooltip = "QP VPN подключается"
+        case .error:
+            symbol = "exclamationmark.shield"
+            tooltip = "QP VPN: ошибка"
+        case .disconnected:
+            symbol = enabled ? "shield.lefthalf.filled" : "shield"
+            tooltip = enabled ? "QP VPN подключается" : "QP VPN выключен"
         }
-        statusItem?.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "QP VPN")
+        guard let button = statusItem?.button else { return }
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "QP VPN")
             ?? NSImage(systemSymbolName: "shield", accessibilityDescription: "QP VPN")
+        button.toolTip = tooltip
     }
 
     @objc private func toggleTunnel() {
         model?.toggle()
     }
 
-    @objc private func chooseMode(_ sender: NSMenuItem) {
-        guard let mode = TunnelMode(rawValue: sender.representedObject as? String ?? "") else { return }
-        model?.setMode(mode)
+    @objc private func toggleWorkFilter() {
+        guard let model else { return }
+        model.setWorkFilter(!model.config.workFilter)
     }
 }
 
@@ -183,13 +198,20 @@ extension AppDelegate: NSMenuDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        for mode in TunnelMode.allCases {
-            let item = NSMenuItem(title: mode.title, action: #selector(chooseMode(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = mode.rawValue
-            item.state = model.config.mode == mode ? .on : .off
-            menu.addItem(item)
-        }
+        // Маршрутизация зашита — выбирать нечего, показываем как есть.
+        let routing = NSMenuItem(title: "Обход блокировок · российские сайты напрямую",
+                                 action: nil,
+                                 keyEquivalent: "")
+        routing.isEnabled = false
+        menu.addItem(routing)
+
+        // Единственный переключатель программы.
+        let work = NSMenuItem(title: "Рабочие ресурсы через VPN",
+                              action: #selector(toggleWorkFilter),
+                              keyEquivalent: "")
+        work.target = self
+        work.state = model.config.workFilter ? .on : .off
+        menu.addItem(work)
 
         if model.status.state == .connected {
             menu.addItem(NSMenuItem.separator())

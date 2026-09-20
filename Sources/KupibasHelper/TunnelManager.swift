@@ -31,6 +31,7 @@ final class TunnelManager {
     private var realInterfaceName = ""
 
     private var connectedSince: Double = 0
+    private let link = LinkWatch()
     private var lastResolveAt = Date.distantPast
     private var lastRestartAt = Date.distantPast
     private var lastStatusWrite = Date.distantPast
@@ -127,7 +128,8 @@ final class TunnelManager {
             && config.effectiveMode != .include
         let text = WireGuardConfig.render(server: config.server,
                                           allowedIPs: allowedIPs,
-                                          includeDNS: includeDNS)
+                                          includeDNS: includeDNS,
+                                          mtuOverride: config.options.mtu)
 
         do {
             try FileManager.default.createDirectory(atPath: Paths.runtimeDir,
@@ -154,6 +156,7 @@ final class TunnelManager {
 
         isUp = true
         connectedSince = Date().timeIntervalSince1970
+        link.start(rx: 0, tx: 0, now: connectedSince)
         realInterfaceName = NetworkTool.realInterfaceName(for: Paths.interfaceName) ?? ""
         appliedRestartSignature = config.restartSignature
         appliedRulesSignature = config.rulesSignature
@@ -413,25 +416,31 @@ final class TunnelManager {
         }
 
         let now = Date().timeIntervalSince1970
-        if stats.lastHandshake > 0 {
-            state = (now - stats.lastHandshake) < 180 ? .connected : .connecting
-        } else {
-            state = .connecting
-        }
+
+        // Туннель считается поднятым, как только сервер ответил хоть раз.
+        // Раньше через три минуты простоя состояние съезжало в «Подключение…»,
+        // хотя связь была цела: простаивающий туннель сессию не обновляет,
+        // потому что ему нечего слать.
+        state = stats.lastHandshake > 0 ? .connected : .connecting
 
         guard config.options.autoReconnect else { return }
-        guard Date().timeIntervalSince(lastRestartAt) > 60 else { return }
 
-        let stalled: Bool
-        if stats.lastHandshake > 0 {
-            stalled = (now - stats.lastHandshake) > 180
-        } else {
-            stalled = (now - connectedSince) > 40
-        }
-        if stalled {
+        // Без единого ответа с момента подъёма туннель бесполезен: ключ не
+        // от этого сервера, сервер недоступен или сеть режет VPN.
+        if stats.lastHandshake == 0 {
+            guard now - connectedSince > 40,
+                  Date().timeIntervalSince(lastRestartAt) > 60 else { return }
             lastRestartAt = Date()
-            log.error("Нет handshake с сервером — перезапуск туннеля.")
+            log.error("Сервер ни разу не ответил — перезапуск туннеля.")
             message = "Сервер не отвечает, переподключаюсь…"
+            bringDown()
+            return
+        }
+
+        if link.stalled(rx: stats.rxBytes, tx: stats.txBytes, now: now) {
+            lastRestartAt = Date()
+            log.error("Шлём, а в ответ тишина — перезапуск туннеля.")
+            message = "Связь оборвалась, переподключаюсь…"
             bringDown()
         }
     }

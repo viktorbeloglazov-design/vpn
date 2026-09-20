@@ -88,15 +88,17 @@ public enum WireGuardConfig {
 
     /// Собирает .conf для wg-quick. AllowedIPs подставляет вызывающая сторона —
     /// именно они определяют, что пойдёт в туннель.
+    /// - Parameter mtuOverride: размер пакета вместо записанного в ключе; 0 — из ключа.
     public static func render(server: ServerConfig,
                               allowedIPs: [String],
-                              includeDNS: Bool) -> String {
+                              includeDNS: Bool,
+                              mtuOverride: Int = 0) -> String {
         var lines: [String] = []
         lines.append("# Сгенерировано kupibasvpnd. Правки будут перезаписаны.")
         lines.append("[Interface]")
         lines.append("PrivateKey = \(server.privateKey)")
         lines.append("Address = \(server.addresses.joined(separator: ", "))")
-        lines.append("MTU = \(server.mtu)")
+        lines.append("MTU = \(mtuOverride > 0 ? mtuOverride : server.mtu)")
         if includeDNS && !server.dns.isEmpty {
             lines.append("DNS = \(server.dns.joined(separator: ", "))")
         }

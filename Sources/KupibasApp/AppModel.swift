@@ -68,27 +68,19 @@ final class AppModel: ObservableObject {
         if enabled { ipInfo = nil }
     }
 
-    func setMode(_ mode: TunnelMode) {
-        config.mode = mode
-        scheduleSave()
-    }
-
-    /// Весь трафик через VPN — перекрывает остальные переключатели.
-    func setFullTunnel(_ enabled: Bool) {
-        config.fullTunnel = enabled
-        scheduleSave()
-    }
-
-    /// Главный фильтр: через VPN идёт всё, кроме российских адресов.
-    func setMainFilter(_ enabled: Bool) {
-        config.mainFilter = enabled
-        scheduleSave()
-    }
-
-    /// Рабочие ресурсы: через VPN или напрямую.
+    /// Единственная настройка маршрутизации, которая осталась у человека.
+    ///
+    /// Всё остальное зашито: заблокированные сервисы идут через VPN,
+    /// российские адреса — напрямую, менять это негде и не нужно.
     func setWorkFilter(_ enabled: Bool) {
         config.workFilter = enabled
         scheduleSave()
+    }
+
+    /// Размер пакета: 0 — как записано в ключе.
+    func setMTU(_ value: Int) {
+        config.options.mtu = value
+        saveNow()
     }
 
     /// Сколько подсетей России знает программа — показываем в подписи.
@@ -102,38 +94,6 @@ final class AppModel: ObservableObject {
         let count = RuZone.networks(extraPaths: paths).count
         ruZoneCountCache = count
         return count
-    }
-
-    func addRule(kind: RuleKind, value: String, note: String = "") -> String? {
-        let trimmed = value.trimmingCharacters(in: .whitespaces).lowercased()
-        if let error = Validation.ruleError(kind: kind, value: trimmed) { return error }
-        if config.rules.contains(where: { $0.kind == kind && $0.value.lowercased() == trimmed }) {
-            return "Такое правило уже есть."
-        }
-        config.rules.append(RoutingRule(kind: kind, value: trimmed, enabled: true, note: note))
-        scheduleSave()
-        return nil
-    }
-
-    func addPreset(_ preset: RulePreset) {
-        for rule in preset.rules {
-            let exists = config.rules.contains {
-                $0.kind == rule.kind && $0.value.lowercased() == rule.value.lowercased()
-            }
-            if !exists { config.rules.append(rule) }
-        }
-        scheduleSave()
-    }
-
-    func removeRules(ids: Set<String>) {
-        config.rules.removeAll { ids.contains($0.id) }
-        scheduleSave()
-    }
-
-    func setRuleEnabled(id: String, enabled: Bool) {
-        guard let index = config.rules.firstIndex(where: { $0.id == id }) else { return }
-        config.rules[index].enabled = enabled
-        scheduleSave()
     }
 
     func applyServer(_ server: ServerConfig) {
@@ -261,6 +221,45 @@ final class AppModel: ObservableObject {
         } else {
             installMessage = "Служба удалена."
         }
+    }
+
+    // MARK: - Диагностика
+
+    /// Короткий отчёт о состоянии — его можно переслать тому, кто выдал ключ.
+    ///
+    /// Ключей внутри нет: только адрес сервера, режим, счётчики и время
+    /// последнего ответа сервера. Этого хватает, чтобы понять, где встало.
+    func diagnosticsReport() -> String {
+        let server = config.server
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        let mtu = config.options.mtu > 0
+            ? "\(config.options.mtu) (задан вручную)"
+            : "\(server.mtu) (из ключа)"
+
+        var lines: [String] = []
+        lines.append("QP VPN \(version) для Mac, macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
+        lines.append("Состояние: \(stateText)")
+        lines.append("Служба: \(isHelperInstalled ? (isDaemonRunning ? "работает" : "не отвечает") : "не установлена")")
+        lines.append("Режим: обход блокировок (всё, кроме \(ruZoneCount) подсетей РФ)")
+        lines.append("Рабочие ресурсы: \(config.workFilter ? "через VPN" : "напрямую")")
+        if server.endpoint.isEmpty {
+            lines.append("Ключ: не загружен")
+        } else {
+            lines.append("Сервер: \(server.endpoint)")
+            lines.append("Протокол: \(server.protocolName), параметров маскировки: \(server.amneziaParams.count)")
+            lines.append("DNS из ключа: \(server.dns.isEmpty ? "нет" : server.dns.joined(separator: ", "))")
+            lines.append("MTU: \(mtu)")
+        }
+        lines.append("Интерфейс: \(status.interfaceName.isEmpty ? "—" : status.interfaceName)")
+        lines.append("Маршрутов мимо туннеля: \(status.routeCount)")
+        lines.append("Handshake: \(Formatting.relative(status.lastHandshake))")
+        lines.append("Принято/отправлено: \(Formatting.bytes(status.rxBytes)) / \(Formatting.bytes(status.txBytes))")
+        return lines.joined(separator: "\n")
+    }
+
+    func copyDiagnostics() {
+        NSWorkspaceOpener.copyToPasteboard(diagnosticsReport())
+        installMessage = "Отчёт скопирован."
     }
 
     // MARK: - Журнал
