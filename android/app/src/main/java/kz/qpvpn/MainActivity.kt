@@ -468,14 +468,18 @@ class MainActivity : ComponentActivity() {
             val result = SpeedTest.measure(this@MainActivity)
             measuringSpeed = false
             speedText = if (result.hasAny) {
-                "через VPN ${SpeedTest.format(result.throughTunnel)}  ·  " +
-                    "без VPN ${SpeedTest.format(result.direct)}"
+                buildString {
+                    appendLine("приём:   через VPN ${SpeedTest.format(result.throughTunnel)}" +
+                        "   без VPN ${SpeedTest.format(result.direct)}")
+                    append("отдача:  через VPN ${SpeedTest.format(result.uploadThroughTunnel)}" +
+                        "   без VPN ${SpeedTest.format(result.uploadDirect)}")
+                }
             } else {
                 ""
             }
             speedHint = when {
                 result.note.isNotEmpty() -> result.note
-                result.tunnelIsSlower ->
+                result.tunnelIsSlower || result.uploadIsSlower ->
                     "Туннель заметно медленнее прямой закачки. Попробуйте «Ещё» → MTU → 1420, " +
                         "а если не поможет — дело в сервере или в этой сети."
                 result.throughTunnel > 0 && result.direct > 0 ->

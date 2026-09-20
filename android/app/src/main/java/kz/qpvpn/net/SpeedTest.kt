@@ -23,13 +23,17 @@ object SpeedTest {
     private const val BYTES = 25_000_000
     private const val SECONDS = 8
 
-    private val url = "https://speed.cloudflare.com/__down?bytes=$BYTES"
+    private val downUrl = "https://speed.cloudflare.com/__down?bytes=$BYTES"
+    private const val UP_URL = "https://speed.cloudflare.com/__up"
 
     data class Result(
         /** Мегабит в секунду через туннель, 0 — не получилось. */
         val throughTunnel: Double,
         /** Мегабит в секунду мимо туннеля, 0 — не получилось. */
         val direct: Double,
+        /** Отдача через туннель и мимо него. */
+        val uploadThroughTunnel: Double = 0.0,
+        val uploadDirect: Double = 0.0,
         val note: String = "",
     ) {
         val hasAny: Boolean get() = throughTunnel > 0 || direct > 0
@@ -37,12 +41,19 @@ object SpeedTest {
         /** Мешает ли VPN: сравниваем, только если оба замера удались. */
         val tunnelIsSlower: Boolean
             get() = throughTunnel > 0 && direct > 0 && direct > throughTunnel * 1.5
+
+        val uploadIsSlower: Boolean
+            get() = uploadThroughTunnel > 0 && uploadDirect > 0 &&
+                uploadDirect > uploadThroughTunnel * 1.5
     }
 
     suspend fun measure(context: Context): Result = withContext(Dispatchers.IO) {
-        val tunnel = download(network = null)
         val bypass = underlyingNetwork(context)
+
+        val tunnel = download(network = null)
         val direct = if (bypass != null) download(network = bypass) else 0.0
+        val upTunnel = upload(network = null)
+        val upDirect = if (bypass != null) upload(network = bypass) else 0.0
 
         val note = when {
             tunnel <= 0 && direct <= 0 -> "Не удалось скачать пробный файл — сеть не отвечает."
@@ -50,7 +61,47 @@ object SpeedTest {
             tunnel <= 0 -> "Через VPN скачать не удалось — похоже, туннель не работает."
             else -> ""
         }
-        Result(throughTunnel = tunnel, direct = direct, note = note)
+        Result(
+            throughTunnel = tunnel,
+            direct = direct,
+            uploadThroughTunnel = upTunnel,
+            uploadDirect = upDirect,
+            note = note,
+        )
+    }
+
+    /** Отдача: шлём поток нулей столько же секунд и считаем, сколько ушло. */
+    private fun upload(network: Network?): Double {
+        val deadline = System.currentTimeMillis() + SECONDS * 1_000L
+        var total = 0L
+        val started = System.nanoTime()
+
+        return try {
+            val connection = (network?.openConnection(URL(UP_URL)) ?: URL(UP_URL).openConnection())
+                as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.connectTimeout = 8_000
+            connection.readTimeout = 8_000
+            connection.useCaches = false
+            connection.setChunkedStreamingMode(64 * 1024)
+
+            val buffer = ByteArray(64 * 1024)
+            connection.outputStream.use { stream ->
+                while (System.currentTimeMillis() < deadline && total < BYTES) {
+                    stream.write(buffer)
+                    total += buffer.size
+                }
+                stream.flush()
+            }
+            connection.responseCode
+            connection.disconnect()
+
+            val seconds = (System.nanoTime() - started) / 1_000_000_000.0
+            if (total <= 0 || seconds <= 0) 0.0 else total * 8.0 / seconds / 1_000_000.0
+        } catch (error: Exception) {
+            0.0
+        }
     }
 
     /** Мегабиты в секунду. 0 — не получилось. */
@@ -60,7 +111,7 @@ object SpeedTest {
         val started = System.nanoTime()
 
         return try {
-            val connection = (network?.openConnection(URL(url)) ?: URL(url).openConnection())
+            val connection = (network?.openConnection(URL(downUrl)) ?: URL(downUrl).openConnection())
                 as HttpURLConnection
             connection.connectTimeout = 8_000
             connection.readTimeout = 8_000
