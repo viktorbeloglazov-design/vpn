@@ -1,6 +1,7 @@
 package kz.qpvpn.vpn
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import org.amnezia.awg.backend.Backend
 import org.amnezia.awg.backend.GoBackend
@@ -23,7 +24,7 @@ import kz.qpvpn.model.AppsMode
 import kz.qpvpn.model.ConnectionState
 import kz.qpvpn.model.RuleKind
 import kz.qpvpn.model.KeepInTunnel
-import kz.qpvpn.model.MasterFilter
+import kz.qpvpn.model.DirectApps
 import kz.qpvpn.model.TunnelMode
 import kz.qpvpn.model.TunnelStatus
 import kz.qpvpn.model.WorkFilter
@@ -89,6 +90,10 @@ class TunnelController(
      */
     @Volatile
     private var cachedZone: List<Ipv4Net>? = null
+
+    /** Найденные на телефоне программы, которым туннель показывать нельзя. */
+    @Volatile
+    private var cachedDirectApps: List<String>? = null
 
     private val link = LinkWatch(silenceMillis = SILENCE_MILLIS)
 
@@ -343,7 +348,9 @@ class TunnelController(
             allowed += "::/0"
         }
 
-        val apps = appsFor(config)
+        // Программы, которым VPN мешает жить: система не должна показывать
+        // им туннель вовсе, иначе МАХ скажет «Отключите VPN».
+        val apps = directApps()
 
         // Без своего DNS толку от туннеля мало: провайдер отвечает на
         // заблокированные имена подставным российским адресом, а тот идёт
@@ -361,7 +368,7 @@ class TunnelController(
         val text = effective.toConfigText(
             allowedIps = allowed,
             includeDns = config.options.useTunnelDns && config.effectiveMode != TunnelMode.INCLUDE,
-            appsMode = if (apps.isEmpty()) AppsMode.OFF else config.appsMode,
+            appsMode = if (apps.isEmpty()) AppsMode.OFF else AppsMode.EXCEPT_SELECTED,
             apps = apps,
         )
 
@@ -471,19 +478,43 @@ class TunnelController(
      * телефоне нет, отсеиваются — система откажется поднимать туннель с чужим
      * пакетом в списке.
      */
-    private fun appsFor(config: AppConfig): List<String> {
-        if (config.appsMode == AppsMode.OFF) return emptyList()
+    /**
+     * Что сейчас идёт мимо туннеля целиком — для экрана и отчёта.
+     *
+     * Человек должен видеть своими глазами, что МАХ в списке: иначе на
+     * слово «исправлено» полагаться нечем.
+     */
+    fun directAppNames(): List<String> = directApps()
 
-        val wanted = if (config.appsMode == AppsMode.ONLY_SELECTED && config.mainFilter) {
-            config.selectedApps + MasterFilter.packages
-        } else {
-            config.selectedApps
-        }
+    private fun directApps(): List<String> {
+        cachedDirectApps?.let { return it }
 
         val manager = context.packageManager
-        return wanted.distinct().filter { name ->
-            name != context.packageName && isInstalled(manager, name)
+        val found = LinkedHashSet<String>()
+
+        // Точные имена — проверяются напрямую: у предустановленных программ
+        // может не быть значка на экране, и в списке запускаемых их не видно.
+        for (name in DirectApps.packages) {
+            if (name != context.packageName && isInstalled(manager, name)) found += name
         }
+
+        // Остальное ищем среди установленных: по куску имени и по названию.
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val installed = try {
+            manager.queryIntentActivities(intent, 0)
+        } catch (error: Exception) {
+            emptyList()
+        }
+        for (info in installed) {
+            val name = info.activityInfo?.packageName ?: continue
+            if (name == context.packageName || name in found) continue
+            val label = runCatching { info.loadLabel(manager).toString() }.getOrDefault("")
+            if (DirectApps.matches(name, label)) found += name
+        }
+
+        val result = found.toList()
+        cachedDirectApps = result
+        return result
     }
 
     private fun isInstalled(manager: PackageManager, name: String): Boolean = try {

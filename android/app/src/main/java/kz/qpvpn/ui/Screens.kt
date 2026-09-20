@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VpnKey
@@ -81,6 +82,9 @@ data class ScreenState(
     val profileSummary: String,
     val profileProtocol: String,
     val ruZoneCount: Int,
+
+    /** Программы, которым туннель не показывается вовсе. */
+    val directApps: List<String>,
     val masterCount: Int,
     val masterSections: List<Pair<String, Int>>,
 
@@ -354,6 +358,31 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                 }
                 if (status.routeCount > 0) {
                     KeyValueRow("Маршрутов в туннеле", status.routeCount.toString())
+                }
+
+                if (state.directApps.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                        Icon(
+                            Icons.Filled.PhoneAndroid,
+                            contentDescription = null,
+                            tint = colors.connected,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Мимо VPN целиком", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                state.directApps.joinToString(", "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                "Эти программы сами отказываются работать при включённом VPN — " +
+                                    "для них его как будто нет.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
 
                 TextButton(onClick = { whatsInside = !whatsInside }) {

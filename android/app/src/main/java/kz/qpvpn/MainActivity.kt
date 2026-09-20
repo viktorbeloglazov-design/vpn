@@ -48,6 +48,7 @@ class MainActivity : ComponentActivity() {
     private var ipIsKazakhstan by mutableStateOf(false)
     private var checkingIp by mutableStateOf(false)
     private var ruZoneCount by mutableStateOf(0)
+    private var directApps by mutableStateOf<List<String>>(emptyList())
     private var notificationsAllowed by mutableStateOf(true)
     private var showScanner by mutableStateOf(false)
 
@@ -104,6 +105,7 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     ruZoneCount = withContext(Dispatchers.IO) { RuZone.count(this@MainActivity) }
+                    directApps = withContext(Dispatchers.IO) { directAppLabels() }
                 }
 
                 val profileSummary = remember(profileVersion) { summarizeProfile() }
@@ -129,6 +131,7 @@ class MainActivity : ComponentActivity() {
                         profileSummary = profileSummary,
                         profileProtocol = profileProtocol,
                         ruZoneCount = ruZoneCount,
+                        directApps = directApps,
                         masterCount = MasterFilter.count,
                         masterSections = MasterFilter.sections.map { it.title to it.domains.size },
                         notificationsAllowed = notificationsAllowed,
@@ -159,6 +162,20 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         notificationsAllowed = hasNotificationPermission()
         lifecycleScope.launch { app.tunnel.syncState() }
+    }
+
+    /**
+     * Названия программ, которые идут мимо VPN, — их показываем на экране.
+     *
+     * Имя пакета человеку ничего не говорит: он должен увидеть «МАХ».
+     */
+    private fun directAppLabels(): List<String> {
+        val manager = packageManager
+        return app.tunnel.directAppNames().map { name ->
+            runCatching {
+                manager.getApplicationLabel(manager.getApplicationInfo(name, 0)).toString()
+            }.getOrDefault(name)
+        }
     }
 
     private fun hasNotificationPermission(): Boolean =
@@ -359,6 +376,8 @@ class MainActivity : ComponentActivity() {
             appendLine("Сеть: ${networkKind()}")
             appendLine("Режим: $mode")
             appendLine("Рабочие ресурсы: ${if (config.workFilter) "через VPN" else "напрямую"}")
+            val direct = app.tunnel.directAppNames()
+            appendLine("Мимо VPN целиком: ${if (direct.isEmpty()) "нет таких программ" else direct.joinToString(", ")}")
             if (profile != null) {
                 appendLine("Сервер: ${profile.endpoint}")
                 appendLine("Протокол: ${profile.protocolName}, параметров маскировки: ${profile.amneziaParams.size}")

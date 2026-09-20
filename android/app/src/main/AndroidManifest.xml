@@ -7,12 +7,42 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- Чтобы показать список программ для маршрутизации по приложениям. -->
+    <!--
+      Чтобы показать список программ и чтобы система призналась, что МАХ и
+      прочие установлены: без этого getPackageInfo врёт про отсутствие.
+    -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <package android:name="ru.oneme.app" />
+        <package android:name="ru.oneme.app.beta" />
+        <package android:name="ru.ok.messages" />
+        <package android:name="ru.rostel" />
+        <package android:name="ru.gosuslugi.doc" />
+        <package android:name="ru.gosuslugi.goskey" />
+        <package android:name="ru.fns.billsCheck" />
+        <package android:name="com.nalog.lkfl2" />
+        <package android:name="ru.sberbankmobile" />
+        <package android:name="ru.sberbank.sbol" />
+        <package android:name="com.idamob.tinkoff.android" />
+        <package android:name="ru.vtb24.mobilebanking.android" />
+        <package android:name="ru.alfabank.mobile.android" />
+        <package android:name="ru.raiffeisennews" />
+        <package android:name="ru.gazprombank.android.mobilebank.app" />
+        <package android:name="ru.psbank.mobile" />
+        <package android:name="ru.mkb.mobile" />
+        <package android:name="ru.rshb.mbank" />
+        <package android:name="ru.otpbank.mobile" />
+        <package android:name="ru.nspk.mirpay" />
+        <package android:name="ru.nspk.sbpay" />
+        <package android:name="ru.mts.mymts" />
+        <package android:name="ru.megafon.mlk" />
+        <package android:name="ru.beeline.services" />
+        <package android:name="ru.tele2.mytele2" />
+        <package android:name="ru.mos.polis" />
+        <package android:name="ru.mos.mospolytech" />
     </queries>
 
     <application
