@@ -81,6 +81,56 @@ enum Cidr {
         return merged.flatMap { rangeToNets(from: $0.0, to: $0.1) }
     }
 
+
+    /// Схлопывает подсети, прощая небольшие промежутки между ними.
+    ///
+    /// Точный список России — это тысячи кусков. Соседние почти всегда
+    /// разделены сотней-другой свободных адресов; если такие промежутки
+    /// прощать, список становится в разы короче, а туннель поднимается
+    /// заметно быстрее.
+    static func mergeWithGap(_ nets: [Ipv4Net], gap: Int64) -> [Ipv4Net] {
+        guard !nets.isEmpty else { return [] }
+        let ranges = nets.map { (Int64($0.start), $0.endInclusive) }.sorted { $0.0 < $1.0 }
+
+        var merged: [(Int64, Int64)] = []
+        for range in ranges {
+            if let last = merged.last, range.0 <= last.1 + 1 + gap {
+                merged[merged.count - 1] = (last.0, max(last.1, range.1))
+            } else {
+                merged.append(range)
+            }
+        }
+        return merged.flatMap { rangeToNets(from: $0.0, to: $0.1) }
+    }
+
+    static func subtract(_ nets: [Ipv4Net], _ removed: [Ipv4Net]) -> [Ipv4Net] {
+        guard !removed.isEmpty else { return merge(nets) }
+
+        let holes = merge(removed).map { (Int64($0.start), $0.endInclusive) }
+        var result: [Ipv4Net] = []
+
+        for net in merge(nets) {
+            var pieces: [(Int64, Int64)] = [(Int64(net.start), net.endInclusive)]
+            for hole in holes {
+                var next: [(Int64, Int64)] = []
+                for piece in pieces {
+                    if hole.1 < piece.0 || hole.0 > piece.1 {
+                        next.append(piece)
+                        continue
+                    }
+                    if hole.0 > piece.0 { next.append((piece.0, hole.0 - 1)) }
+                    if hole.1 < piece.1 { next.append((hole.1 + 1, piece.1)) }
+                }
+                pieces = next
+                if pieces.isEmpty { break }
+            }
+            for piece in pieces {
+                result += rangeToNets(from: piece.0, to: piece.1)
+            }
+        }
+        return result
+    }
+
     /// Всё адресное пространство минус перечисленные подсети.
     static func complement(_ excluded: [Ipv4Net]) -> [Ipv4Net] {
         guard !excluded.isEmpty else { return [Ipv4Net(start: 0, prefix: 0)] }

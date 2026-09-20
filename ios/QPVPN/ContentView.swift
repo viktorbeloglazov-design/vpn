@@ -17,7 +17,6 @@ enum Brand {
 struct ContentView: View {
     @EnvironmentObject private var model: AppModel
     @State private var showScanner = false
-    @State private var showAdvanced = false
     @State private var showInside = false
 
     private let ticker = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
@@ -34,7 +33,6 @@ struct ContentView: View {
                     workCard
                     keyCard
                     checkCard
-                    advancedSection
                     Text("QP VPN 1.0 · AmneziaWG и WireGuard")
                         .font(.caption2)
                         .foregroundColor(Brand.muted)
@@ -118,26 +116,28 @@ struct ContentView: View {
         }
     }
 
+    /// Как идёт трафик — без переключателей: маршрутизация зашита.
     private var masterCard: some View {
-        Card(highlighted: model.config.mainFilter) {
+        Card(highlighted: true) {
             VStack(alignment: .leading, spacing: 10) {
-                Toggle(isOn: $model.config.mainFilter) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Обход блокировок").font(.headline)
-                        Text("\(MasterFilter.count) сервисов · нейросети, соцсети, мессенджеры, видео, работа")
-                            .font(.caption2)
-                            .foregroundColor(Brand.muted)
-                    }
+                Text("Как идёт трафик").font(.headline)
+
+                row(icon: "shield.lefthalf.filled",
+                    title: "Заблокированные сервисы",
+                    detail: "Идут через VPN, казахстанский адрес")
+
+                row(icon: "house",
+                    title: "Российские сайты",
+                    detail: "МАХ, госуслуги, банки, маркетплейсы — напрямую "
+                        + "(\(RuZone.count()) подсетей России)")
+
+                if model.tunnel.routeCount > 0 {
+                    Text("Маршрутов в туннеле: \(model.tunnel.routeCount)")
+                        .font(.caption2)
+                        .foregroundColor(Brand.muted)
                 }
-                .tint(Brand.ocean)
 
-                Text(model.config.mainFilter
-                     ? "Через VPN идут только эти сервисы. Всё остальное — банки, госуслуги, маркетплейсы, любой российский сайт — работает напрямую."
-                     : "Выключен: маршруты задаются вручную в расширенных настройках.")
-                    .font(.caption)
-                    .foregroundColor(Brand.muted)
-
-                Button(showInside ? "Свернуть список" : "Что внутри") {
+                Button(showInside ? "Свернуть список" : "Что работает через VPN") {
                     withAnimation { showInside.toggle() }
                 }
                 .font(.caption)
@@ -153,8 +153,28 @@ struct ContentView: View {
                                 .foregroundColor(Brand.muted)
                         }
                     }
+                    Text("Это примеры: через VPN уходит всё, кроме российских подсетей, "
+                         + "поэтому работает и то, чего в списке нет.")
+                        .font(.caption2)
+                        .foregroundColor(Brand.muted)
                 }
             }
+        }
+    }
+
+    private func row(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .foregroundColor(Brand.sky)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.medium))
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundColor(Brand.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
         }
     }
 
@@ -235,52 +255,6 @@ struct ContentView: View {
                 }
             }
         }
-    }
-
-    private var advancedSection: some View {
-        DisclosureGroup(isExpanded: $showAdvanced) {
-            Card {
-                VStack(alignment: .leading, spacing: 10) {
-                    if model.config.mainFilter {
-                        Text("Главный фильтр включён — он задаёт маршруты сам. Настройки ниже начнут действовать, когда вы его выключите.")
-                            .font(.caption2)
-                            .foregroundColor(Brand.waiting)
-                    }
-
-                    Text("Режим маршрутизации").font(.subheadline.weight(.semibold))
-                    Picker("Режим", selection: $model.config.mode) {
-                        ForEach(TunnelMode.allCases, id: \.self) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-
-                    Toggle("Российская зона мимо VPN", isOn: $model.config.bypassRuZone)
-                        .font(.subheadline)
-                        .tint(Brand.ocean)
-                    Text("Встроенный список: \(RuZone.count()) подсетей России.")
-                        .font(.caption2)
-                        .foregroundColor(Brand.muted)
-
-                    Toggle("DNS-серверы из профиля", isOn: $model.config.useTunnelDns)
-                        .font(.subheadline)
-                        .tint(Brand.ocean)
-
-                    if model.tunnel.routeCount > 0 {
-                        Text("Сейчас в туннеле маршрутов: \(model.tunnel.routeCount)")
-                            .font(.caption2)
-                            .foregroundColor(Brand.muted)
-                    }
-                }
-            }
-            .padding(.top, 8)
-        } label: {
-            Text("Расширенные настройки")
-                .font(.subheadline)
-                .foregroundColor(Brand.muted)
-        }
-        .tint(Brand.muted)
     }
 
     // MARK: - Мелочи

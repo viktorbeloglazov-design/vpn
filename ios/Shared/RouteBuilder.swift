@@ -2,69 +2,65 @@ import Foundation
 
 /// Считает, что уходит в туннель.
 ///
-/// Логика одна на все платформы: главный фильтр превращается в список
-/// адресов, рабочие ресурсы добавляются поверх, российская зона вычитается.
+/// Логика одна на все платформы и не настраивается: через VPN идёт всё,
+/// кроме российской зоны, а рабочие ресурсы возвращаются в туннель поверх
+/// неё — если человек не выключил их единственным переключателем.
 enum RouteBuilder {
 
+    /// Столько маршрутов система принимает спокойно.
+    private static let maxRoutes = 4_000
+
+    /// Шаги укрупнения: насколько большой промежуток между подсетями прощаем.
+    private static let gaps: [Int64] = [4_096, 16_384, 65_536, 262_144, 1_048_576]
+
     static func routes(for config: AppConfig, profile: WgProfile, bundle: Bundle = .main) async -> [String] {
-        let nets = await resolveRules(config)
         let work = await workNets()
 
-        switch config.effectiveMode {
-        case .full:
-            if config.workFilter || work.isEmpty { return ["0.0.0.0/0"] }
-            // Рабочие ресурсы выключены — вычитаем их из полного туннеля.
-            return Cidr.complement(work).map(\.text)
+        // Маршрутизация зашита: через VPN идёт всё, кроме российской зоны.
+        // Так заблокированный сервис открывается, даже если его адрес
+        // программе незнаком, а банки и госуслуги работают напрямую.
+        let zone = fittingRuZone(bundle: bundle)
 
-        case .include:
-            let included = config.workFilter ? nets + work : nets
-            if included.isEmpty {
-                // Пустой список туннель не примет: оставляем адрес самого клиента.
-                let address = profile.addresses.first?.split(separator: "/").first.map(String.init)
-                return [address.map { "\($0)/32" } ?? "0.0.0.0/32"]
-            }
-            return Cidr.merge(included).map(\.text)
-
-        case .exclude:
-            let excluded = config.bypassRuZone ? nets + RuZone.networks(bundle: bundle) : nets
-
-            if config.workFilter {
-                // Рабочие ресурсы сильнее исключений: возвращаем их в туннель.
-                let background = excluded.isEmpty ? [Ipv4Net(start: 0, prefix: 0)] : Cidr.complement(excluded)
-                return Cidr.merge(background + work).map(\.text)
-            }
-
-            let all = excluded + work
-            return all.isEmpty ? ["0.0.0.0/0"] : Cidr.complement(all).map(\.text)
+        if config.workFilter {
+            // Рабочие ресурсы сильнее исключений: возвращаем их в туннель,
+            // даже если они попали в российскую зону.
+            let background = zone.isEmpty ? [Ipv4Net(start: 0, prefix: 0)] : Cidr.complement(zone)
+            return Cidr.merge(background + work).map(\.text)
         }
+
+        let all = zone + work
+        return all.isEmpty ? ["0.0.0.0/0"] : Cidr.complement(all).map(\.text)
     }
 
-    /// Разворачивает правила в адреса. Когда включён главный фильтр,
-    /// к правилам добавляется встроенный список сервисов.
-    private static func resolveRules(_ config: AppConfig) async -> [Ipv4Net] {
-        var result: [Ipv4Net] = []
-        var domains: [String] = []
+    /// Российская зона, ужатая до размера, который система принимает.
+    ///
+    /// Точный список даёт больше двадцати тысяч маршрутов: столько система
+    /// принимает долго, и туннель поднимается заметными секундами. Список
+    /// укрупняется, пока маршрутов не станет разумное количество, а сервисы,
+    /// которые при этом могли бы уйти мимо туннеля, возвращаются обратно.
+    private static func fittingRuZone(bundle: Bundle) -> [Ipv4Net] {
+        if let cached = cachedZone { return cached }
 
-        for rule in config.activeRules {
-            switch rule.kind {
-            case .cidr:
-                if let net = Cidr.parse(rule.value) { result.append(net) }
-            case .domain:
-                domains.append(rule.value.trimmingCharacters(in: .whitespaces).lowercased())
-            }
+        let exact = RuZone.networks(bundle: bundle)
+        guard !exact.isEmpty else { return [] }
+
+        let keep = KeepInTunnel.nets()
+        var zone = Cidr.subtract(exact, keep)
+        var routes = Cidr.complement(zone).count
+        var step = 0
+
+        while routes > maxRoutes && step < gaps.count {
+            zone = Cidr.subtract(Cidr.mergeWithGap(exact, gap: gaps[step]), keep)
+            routes = Cidr.complement(zone).count
+            step += 1
         }
 
-        if config.mainFilter {
-            domains += MasterFilter.domains
-        }
-
-        if !domains.isEmpty {
-            result += await DomainResolver.resolveAll(domains)
-        }
-
-        var seen = Set<Ipv4Net>()
-        return result.filter { seen.insert($0).inserted }
+        cachedZone = zone
+        return zone
     }
+
+    /// Считается один раз за запуск: файл не меняется.
+    private static var cachedZone: [Ipv4Net]?
 
     /// Адреса рабочих ресурсов: заложенные в приложение узлы.
     private static func workNets() async -> [Ipv4Net] {

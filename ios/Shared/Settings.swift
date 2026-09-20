@@ -44,13 +44,18 @@ struct RoutingRule: Codable, Identifiable, Hashable {
 struct AppConfig: Codable, Equatable {
     var version = 1
 
-    /// Главный фильтр: через VPN идёт только то, что не работает из России.
+    /// Главный фильтр: через VPN идёт всё, кроме российских адресов.
+    ///
+    /// Заблокированный сервис открывается, даже если его адрес программе
+    /// незнаком: снаружи туннеля остаётся только российская зона.
     var mainFilter = true
 
     /// Рабочие ресурсы: заложенные адреса идут через VPN.
+    ///
+    /// Единственное, что человек выбирает сам, — всё остальное зашито.
     var workFilter = true
 
-    var mode: TunnelMode = .full
+    var mode: TunnelMode = .exclude
     var rules: [RoutingRule] = []
 
     /// Использовать DNS-серверы из профиля.
@@ -63,8 +68,23 @@ struct AppConfig: Codable, Equatable {
         rules.filter { $0.enabled && !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 
-    /// Режим, который действительно применяется с учётом главного фильтра.
-    var effectiveMode: TunnelMode { mainFilter ? .include : mode }
+    /// Режим, который действительно применяется.
+    var effectiveMode: TunnelMode { .exclude }
+
+    /// Настройки, приведённые к зашитому поведению.
+    ///
+    /// Маршрутизация не настраивается: заблокированные сервисы всегда идут
+    /// через VPN, российские адреса — всегда напрямую. Человек выбирает
+    /// только рабочие ресурсы, поэтому `workFilter` здесь не трогается.
+    func pinned() -> AppConfig {
+        var copy = self
+        copy.mainFilter = true
+        copy.mode = .exclude
+        copy.rules = []
+        copy.useTunnelDns = true
+        copy.bypassRuZone = true
+        return copy
+    }
 }
 
 /// Настройки на диске. Ключ здесь не хранится: он уезжает в системное
@@ -79,9 +99,11 @@ final class Store {
     }
 
     init() {
+        // Что бы ни лежало в памяти от прошлых версий, в работу уходит
+        // одно и то же поведение: настраивать маршруты больше негде.
         if let data = defaults.data(forKey: key),
            let stored = try? JSONDecoder().decode(AppConfig.self, from: data) {
-            config = stored
+            config = stored.pinned()
         } else {
             config = AppConfig()
         }
@@ -90,7 +112,7 @@ final class Store {
     func update(_ transform: (inout AppConfig) -> Void) {
         var copy = config
         transform(&copy)
-        config = copy
+        config = copy.pinned()
     }
 
     private func save() {
