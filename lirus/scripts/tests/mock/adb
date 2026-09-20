@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Подставной adb для проверки check_ru.sh без машины.
+set -euo pipefail
+
+args=("$@")
+if [ "${args[0]:-}" = "-s" ]; then
+    args=("${args[@]:2}")
+fi
+verb="${args[0]:-}"
+rest=("${args[@]:1}")
+
+case "$verb" in
+    devices)
+        printf 'List of devices attached\nMOCKL9\tdevice\n'
+        ;;
+    shell)
+        sub="${rest[0]:-}"
+        case "$sub" in
+            getprop)
+                case "${rest[1]:-}" in
+                    ro.build.version.release) echo "11" ;;
+                    ro.build.version.sdk) echo "30" ;;
+                    ro.build.display.id) echo "LiOS-8.6.0" ;;
+                    ro.build.fingerprint) echo "lixiang/x01/x01:11/LiOS8.6.0/8.6.0:user/release-keys" ;;
+                    ro.product.model) echo "Li L9" ;;
+                    ro.product.device) echo "x01" ;;
+                    persist.sys.locale) echo "zh-CN" ;;
+                    ro.product.locale) echo "zh-CN" ;;
+                    "") printf '[persist.sys.locale]: [zh-CN]\n[ro.product.locale]: [zh-CN]\n' ;;
+                    *) echo "" ;;
+                esac
+                ;;
+            settings) echo "zh-CN,en-US" ;;
+            am) printf 'config: mcc460-mnc00-zh-rCN-ldltr-sw1280dp\nabi: arm64-v8a\n' ;;
+            cmd) printf '[x] com.android.systemui.overlay\n' ;;
+            ls)
+                if [ "${rest[1]:-}" = "-l" ]; then
+                    printf -- '-rw-r--r-- 1 root root 10485760 2024-01-01 00:00 %s\n' "${rest[2]:-}"
+                else
+                    printf 'framework-res__auto_generated_rro.apk\n'
+                fi
+                ;;
+            pm)
+                case "${rest[1]:-}" in
+                    list)
+                        cat <<'PKGS'
+package:/system/priv-app/Settings/Settings.apk=com.android.settings
+package:/system/priv-app/SystemUI/SystemUI.apk=com.android.systemui
+package:/system/priv-app/CarLauncher/CarLauncher.apk=com.lixiang.launcher
+package:/system/app/Hvac/Hvac.apk=com.chj.hvac
+package:/system/app/Cluster/Cluster.apk=com.chj.cluster
+package:/data/app/~~a==/com.chj.media-b==/base.apk=com.chj.media
+package:/system/app/Calculator/Calculator.apk=com.android.calculator2
+PKGS
+                        ;;
+                    *) echo "" ;;
+                esac
+                ;;
+            *) echo "" ;;
+        esac
+        ;;
+    pull)
+        remote="${rest[0]:-}"
+        local_path="${rest[1]:-}"
+        printf '%s\n' "$remote" > "$local_path"
+        printf '1 file pulled.\n'
+        ;;
+    *) echo "" ;;
+esac

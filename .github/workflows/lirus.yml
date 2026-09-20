@@ -1,0 +1,36 @@
+name: lirus
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "lirus/**"
+      - ".github/workflows/lirus.yml"
+  workflow_dispatch:
+
+jobs:
+  checks:
+    name: Проверка скриптов
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Разбор синтаксиса
+        run: bash -n lirus/scripts/check_ru.sh && bash -n lirus/scripts/tests/run.sh
+
+      - name: shellcheck
+        run: shellcheck --severity=warning lirus/scripts/check_ru.sh lirus/scripts/tests/run.sh
+
+      - name: Проверка на подставных adb и aapt2
+        run: ./lirus/scripts/tests/run.sh
+
+      - name: Скрипт ничего не пишет в машину
+        run: |
+          # Отдельная проверка помимо тестов: в коде не должно быть команд,
+          # которые меняют состояние автомобиля.
+          if grep -vE '^[[:space:]]*#' lirus/scripts/check_ru.sh \
+            | grep -nE '(settings put|setprop|pm (install|uninstall|grant|disable)|am (start|broadcast)|mount )'; then
+            echo "В скрипте проверки появилась команда, меняющая машину." >&2
+            exit 1
+          fi
+          echo "только чтение — в порядке"

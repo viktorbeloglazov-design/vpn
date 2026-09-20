@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Подставной aapt2: выдаёт ресурсы по сценарию MOCK_PROFILE.
+set -euo pipefail
+
+what="${2:-}"
+apk="${3:-}"
+remote="$(head -1 "$apk" 2>/dev/null || echo "")"
+profile="${MOCK_PROFILE:-mixed}"
+
+# Сколько строк на каком языке — зависит от пакета и сценария.
+base=1000
+ru=0
+en=800
+zh=1000
+
+case "$profile" in
+    mixed)   # рамка переведена, фирменные экраны — нет
+        case "$remote" in
+            *framework-res*) ru=800 ;;
+            *Settings*) ru=150 ;;
+            *) ru=0 ;;
+        esac
+        ;;
+    full)    # переведено всё
+        ru=900
+        ;;
+    none)    # русского нет нигде
+        ru=0
+        ;;
+esac
+
+case "$what" in
+    configurations)
+        echo ""
+        echo "en"
+        echo "zh-rCN"
+        [ "$ru" -gt 0 ] && echo "ru-rRU"
+        exit 0
+        ;;
+    resources)
+        echo "Package name=mock id=7f"
+        echo "  type string id=0e entryCount=$base"
+        i=0
+        while [ "$i" -lt "$base" ]; do
+            printf '    resource 0x7f0e%04x string/text_%d\n' "$i" "$i"
+            printf '      () "文本"\n'
+            [ "$i" -lt "$en" ] && printf '      (en) "text"\n'
+            [ "$i" -lt "$zh" ] && printf '      (zh-rCN) "文本"\n'
+            [ "$i" -lt "$ru" ] && printf '      (ru-rRU) "текст"\n'
+            i=$((i + 1))
+        done
+        exit 0
+        ;;
+esac
