@@ -233,8 +233,9 @@ analyze_one() {
     fi
 
     if has_ru_config "$local_apk"; then ru_cfg="да"; else ru_cfg="нет"; fi
-    set -- $(count_strings "$local_apk")
-    ru="${1:-0}"; en="${2:-0}"; zh="${3:-0}"; base="${4:-0}"
+    ru=0; en=0; zh=0; base=0
+    counts="$(count_strings "$local_apk")"
+    IFS=' ' read -r ru en zh base <<< "$counts"
 
     coverage="$(awk -v ru="$ru" -v base="$base" 'BEGIN { if (base > 0) printf "%.1f", ru * 100 / base; else print "0.0" }')"
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
