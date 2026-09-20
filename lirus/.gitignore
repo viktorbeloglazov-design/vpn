@@ -1,0 +1,5 @@
+scripts/probe_report.txt
+*.apk
+build/
+.gradle/
+local.properties
