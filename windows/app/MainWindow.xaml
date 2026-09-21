@@ -134,6 +134,22 @@
                     <Button Content="Открыть файл .conf или картинку с QR-кодом" Click="OnOpenFile" />
                     <Button x:Name="ClearProfileButton" Content="Удалить ключ" Click="OnClearProfile" />
                     <TextBlock x:Name="ImportNote" Style="{StaticResource Hint}" Margin="0,8,0,0" />
+
+                    <TextBlock Text="Запасной вход" Foreground="{StaticResource OnSurface}" Margin="0,14,0,0" />
+                    <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap"
+                               Text="Необязательно. Адрес узла-пересыльщика в виде адрес:порт. Программа пробует сервер напрямую, а если он не ответит — этот узел. Ключ менять не нужно." />
+                    <TextBox x:Name="BackupEndpointBox" Margin="0,6,0,0" Padding="6"
+                             Background="{StaticResource SurfaceVariant}" Foreground="{StaticResource OnSurface}"
+                             BorderThickness="0" LostFocus="OnBackupEndpointChanged" />
+                </StackPanel>
+            </Border>
+
+            <!-- Обновление -->
+            <Border x:Name="UpdateCard" Style="{StaticResource Card}" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock x:Name="UpdateTitle" Style="{StaticResource Title}" Text="Вышла новая версия" />
+                    <TextBlock x:Name="UpdateHint" Style="{StaticResource Hint}" TextWrapping="Wrap" />
+                    <Button x:Name="UpdateButton" Content="Обновить" Click="OnInstallUpdate" />
                 </StackPanel>
             </Border>
 
@@ -151,12 +167,12 @@
                     <TextBlock Text="Размер пакета (MTU)" Foreground="{StaticResource OnSurface}"
                                Margin="0,12,0,0" />
                     <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap"
-                               Text="В гостевых сетях — в кафе, гостиницах — большие пакеты часто не проходят целиком, и скорость падает в разы. Если замер расстроил, пробуйте по порядку." />
+                               Text="В гостевых и мобильных сетях большие пакеты часто не проходят целиком: сообщения уходят, а видео крутится и не качается. На «Авто» программа подбирает размер сама." />
                     <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <RadioButton x:Name="MtuKey" GroupName="Mtu" Foreground="{StaticResource OnSurface}"
+                                     Content="Авто" Checked="OnMtuChanged" Margin="0,0,14,0" />
                         <RadioButton x:Name="Mtu1420" GroupName="Mtu" Foreground="{StaticResource OnSurface}"
                                      Content="1420" Checked="OnMtuChanged" Margin="0,0,14,0" />
-                        <RadioButton x:Name="MtuKey" GroupName="Mtu" Foreground="{StaticResource OnSurface}"
-                                     Content="Из ключа" Checked="OnMtuChanged" Margin="0,0,14,0" />
                         <RadioButton x:Name="Mtu1380" GroupName="Mtu" Foreground="{StaticResource OnSurface}"
                                      Content="1380" Checked="OnMtuChanged" Margin="0,0,14,0" />
                         <RadioButton x:Name="Mtu1280" GroupName="Mtu" Foreground="{StaticResource OnSurface}"
@@ -172,6 +188,12 @@
                     <TextBlock Style="{StaticResource Hint}" Text="Посмотрите, из какой страны вас видят сайты." />
                     <Button x:Name="CheckIpButton" Content="Проверить мой IP" Click="OnCheckIp" />
                     <TextBlock x:Name="IpText" Style="{StaticResource Hint}" Margin="0,8,0,0" />
+
+                    <TextBlock Text="Обновление" Foreground="{StaticResource OnSurface}" Margin="0,14,0,0" />
+                    <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap"
+                               Text="Программа сама смотрит раз в сутки, не вышла ли новая версия. Здесь можно спросить прямо сейчас." />
+                    <Button x:Name="CheckUpdateButton" Content="Проверить обновления" Click="OnCheckUpdate" />
+                    <TextBlock x:Name="UpdateStateText" Style="{StaticResource Hint}" Margin="0,8,0,0" />
                 </StackPanel>
             </Border>
 

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -36,6 +38,7 @@ public partial class MainWindow : Window
             await RefreshAsync();
             _timer.Tick += async (_, _) => await RefreshAsync();
             _timer.Start();
+            await CheckForUpdateAsync(force: false);
         };
     }
 
@@ -45,6 +48,7 @@ public partial class MainWindow : Window
     {
         var config = _store.Config;
         WorkFilterSwitch.IsChecked = config.WorkFilter;
+        BackupEndpointBox.Text = config.BackupEndpoint;
         Mtu1420.IsChecked = config.Mtu == 1420;
         MtuKey.IsChecked = config.Mtu == 0;
         Mtu1380.IsChecked = config.Mtu == 1380;
@@ -74,11 +78,21 @@ public partial class MainWindow : Window
             _ => (System.Windows.Media.Brush)FindResource("OnSurface"),
         };
 
-        StateSubtitle.Text = status.Message.Length > 0
-            ? status.Message
-            : status.State == ConnectionState.Connected
-                ? $"Сервер {status.ServerName} · маршрутов: {status.RouteCount}"
+        if (status.State == ConnectionState.Connected)
+        {
+            // Внизу приписываем то, что человек сам не увидит: каким входом
+            // поднялась связь и какой размер пакета в итоге подошёл.
+            var parts = new List<string> { $"Сервер {status.ServerName}", $"маршрутов: {status.RouteCount}" };
+            if (_tunnel.UsedBackupEntry) parts.Add("через запасной вход");
+            if (_tunnel.ActiveMtu > 0) parts.Add($"пакет {_tunnel.ActiveMtu}");
+            StateSubtitle.Text = string.Join(" · ", parts);
+        }
+        else
+        {
+            StateSubtitle.Text = status.Message.Length > 0
+                ? status.Message
                 : _store.HasProfile ? "Ключ загружен" : "Ключ не загружен";
+        }
 
         PowerButton.Content = status.State == ConnectionState.Connected ? "Выключить" : "Включить";
         PowerButton.IsEnabled = !_busy;
@@ -101,7 +115,7 @@ public partial class MainWindow : Window
         ProfileText.Text = _store.HasProfile ? ProfileSummary() : "Ключа нет. Вставьте ссылку vpn:// или откройте файл.";
         ClearProfileButton.Visibility = _store.HasProfile ? Visibility.Visible : Visibility.Collapsed;
 
-        VersionText.Text = "QP VPN 1.0 · AmneziaWG и WireGuard";
+        VersionText.Text = $"QP VPN {AppVersion} · AmneziaWG и WireGuard";
     }
 
     private string ProfileSummary()
@@ -174,6 +188,99 @@ public partial class MainWindow : Window
         Render();
         _ = ReapplyAsync();
     }
+
+    /// <summary>
+    /// Запасной вход: узел, который пересылает пакеты на сервер.
+    ///
+    /// Ключ при этом не меняется, поэтому и переподключаться незачем —
+    /// адрес пригодится при следующем включении.
+    /// </summary>
+    private void OnBackupEndpointChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        _store.Config.BackupEndpoint = BackupEndpointBox.Text.Trim();
+        _store.Save();
+    }
+
+    // MARK: - Обновление
+
+    /// <summary>
+    /// Смотрит, не вышла ли новая версия.
+    ///
+    /// Программа ставится архивом с сайта, мимо магазина: напомнить о новой
+    /// версии некому, поэтому смотрим сами — раз в сутки.
+    /// </summary>
+    private async Task CheckForUpdateAsync(bool force)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (!force && now - _store.Config.LastUpdateCheck < UpdateCheck.CheckInterval) return;
+
+        var latest = await UpdateCheck.LatestVersionAsync();
+        _store.Config.LastUpdateCheck = now;
+        _store.Save();
+
+        if (latest is null)
+        {
+            UpdateCard.Visibility = Visibility.Collapsed;
+            if (force) UpdateStateText.Text = "Не удалось спросить сервер. Попробуйте позже.";
+            return;
+        }
+
+        if (!UpdateCheck.IsNewer(latest, AppVersion))
+        {
+            UpdateCard.Visibility = Visibility.Collapsed;
+            if (force) UpdateStateText.Text = $"Установлена последняя версия {AppVersion}.";
+            return;
+        }
+
+        _updateVersion = latest;
+        UpdateTitle.Text = $"Вышла версия {latest}";
+        UpdateHint.Text = $"Установлена {AppVersion}. Скачается архив — распакуйте его поверх "
+            + "текущей папки с заменой. Ключ и настройки останутся на месте.";
+        UpdateCard.Visibility = Visibility.Visible;
+        UpdateStateText.Text = $"Есть версия {latest} — кнопка «Обновить» наверху.";
+    }
+
+    /// <summary>Спросить о новой версии прямо сейчас, не дожидаясь суточной проверки.</summary>
+    private async void OnCheckUpdate(object sender, RoutedEventArgs e)
+    {
+        CheckUpdateButton.IsEnabled = false;
+        UpdateStateText.Text = "Смотрю…";
+        await CheckForUpdateAsync(force: true);
+        CheckUpdateButton.IsEnabled = true;
+    }
+
+    /// <summary>Скачивает архив и показывает его в проводнике.</summary>
+    private async void OnInstallUpdate(object sender, RoutedEventArgs e)
+    {
+        if (!UpdateButton.IsEnabled) return;
+
+        UpdateButton.IsEnabled = false;
+        UpdateButton.Content = "Скачиваю…";
+        var progress = new Progress<int>(percent => UpdateButton.Content = $"Скачиваю… {percent}%");
+
+        var archive = await UpdateCheck.DownloadAsync(progress);
+
+        UpdateButton.IsEnabled = true;
+        UpdateButton.Content = "Обновить";
+
+        if (archive is null)
+        {
+            UpdateHint.Text = "Скачать не удалось. Попробуйте ещё раз или скачайте вручную.";
+            return;
+        }
+
+        UpdateHint.Text = $"Архив версии {_updateVersion} скачан. Закройте программу, распакуйте "
+            + "его поверх текущей папки с заменой и запустите снова.";
+        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{archive}\"") { UseShellExecute = true });
+    }
+
+    private string _updateVersion = "";
+
+    private static string AppVersion =>
+        System.Reflection.Assembly.GetExecutingAssembly().GetName().Version is { } version
+            ? $"{version.Major}.{version.Minor}.{version.Build}"
+            : "0.0.0";
 
     /// <summary>
     /// Размер пакета. Задаётся при подключении, поэтому туннель пересобирается.

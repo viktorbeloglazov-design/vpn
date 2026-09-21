@@ -78,7 +78,9 @@ public sealed class TunnelController
             return Status = new TunnelStatus(ConnectionState.Error, $"Маршруты не посчитались: {error.Message}");
         }
 
-        var text = profile.ToConfigText(routes, _store.Config.UseTunnelDns, _store.Config.Mtu);
+        var config = _store.Config;
+        var endpoints = config.EndpointsToTry(profile.Endpoint);
+        var text = profile.ToConfigText(routes, config.UseTunnelDns, config.Mtu);
 
         try
         {
@@ -96,10 +98,13 @@ public sealed class TunnelController
                 stderr.Length > 0 ? stderr : "Служба туннеля не запустилась.");
         }
 
-        return Status = new TunnelStatus(
+        Status = new TunnelStatus(
             ConnectionState.Connected,
             RouteCount: routes.Count,
             ServerName: profile.EndpointHost);
+
+        await VerifyAndTuneAsync(profile, routes, endpoints).ConfigureAwait(false);
+        return Status;
     }
 
     public async Task<TunnelStatus> DisconnectAsync()
@@ -172,6 +177,78 @@ public sealed class TunnelController
         return all.Count == 0
             ? new List<string> { "0.0.0.0/0" }
             : Cidr.Complement(all).Select(net => net.ToString()).ToList();
+    }
+
+    /// <summary>Каким входом поднялась связь и с каким размером пакета.</summary>
+    public bool UsedBackupEntry { get; private set; }
+
+    public int ActiveMtu { get; private set; }
+
+    /// <summary>Размеры пакета сверху вниз: чем больше, тем быстрее.</summary>
+    private static readonly int[] MtuLadder = { 1420, 1380, 1320, 1280 };
+
+    /// <summary>
+    /// Доводит поднятый туннель до рабочего состояния.
+    ///
+    /// Сначала убеждаемся, что через него вообще идут большие порции данных.
+    /// Не идут — пробуем запасной вход, если он задан, а потом уменьшаем
+    /// размер пакета, пока не пойдут. Каждая перенастройка — это короткий
+    /// перезапуск службы туннеля, маршруты при этом те же самые.
+    /// </summary>
+    private async Task VerifyAndTuneAsync(WgProfile profile, List<string> routes, List<string> endpoints)
+    {
+        var config = _store.Config;
+        UsedBackupEntry = false;
+
+        if (await BulkCheck.WorksAsync().ConfigureAwait(false))
+        {
+            ActiveMtu = config.Mtu > 0 ? config.Mtu : profile.Mtu;
+            return;
+        }
+
+        // Размеры пакета: с того, что подошло в прошлый раз, и ниже.
+        var start = config.ProbedMtu > 0 ? config.ProbedMtu : Math.Min(profile.Mtu, MtuLadder[0]);
+        var ladder = config.Mtu > 0
+            ? new List<int> { config.Mtu }
+            : new List<int> { start }.Concat(MtuLadder.Where(value => value < start)).ToList();
+
+        // Одно сочетание уже проверено выше — им туннель и поднимался.
+        // Повторять его значит зря гонять службу туда-обратно.
+        var triedMtu = config.Mtu > 0 ? config.Mtu : profile.Mtu;
+
+        foreach (var endpoint in endpoints)
+        {
+            var viaBackup = endpoint != endpoints[0];
+            foreach (var mtu in ladder)
+            {
+                if (!viaBackup && mtu == triedMtu) continue;
+
+                var attempt = profile with { Endpoint = endpoint };
+                WriteTunnelConfig(attempt.ToConfigText(routes, config.UseTunnelDns, mtu));
+                await RunToolAsync("/uninstalltunnelservice", TunnelName).ConfigureAwait(false);
+                var (code, _, _) = await RunToolAsync("/installtunnelservice", Store.ProfilePath)
+                    .ConfigureAwait(false);
+                if (code != 0) continue;
+
+                if (!await BulkCheck.WorksAsync().ConfigureAwait(false)) continue;
+
+                UsedBackupEntry = viaBackup;
+                ActiveMtu = mtu;
+                if (config.Mtu == 0 && mtu != config.ProbedMtu)
+                {
+                    _store.Config.ProbedMtu = mtu;
+                    _store.Save();
+                }
+                Status = Status with
+                {
+                    ServerName = attempt.EndpointHost,
+                    Message = viaBackup ? "Через запасной вход" : "",
+                };
+                return;
+            }
+        }
+
+        ActiveMtu = ladder[^1];
     }
 
     /// <summary>Столько маршрутов система принимает спокойно.</summary>

@@ -63,9 +63,32 @@ public sealed class AppConfig
     /// </summary>
     public int Mtu { get; set; }
 
+    /// <summary>Что подобралось в прошлый раз. 0 — ещё не подбирали.</summary>
+    public int ProbedMtu { get; set; }
+
+    /// <summary>
+    /// Запасной вход: адрес:порт узла, который пересылает пакеты на сервер.
+    ///
+    /// Нужен там, где до сервера напрямую не достучаться. Ключ при этом тот
+    /// же самый — узел ничего не расшифровывает, только перебрасывает.
+    /// </summary>
+    public string BackupEndpoint { get; set; } = "";
+
+    /// <summary>Когда в последний раз смотрели, нет ли обновления.</summary>
+    public DateTimeOffset LastUpdateCheck { get; set; }
+
     /// <summary>Режим, который действительно применяется.</summary>
     [JsonIgnore]
     public TunnelMode EffectiveMode => TunnelMode.Exclude;
+
+    /// <summary>Куда пробовать подключаться: сервер, затем запасной вход.</summary>
+    public List<string> EndpointsToTry(string primary)
+    {
+        var backup = BackupEndpoint.Trim();
+        return backup.Length == 0 || backup == primary
+            ? new List<string> { primary }
+            : new List<string> { primary, backup };
+    }
 
     /// <summary>
     /// Настройки, приведённые к зашитому поведению.

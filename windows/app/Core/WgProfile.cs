@@ -5,8 +5,13 @@ using System.Text;
 
 namespace QPVPN.Core;
 
-/// <summary>Разобранный профиль WireGuard или AmneziaWG.</summary>
-public sealed class WgProfile
+/// <summary>
+/// Разобранный профиль WireGuard или AmneziaWG.
+///
+/// Запись, а не класс: нужно уметь делать копию с другим адресом входа —
+/// когда до сервера напрямую не достучаться и в дело идёт запасной узел.
+/// </summary>
+public sealed record WgProfile
 {
     /// <summary>Имена параметров маскировки так, как их ждёт библиотека AmneziaWG.</summary>
     private static readonly (string Key, string Name)[] AmneziaFields =
