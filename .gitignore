@@ -7,3 +7,7 @@ dist/
 *.conf.local
 secrets/
 android/app/libs/*.aar
+
+# Python
+__pycache__/
+*.pyc

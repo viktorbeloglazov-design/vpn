@@ -1,0 +1,68 @@
+name: manual
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "scripts/manual/**"
+      - "docs/instrukciya/**"
+      - ".github/workflows/manual.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pdf:
+    name: Инструкция в PDF
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Зависимости
+        run: |
+          python3 -m pip install --quiet segno pypdfium2 opencv-python-headless
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq chromium-browser fonts-liberation || \
+            sudo apt-get install -y -qq chromium fonts-liberation
+
+      - name: Собрать
+        run: |
+          chrome="$(command -v chromium-browser || command -v chromium)"
+          echo "Chromium: $chrome"
+          CHROME="$chrome" ./scripts/manual/build.sh
+
+      - name: Проверить, что вышло
+        run: |
+          python3 - <<'PY'
+          import numpy as np, cv2, pypdfium2 as pdfium
+
+          pdf = pdfium.PdfDocument("docs/instrukciya/QPVPN-instrukciya.pdf")
+          if len(pdf) != 10:
+              raise SystemExit(f"страниц {len(pdf)}, а должно быть 10")
+
+          # Если QR-коды не читаются, инструкция бесполезна: по ней и
+          # скачивают приложение. Проверяем в разрешении принтера.
+          page = pdf[0].render(scale=300 / 72).to_pil().convert("RGB")
+          found = cv2.QRCodeDetector().detectAndDecodeMulti(
+              cv2.cvtColor(np.array(page), cv2.COLOR_RGB2BGR))
+          texts = sorted(found[1]) if found[0] else []
+          expected = sorted(
+              "https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/" + name
+              for name in ("QPVPN-android.apk", "QPVPN-mac.dmg", "QPVPN-windows.zip"))
+          if texts != expected:
+              raise SystemExit(f"QR-коды читаются не так: {texts}")
+          print("10 страниц, 3 QR-кода — всё на месте")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QPVPN-instrukciya
+          path: docs/instrukciya/QPVPN-instrukciya.pdf
+          if-no-files-found: error
+
+      - name: Опубликовать по постоянной ссылке
+        if: github.ref_name == 'claude/mac-vpn-app-routes-7jv8o7' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload latest docs/instrukciya/QPVPN-instrukciya.pdf --clobber
