@@ -22,14 +22,18 @@ jobs:
       - name: Зависимости
         run: |
           python3 -m pip install --quiet segno pypdfium2 opencv-python-headless
+          # Шрифты нужны те же, что и при ручной сборке, иначе строки
+          # разъедутся и проверка «всё влезает» ничего не значит.
           sudo apt-get update -qq
-          sudo apt-get install -y -qq chromium-browser fonts-liberation || \
-            sudo apt-get install -y -qq chromium fonts-liberation
+          sudo apt-get install -y -qq fonts-liberation
 
       - name: Собрать
         run: |
-          chrome="$(command -v chromium-browser || command -v chromium)"
-          echo "Chromium: $chrome"
+          # На раннере уже стоит Google Chrome. Пакет chromium-browser из apt —
+          # заглушка для snap, в CI он не запускается.
+          chrome="$(command -v google-chrome || command -v chromium || true)"
+          if [ -z "$chrome" ]; then echo "Не нашёл браузер для печати в PDF" >&2; exit 1; fi
+          echo "Браузер: $chrome"
           CHROME="$chrome" ./scripts/manual/build.sh
 
       - name: Проверить, что вышло
@@ -52,7 +56,31 @@ jobs:
               for name in ("QPVPN-android.apk", "QPVPN-mac.dmg", "QPVPN-windows.zip"))
           if texts != expected:
               raise SystemExit(f"QR-коды читаются не так: {texts}")
-          print("10 страниц, 3 QR-кода — всё на месте")
+
+          # Слова со ссылками должны кликаться: ради них и делалась вёрстка.
+          import re, zlib
+          raw = open("docs/instrukciya/QPVPN-instrukciya.pdf", "rb").read()
+          parts = [raw]
+          for m in re.finditer(rb"stream\r?\n", raw):
+              tail = raw.find(b"endstream", m.end())
+              if tail > 0:
+                  try:
+                      parts.append(zlib.decompress(raw[m.end():tail]))
+                  except zlib.error:
+                      pass
+          links = {u.decode("latin-1") for u in
+                   re.findall(rb"/URI\s*\((.*?)\)", b"\n".join(parts), re.S)}
+          missing = [u for u in expected if u not in links]
+          if missing:
+              raise SystemExit(f"в PDF не кликаются: {missing}")
+
+          # Терминала в инструкции быть не должно: им никто не пользуется.
+          text = "".join(pdf[i].get_textpage().get_text_range() for i in range(len(pdf)))
+          for word in ("Терминал", "curl ", "xattr", "sudo "):
+              if word in text:
+                  raise SystemExit(f"в инструкции снова появился терминал: {word!r}")
+
+          print(f"10 страниц, 3 QR-кода, {len(links)} адресов — всё на месте")
           PY
 
       - uses: actions/upload-artifact@v4

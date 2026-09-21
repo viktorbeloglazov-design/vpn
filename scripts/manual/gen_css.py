@@ -51,6 +51,14 @@ ol.steps b { color: #0B2B3A; }
        margin-top: 2mm; word-break: break-all; line-height: 1.35; }
 .cap { font-size: 7.8pt; color: #94A4B0; text-align: center; margin-top: 2mm; }
 
+/* Ссылки. В PDF они кликаются, поэтому их должно быть видно: читатель
+   не догадается нажать на слово, которое выглядит как обычный текст. */
+a { text-decoration: none; }
+.lnk { color: #0E7FA8; border-bottom: 0.3mm solid #9AD3EA; font-weight: bold; }
+.plain { color: inherit; }
+.dl a.item { display: block; color: inherit; }
+.dl .tap { font-size: 6.6pt; color: #3ABEE8; margin-top: 1.6mm; letter-spacing: .2px; }
+
 table { width: 100%; border-collapse: collapse; font-size: 9.2pt; }
 th { text-align: left; background: #0E7FA8; color: #fff; padding: 2.2mm 3mm; font-size: 8.8pt; }
 td { padding: 2.4mm 3mm; border-bottom: 0.2mm solid #E3EAEF; vertical-align: top; }

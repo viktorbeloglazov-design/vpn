@@ -54,6 +54,14 @@ ol.steps b { color: #0B2B3A; }
        margin-top: 2mm; word-break: break-all; line-height: 1.35; }
 .cap { font-size: 7.8pt; color: #94A4B0; text-align: center; margin-top: 2mm; }
 
+/* Ссылки. В PDF они кликаются, поэтому их должно быть видно: читатель
+   не догадается нажать на слово, которое выглядит как обычный текст. */
+a { text-decoration: none; }
+.lnk { color: #0E7FA8; border-bottom: 0.3mm solid #9AD3EA; font-weight: bold; }
+.plain { color: inherit; }
+.dl a.item { display: block; color: inherit; }
+.dl .tap { font-size: 6.6pt; color: #3ABEE8; margin-top: 1.6mm; letter-spacing: .2px; }
+
 table { width: 100%; border-collapse: collapse; font-size: 9.2pt; }
 th { text-align: left; background: #0E7FA8; color: #fff; padding: 2.2mm 3mm; font-size: 8.8pt; }
 td { padding: 2.4mm 3mm; border-bottom: 0.2mm solid #E3EAEF; vertical-align: top; }
@@ -160,30 +168,34 @@ tr:nth-child(even) td { background: #F7FAFC; }
     банки и маркетплейсы продолжают видеть российский адрес.</div>
 
   <div class="dl">
-      <div class="item">
+      <a class="item" href="https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-android.apk">
         <div class="os">Android</div><div class="ver">8.0 и новее</div>
         <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45"><path class="qrline" stroke="#0a1015" d="M2 2.5h7m1 0h1m2 0h3m2 0h3m1 0h1m2 0h1m1 0h1m4 0h1m3 0h7m-41 1h1m5 0h1m1 0h2m5 0h2m1 0h5m2 0h2m1 0h4m2 0h1m5 0h1m-41 1h1m1 0h3m1 0h1m1 0h3m1 0h5m3 0h1m1 0h2m1 0h4m3 0h1m1 0h1m1 0h3m1 0h1m-41 1h1m1 0h3m1 0h1m4 0h1m4 0h1m1 0h3m2 0h2m1 0h1m1 0h1m1 0h3m1 0h1m1 0h3m1 0h1m-41 1h1m1 0h3m1 0h1m1 0h3m2 0h1m1 0h1m3 0h1m8 0h5m1 0h1m1 0h3m1 0h1m-41 1h1m5 0h1m2 0h1m1 0h6m4 0h1m1 0h3m8 0h1m5 0h1m-41 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-32 1h1m4 0h3m2 0h1m2 0h1m1 0h3m-27 1h1m2 0h6m1 0h1m1 0h1m3 0h2m6 0h1m3 0h2m1 0h1m1 0h1m2 0h1m1 0h3m-41 1h1m1 0h1m1 0h2m4 0h2m3 0h1m3 0h1m1 0h1m1 0h2m1 0h2m1 0h3m1 0h1m1 0h2m2 0h1m-40 1h3m1 0h9m3 0h2m2 0h1m1 0h2m1 0h1m1 0h3m8 0h1m-39 1h6m2 0h4m4 0h2m2 0h1m1 0h2m2 0h1m2 0h1m1 0h2m1 0h1m2 0h1m2 0h1m-40 1h1m4 0h1m1 0h2m1 0h3m5 0h2m1 0h1m4 0h2m3 0h4m4 0h1m-41 1h1m1 0h2m6 0h2m1 0h1m2 0h4m4 0h3m1 0h1m1 0h1m3 0h3m2 0h2m-39 1h2m2 0h2m2 0h1m1 0h2m1 0h2m4 0h2m2 0h2m1 0h1m1 0h2m1 0h2m1 0h2m2 0h1m-41 1h1m1 0h2m1 0h1m3 0h1m1 0h4m1 0h1m2 0h1m4 0h1m1 0h2m4 0h2m1 0h1m1 0h4m-41 1h1m4 0h4m1 0h4m5 0h7m6 0h2m-33 1h1m1 0h2m3 0h2m1 0h3m1 0h2m1 0h1m1 0h1m3 0h2m1 0h1m1 0h5m2 0h1m-37 1h2m1 0h1m2 0h2m2 0h1m1 0h1m2 0h1m3 0h6m2 0h10m3 0h1m-40 1h3m3 0h1m3 0h1m3 0h1m1 0h4m1 0h1m3 0h1m1 0h1m1 0h2m1 0h1m2 0h4m-40 1h1m1 0h1m2 0h2m2 0h5m5 0h1m1 0h2m2 0h2m1 0h1m1 0h1m1 0h1m1 0h1m2 0h2m1 0h1m-37 1h1m2 0h1m1 0h1m3 0h1m2 0h1m1 0h2m3 0h1m1 0h3m1 0h3m1 0h1m1 0h2m1 0h1m-34 1h2m5 0h3m1 0h1m1 0h1m3 0h4m1 0h4m5 0h1m-36 1h1m2 0h2m1 0h1m2 0h2m1 0h1m1 0h4m1 0h1m1 0h1m4 0h3m1 0h3m1 0h1m1 0h1m1 0h2m-41 1h1m1 0h2m2 0h2m1 0h1m4 0h1m4 0h1m3 0h2m2 0h1m4 0h1m1 0h2m1 0h1m1 0h1m-39 1h1m2 0h2m1 0h1m1 0h2m2 0h2m3 0h1m2 0h1m1 0h1m2 0h3m3 0h1m1 0h3m1 0h1m1 0h1m-41 1h1m5 0h3m4 0h2m3 0h3m5 0h3m2 0h2m3 0h2m2 0h1m-40 1h2m10 0h1m1 0h1m3 0h2m2 0h1m2 0h1m1 0h1m1 0h2m3 0h4m-36 1h2m1 0h1m1 0h6m1 0h2m2 0h1m2 0h1m1 0h3m1 0h1m2 0h1m3 0h1m1 0h1m2 0h1m-41 1h2m2 0h2m3 0h1m1 0h1m3 0h1m1 0h1m5 0h1m4 0h5m3 0h3m-39 1h3m1 0h1m1 0h1m3 0h1m1 0h1m1 0h2m1 0h3m1 0h2m1 0h2m1 0h1m1 0h1m1 0h1m1 0h1m6 0h1m-41 1h2m1 0h3m1 0h7m1 0h1m3 0h2m2 0h1m1 0h1m4 0h3m1 0h3m1 0h3m-41 1h3m1 0h1m1 0h1m1 0h2m1 0h2m1 0h1m2 0h1m1 0h3m1 0h1m2 0h15m-33 1h2m1 0h2m5 0h1m2 0h1m1 0h1m3 0h1m1 0h2m1 0h1m3 0h2m-38 1h7m1 0h4m1 0h2m1 0h3m1 0h1m1 0h2m2 0h3m2 0h2m1 0h1m1 0h2m-38 1h1m5 0h1m1 0h4m2 0h2m1 0h1m1 0h4m1 0h1m1 0h2m2 0h3m3 0h2m-38 1h1m1 0h3m1 0h1m1 0h1m1 0h4m1 0h1m1 0h5m1 0h1m1 0h2m2 0h1m1 0h7m1 0h2m-41 1h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m2 0h2m3 0h1m1 0h1m1 0h1m1 0h2m1 0h2m3 0h1m3 0h1m-40 1h1m1 0h3m1 0h1m3 0h3m1 0h1m1 0h2m1 0h1m1 0h2m4 0h1m4 0h2m1 0h2m1 0h1m1 0h1m-41 1h1m5 0h1m3 0h1m1 0h1m2 0h2m2 0h2m2 0h1m6 0h1m5 0h3m1 0h1m-41 1h7m1 0h2m2 0h2m1 0h1m1 0h1m2 0h1m1 0h1m1 0h2m1 0h1m3 0h4m1 0h1"/></svg>
 </div>
         <div class="url">QPVPN-android.apk</div>
-      </div>
-      <div class="item">
+        <div class="tap">нажмите, чтобы скачать</div>
+      </a>
+      <a class="item" href="https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-mac.dmg">
         <div class="os">Mac</div><div class="ver">macOS 13 и новее</div>
         <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45"><path class="qrline" stroke="#0a1015" d="M2 2.5h7m3 0h2m6 0h2m2 0h1m3 0h1m1 0h5m1 0h7m-41 1h1m5 0h1m3 0h2m4 0h1m1 0h1m3 0h1m4 0h3m2 0h1m1 0h1m5 0h1m-41 1h1m1 0h3m1 0h1m1 0h3m3 0h1m4 0h2m2 0h1m2 0h2m1 0h4m1 0h1m1 0h3m1 0h1m-41 1h1m1 0h3m1 0h1m1 0h1m2 0h1m1 0h3m2 0h2m1 0h4m2 0h1m3 0h1m2 0h1m1 0h3m1 0h1m-41 1h1m1 0h3m1 0h1m1 0h4m1 0h3m1 0h1m1 0h2m2 0h1m2 0h1m1 0h1m1 0h2m2 0h1m1 0h3m1 0h1m-41 1h1m5 0h1m1 0h1m1 0h1m1 0h1m1 0h1m2 0h1m4 0h1m1 0h2m1 0h3m4 0h1m5 0h1m-41 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-33 1h3m3 0h1m1 0h1m3 0h3m1 0h1m2 0h1m3 0h2m-33 1h1m1 0h5m2 0h1m2 0h2m3 0h1m1 0h1m2 0h1m1 0h2m3 0h1m4 0h5m-37 1h4m3 0h4m1 0h1m1 0h1m2 0h2m1 0h3m3 0h5m1 0h3m1 0h3m-41 1h2m2 0h1m1 0h1m1 0h3m3 0h1m1 0h1m5 0h1m2 0h4m3 0h1m2 0h1m3 0h1m-40 1h1m1 0h1m2 0h1m2 0h1m2 0h1m8 0h2m4 0h3m2 0h2m1 0h2m1 0h1m2 0h1m-41 1h3m2 0h3m1 0h2m3 0h4m5 0h1m1 0h3m1 0h1m1 0h3m3 0h3m-40 1h2m5 0h2m1 0h9m1 0h2m2 0h1m2 0h2m1 0h1m2 0h1m1 0h4m1 0h1m-40 1h3m2 0h1m2 0h4m2 0h1m3 0h1m1 0h1m4 0h1m3 0h1m1 0h2m2 0h1m-37 1h1m3 0h2m2 0h4m1 0h1m1 0h2m2 0h4m1 0h1m3 0h1m5 0h2m1 0h1m-37 1h7m3 0h3m2 0h2m1 0h1m1 0h2m1 0h3m2 0h1m3 0h1m1 0h1m2 0h1m-38 1h2m2 0h1m3 0h2m1 0h2m3 0h2m1 0h6m2 0h1m1 0h3m1 0h3m2 0h2m-41 1h1m3 0h4m4 0h3m1 0h2m3 0h1m2 0h4m2 0h1m2 0h1m2 0h3m-36 1h1m4 0h2m2 0h2m1 0h1m1 0h2m2 0h2m2 0h1m1 0h2m3 0h1m3 0h1m-37 1h3m1 0h3m2 0h1m1 0h3m1 0h2m4 0h1m4 0h1m3 0h3m5 0h1m-39 1h1m2 0h2m8 0h3m2 0h6m1 0h1m2 0h2m1 0h2m1 0h7m-41 1h1m1 0h1m1 0h4m2 0h5m1 0h3m1 0h1m1 0h1m1 0h5m1 0h1m1 0h1m2 0h2m1 0h1m-39 1h4m1 0h1m1 0h1m1 0h1m4 0h1m3 0h1m1 0h2m1 0h1m7 0h2m1 0h2m1 0h1m-37 1h3m1 0h2m3 0h2m5 0h1m2 0h1m1 0h1m1 0h6m1 0h1m6 0h1m-39 1h1m1 0h1m1 0h2m1 0h2m3 0h1m1 0h2m2 0h3m2 0h1m1 0h1m2 0h1m2 0h1m1 0h5m1 0h2m-41 1h2m2 0h1m1 0h3m1 0h3m1 0h3m1 0h1m1 0h1m1 0h1m2 0h3m4 0h2m2 0h1m-35 1h2m3 0h5m1 0h2m1 0h1m2 0h1m1 0h3m3 0h1m2 0h4m1 0h3m-38 1h4m2 0h2m1 0h7m1 0h1m1 0h2m1 0h4m2 0h2m1 0h1m1 0h1m3 0h3m-40 1h1m2 0h2m4 0h3m3 0h3m3 0h2m4 0h1m2 0h1m1 0h2m1 0h6m-41 1h1m3 0h1m1 0h3m2 0h2m1 0h1m5 0h2m1 0h2m1 0h3m2 0h1m1 0h3m1 0h2m-39 1h1m1 0h1m1 0h1m4 0h2m2 0h3m5 0h1m1 0h1m2 0h2m2 0h8m2 0h1m-41 1h1m1 0h1m2 0h4m1 0h1m1 0h2m2 0h2m2 0h4m1 0h3m1 0h8m1 0h2m-32 1h1m1 0h1m1 0h1m3 0h1m1 0h1m1 0h1m1 0h2m2 0h1m1 0h3m1 0h1m3 0h5m-41 1h7m2 0h2m2 0h1m1 0h2m1 0h1m3 0h1m4 0h3m1 0h2m1 0h1m1 0h3m-39 1h1m5 0h1m1 0h3m2 0h4m2 0h2m2 0h2m1 0h1m1 0h5m3 0h2m1 0h2m-41 1h1m1 0h3m1 0h1m1 0h5m3 0h1m1 0h1m2 0h2m5 0h1m3 0h5m1 0h2m-40 1h1m1 0h3m1 0h1m1 0h2m1 0h1m2 0h4m1 0h2m2 0h1m2 0h1m1 0h1m1 0h1m1 0h2m1 0h1m1 0h1m-38 1h1m1 0h3m1 0h1m1 0h1m1 0h3m1 0h1m6 0h1m3 0h1m1 0h2m2 0h6m-37 1h1m5 0h1m2 0h2m1 0h1m1 0h1m2 0h3m1 0h3m2 0h3m1 0h1m1 0h3m1 0h2m1 0h1m-40 1h7m1 0h1m1 0h4m1 0h3m4 0h6m1 0h1m1 0h1m1 0h4m1 0h1"/></svg>
 </div>
         <div class="url">QPVPN-mac.dmg</div>
-      </div>
-      <div class="item">
+        <div class="tap">нажмите, чтобы скачать</div>
+      </a>
+      <a class="item" href="https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-windows.zip">
         <div class="os">Windows</div><div class="ver">10 и 11</div>
         <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45"><path class="qrline" stroke="#0a1015" d="M2 2.5h7m1 0h1m1 0h3m1 0h5m1 0h1m2 0h1m1 0h1m3 0h2m3 0h7m-41 1h1m5 0h1m1 0h1m1 0h1m3 0h2m2 0h5m2 0h2m1 0h1m1 0h2m2 0h1m5 0h1m-41 1h1m1 0h3m1 0h1m1 0h3m3 0h1m1 0h1m3 0h1m1 0h2m1 0h4m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1m-41 1h1m1 0h3m1 0h1m4 0h1m2 0h3m1 0h3m2 0h2m1 0h1m1 0h1m1 0h3m1 0h1m1 0h3m1 0h1m-41 1h1m1 0h3m1 0h1m1 0h2m3 0h1m1 0h1m3 0h1m8 0h5m1 0h1m1 0h3m1 0h1m-41 1h1m5 0h1m2 0h1m1 0h6m4 0h1m1 0h3m8 0h1m5 0h1m-41 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-32 1h1m4 0h3m2 0h1m2 0h1m1 0h3m-27 1h1m2 0h6m1 0h1m1 0h1m3 0h2m6 0h1m3 0h2m1 0h1m1 0h1m2 0h1m1 0h3m-41 1h4m1 0h1m1 0h1m2 0h2m3 0h1m3 0h1m1 0h1m1 0h2m1 0h2m1 0h3m1 0h1m1 0h2m-36 1h2m1 0h1m1 0h7m3 0h2m2 0h1m1 0h2m1 0h1m1 0h3m3 0h1m4 0h1m-39 1h1m3 0h2m1 0h5m4 0h2m2 0h1m1 0h2m2 0h1m2 0h1m1 0h3m3 0h1m-38 1h1m1 0h1m1 0h3m1 0h2m1 0h3m2 0h1m2 0h2m1 0h1m4 0h2m4 0h3m-36 1h4m5 0h3m1 0h1m2 0h4m4 0h3m1 0h1m1 0h1m3 0h3m2 0h2m-39 1h2m2 0h2m2 0h2m2 0h2m5 0h2m2 0h2m1 0h1m1 0h5m1 0h2m2 0h1m-41 1h1m1 0h2m1 0h1m3 0h1m1 0h2m2 0h1m3 0h1m4 0h1m1 0h2m4 0h2m1 0h1m1 0h4m-41 1h1m4 0h4m2 0h5m3 0h7m5 0h3m-33 1h1m1 0h2m3 0h1m1 0h2m3 0h2m3 0h1m3 0h2m1 0h1m1 0h5m2 0h1m-37 1h2m1 0h1m2 0h2m1 0h1m4 0h2m3 0h6m2 0h10m3 0h1m-40 1h3m3 0h1m4 0h1m4 0h4m1 0h1m3 0h1m1 0h1m1 0h2m1 0h1m2 0h4m-40 1h1m1 0h1m2 0h2m2 0h2m1 0h1m1 0h2m3 0h1m1 0h2m2 0h2m1 0h1m1 0h1m1 0h1m1 0h2m1 0h2m1 0h1m-37 1h1m3 0h2m3 0h2m1 0h1m1 0h2m3 0h1m1 0h3m1 0h3m1 0h1m1 0h4m-39 1h2m2 0h1m1 0h2m4 0h3m1 0h1m1 0h1m3 0h4m1 0h4m7 0h1m-39 1h1m1 0h1m2 0h1m2 0h1m1 0h2m1 0h1m1 0h4m1 0h1m1 0h1m4 0h3m1 0h3m2 0h2m1 0h2m-41 1h1m1 0h2m2 0h1m1 0h2m4 0h1m4 0h1m3 0h2m2 0h1m4 0h1m1 0h2m1 0h1m1 0h1m-40 1h1m2 0h3m3 0h2m2 0h2m3 0h1m2 0h1m1 0h1m2 0h3m3 0h1m1 0h3m1 0h1m1 0h1m-40 1h1m2 0h1m1 0h2m5 0h2m3 0h3m5 0h3m2 0h2m3 0h2m2 0h1m-41 1h2m1 0h1m3 0h2m4 0h1m1 0h1m3 0h2m2 0h1m2 0h1m1 0h1m1 0h2m3 0h6m-40 1h4m1 0h8m1 0h1m3 0h1m2 0h1m1 0h3m1 0h1m2 0h2m2 0h1m1 0h1m1 0h2m-41 1h2m2 0h2m3 0h1m1 0h1m1 0h1m2 0h2m5 0h1m4 0h6m2 0h3m-39 1h3m1 0h1m1 0h1m2 0h5m5 0h1m1 0h2m1 0h2m1 0h1m1 0h1m1 0h3m6 0h1m-41 1h2m1 0h3m1 0h3m1 0h3m2 0h1m2 0h2m2 0h1m1 0h1m4 0h1m1 0h1m1 0h3m1 0h3m-41 1h3m1 0h1m1 0h1m1 0h2m1 0h1m1 0h3m1 0h1m1 0h3m1 0h1m2 0h5m1 0h9m-33 1h7m1 0h1m1 0h1m2 0h1m1 0h1m3 0h1m1 0h2m1 0h1m3 0h2m-38 1h7m1 0h2m2 0h3m2 0h2m1 0h1m1 0h2m2 0h3m2 0h2m1 0h1m1 0h2m-38 1h1m5 0h1m1 0h1m1 0h5m1 0h2m1 0h4m1 0h1m1 0h2m2 0h3m3 0h2m-38 1h1m1 0h3m1 0h1m1 0h8m1 0h5m1 0h1m1 0h2m2 0h1m1 0h7m1 0h2m-41 1h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h2m1 0h2m3 0h1m1 0h1m1 0h1m1 0h2m1 0h2m3 0h1m3 0h1m-40 1h1m1 0h3m1 0h1m3 0h3m1 0h1m1 0h2m1 0h1m1 0h2m4 0h1m4 0h2m1 0h2m1 0h1m1 0h1m-41 1h1m5 0h1m3 0h1m1 0h1m2 0h2m2 0h2m2 0h1m6 0h1m5 0h3m1 0h1m-41 1h7m1 0h2m2 0h2m1 0h1m1 0h1m2 0h1m1 0h1m1 0h2m1 0h1m3 0h4m1 0h2"/></svg>
 </div>
         <div class="url">QPVPN-windows.zip</div>
-      </div></div>
+        <div class="tap">нажмите, чтобы скачать</div>
+      </a></div>
 
   <div class="perm">
     <b>Эти ссылки постоянные.</b> Они не зависят от номера версии — по ним всегда
     лежит свежая сборка. Сохраните эту страницу или наведите камеру на QR-код.
-    Все ссылки начинаются одинаково:<br>
-    <span style="font-family:'Liberation Mono',monospace;font-size:8pt">https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/</span>
+    В этом файле названия сборок и выделенные слова кликаются — нажмите,
+    и начнётся скачивание. Все ссылки начинаются одинаково:<br>
+    <a class="plain" href="https://github.com/viktorbeloglazov-design/vpn/releases">https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/</a>
   </div>
 
   <div class="toc">
@@ -261,9 +273,9 @@ tr:nth-child(even) td { background: #F7FAFC; }
     <div class="right">
       <ol class="steps">
         <li>Наведите камеру телефона на <b>QR-код Android</b> с первой страницы —
-          или откройте ссылку в браузере телефона.</li>
+          или нажмите прямо здесь: <b><a class="lnk" href="https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-android.apk">скачать QPVPN-android.apk</a></b>.</li>
         <li>Браузер спросит, скачивать ли файл. Скачайте — это
-          <span class="mono">QPVPN-android.apk</span>.</li>
+          <a class="lnk" href="https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-android.apk">QPVPN-android.apk</a>.</li>
         <li>Откройте скачанный файл: шторка сверху или «Загрузки» в браузере.</li>
         <li>Android скажет, что установка из этого источника запрещена. Нажмите
           <b>«Настройки»</b> &#8594; разрешите установку для браузера &#8594;
@@ -351,10 +363,10 @@ tr:nth-child(even) td { background: #F7FAFC; }
   <div class="head"><span class="who">QP VPN · инструкция</span><span class="num">4 / 10</span></div>
   
   <h1>Mac — установка</h1>
-  <p class="sub">Приложение и служба. Служба нужна обязательно — без неё
-    переключатель не сработает.</p>
+  <p class="sub">Всё делается мышью. Приложение и служба: служба нужна
+    обязательно — без неё переключатель не сработает.</p>
   <div class="split">
-    <div class="wide">
+    <div class="mid">
 <div class="win">
   <div class="titlebar"><div class="tl" style="background:#FF5F57"></div><div class="tl" style="background:#FEBC2E"></div><div class="tl" style="background:#28C840"></div><span class="name">QP VPN — строка меню: <svg viewBox="0 0 24 24" width="2.4mm" height="2.4mm" style="vertical-align:-0.5mm"><path fill="#3ABEE8" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/></svg></span></div>
   <div class="tabs"><div class="act">Главная</div><div>Сервер</div><div>Ещё</div></div>
@@ -386,34 +398,44 @@ tr:nth-child(even) td { background: #F7FAFC; }
   </div>
 </div>
       <div class="cap">Главный экран. Значок также появляется в строке меню сверху</div>
-      <div class="note" style="margin-top:4mm"><b>Можно одной командой.</b>
-        Откройте «Терминал» и вставьте строку ниже — она скачает свежую сборку,
-        положит в «Программы» и откроет. Так надёжнее: файл, скачанный браузером,
-        macOS помечает как «из интернета» и потом может вообще отказаться открывать.
-        <div class="cmd">curl -fsSL https://raw.githubusercontent.com/viktorbeloglazov-design/vpn/claude/mac-vpn-app-routes-7jv8o7/scripts/install-mac.sh | bash</div>
-      </div>
+      <div class="warn" style="margin-top:4mm"><b>Не нажимайте «Переместить
+        в Корзину».</b> Когда macOS впервые сообщит, что не может проверить
+        приложение, в окне будет две кнопки. Нужна <b>«Готово»</b> —
+        она просто закрывает окно. «Переместить в Корзину» удалит скачанное,
+        и придётся качать заново.</div>
+      <div class="note"><b>Почему macOS ругается.</b> Приложение подписано
+        своим сертификатом, а не купленным у Apple за 99 $ в год. Разрешение
+        даётся один раз и потом не спрашивается.</div>
     </div>
     <div class="right">
       <ol class="steps">
-        <li>Скачайте <span class="mono">QPVPN-mac.dmg</span> по ссылке с первой
-          страницы.</li>
-        <li>Откройте образ и перетащите <b>QPVPN</b> в «Программы».</li>
-        <li>Первый запуск macOS заблокирует. Откройте
-          <b>Системные настройки &#8594; Конфиденциальность и безопасность</b>,
-          пролистайте вниз и нажмите <b>«Открыть всё равно»</b>.</li>
-        <li>Нажмите <b>«Установить службу»</b> и введите пароль администратора.
-          Служба поднимает туннель и правит маршруты — приложение само этого
-          не умеет.</li>
+        <li>Скачайте <b><a class="lnk" href="https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-mac.dmg">QPVPN-mac.dmg</a></b> — ссылка кликается,
+          или возьмите QR-код с первой страницы.</li>
+        <li>В «Загрузках» дважды щёлкните по скачанному файлу — откроется окно
+          с приложением.</li>
+        <li>Перетащите значок <b>QPVPN</b> на папку <b>«Программы»</b>
+          в том же окне.</li>
+        <li>Откройте «Программы» и дважды щёлкните по <b>QPVPN</b>.
+          macOS скажет, что не может проверить разработчика. Нажмите
+          <b>«Готово»</b>.</li>
+        <li>Меню <b>Apple</b> &#8594; <b>Системные настройки</b> &#8594;
+          <b>Конфиденциальность и безопасность</b>. Пролистайте вниз: там будет
+          строка про QPVPN и кнопка <b>«Открыть всё равно»</b> — нажмите её
+          и введите пароль от компьютера.</li>
+        <li>Появится ещё одно окно — в нём нажмите <b>«Открыть»</b>.
+          Больше macOS спрашивать не будет.</li>
+        <li>В приложении нажмите <b>«Установить службу»</b> и снова введите
+          пароль. Служба поднимает туннель и правит маршруты — приложение
+          само этого не умеет.</li>
         <li>Вкладка <b>«Сервер»</b> — загрузите ключ (следующая страница).</li>
         <li>Вернитесь на «Главную» и нажмите круглую кнопку.</li>
       </ol>
-      <div class="note"><b>Почему macOS ругается.</b> Приложение подписано своим
-        сертификатом, а не купленным у Apple за 99 $ в год. Разрешить нужно
-        один раз.</div>
-      <div class="warn"><b>Если значок прыгает в Dock и гаснет</b> — macOS отказала
-        молча. Выполните в «Терминале»:
-        <div class="cmd">xattr -dr com.apple.quarantine /Applications/QPVPN.app</div>
-      </div>
+      <div class="note"><b>Короткий путь вместо шагов 4–6.</b> В папке
+        «Программы» щёлкните по <b>QPVPN</b> правой кнопкой мыши (или с
+        зажатой клавишей Control) и выберите <b>«Открыть»</b> — в появившемся
+        окне тоже будет кнопка «Открыть». На свежих версиях macOS этот путь
+        может не сработать: тогда идите через «Системные настройки», как
+        в шаге 5.</div>
     </div>
   </div>
   <div class="foot"><span>Mac — установка</span><span>Ссылки на сборки не меняются — стр. 1</span></div>
@@ -519,8 +541,8 @@ tr:nth-child(even) td { background: #F7FAFC; }
     </div>
     <div class="right">
       <ol class="steps">
-        <li>Скачайте <span class="mono">QPVPN-windows.zip</span> по ссылке
-          с первой страницы.</li>
+        <li>Скачайте <b><a class="lnk" href="https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-windows.zip">QPVPN-windows.zip</a></b> — ссылка
+          кликается, или возьмите QR-код с первой страницы.</li>
         <li><b>Распакуйте архив в постоянную папку</b> — например
           <span class="mono">C:\QPVPN</span>. Не запускайте программу прямо
           из архива и не оставляйте её в «Загрузках».</li>
@@ -718,17 +740,16 @@ tr:nth-child(even) td { background: #F7FAFC; }
   <div class="head"><span class="who">QP VPN · инструкция</span><span class="num">10 / 10</span></div>
   
   <h1>Если что-то не работает</h1>
-  <p class="sub">Сначала — самое частое. Почти всё лечится за минуту.</p>
+  <p class="sub" style="margin-bottom:4.5mm">Сначала — самое частое. Почти всё лечится за минуту.</p>
 
   <table>
     <tr><th style="width:62mm">Что вы видите</th><th>Что делать</th></tr>
 
     <tr><td><b>МАХ, банк или госуслуги пишут «отключите VPN»</b></td>
-      <td>На Android этого быть не должно — эти программы идут мимо туннеля.
-        Проверьте на главном экране карточку <b>«Мимо VPN целиком»</b>: программа
-        должна быть в списке. Нет — обновите приложение.
-        На Mac и Windows исключений по программам нет, но российские адреса
-        и так идут напрямую; если ругается — пришлите название администратору.</td></tr>
+      <td>На Android этого быть не должно: проверьте на главном экране карточку
+        <b>«Мимо VPN целиком»</b> — программа должна быть в списке. Нет —
+        обновите приложение. На Mac и Windows исключений по программам нет,
+        но российские адреса и так идут напрямую.</td></tr>
 
     <tr><td><b>Видео крутится, сообщения при этом уходят</b></td>
       <td>Классика: сеть не пропускает крупные пакеты. Убедитесь, что размер
@@ -750,12 +771,20 @@ tr:nth-child(even) td { background: #F7FAFC; }
         <b>запасной вход</b>, если он вам выдан.</td></tr>
 
     <tr><td><b>В командировке в России мобильный интернет почти не работает</b></td>
-      <td>Это не приложение. Оператор в такие дни пропускает только «белый
-        список» сайтов, и туннель просто не устанавливается — обойти это
-        со стороны телефона нельзя. Работают Wi-Fi и роуминговая eSIM.</td></tr>
+      <td>Это не приложение. Оператор пропускает только «белый список» сайтов,
+        и туннель не устанавливается — со стороны телефона это не обойти.
+        Работают Wi-Fi и роуминговая eSIM.</td></tr>
 
-    <tr><td><b>Mac: «приложение повреждено» или значок гаснет</b></td>
-      <td>Снимите карантин — команда на странице 4.</td></tr>
+    <tr><td><b>Mac: значок прыгает в Dock и гаснет, приложение не открывается</b></td>
+      <td>macOS отказала молча. Меню <b>Apple</b> &#8594; <b>Системные
+        настройки</b> &#8594; <b>Конфиденциальность и безопасность</b>,
+        пролистать вниз до строки про QPVPN и нажать <b>«Открыть всё равно»</b>.
+        Строки нет — попробуйте открыть приложение ещё раз: она появляется
+        после попытки.</td></tr>
+
+    <tr><td><b>Mac: «приложение повреждено и не может быть открыто»</b></td>
+      <td>Файл скачался не полностью. Удалите QPVPN из «Программ», скачайте
+        <a class="lnk" href="https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/QPVPN-mac.dmg">QPVPN-mac.dmg</a> заново и поставьте ещё раз.</td></tr>
 
     <tr><td><b>Windows: «не удалось запустить службу туннеля»</b></td>
       <td>Запущено не от администратора, либо рядом с
@@ -768,15 +797,14 @@ tr:nth-child(even) td { background: #F7FAFC; }
         медленно — дело в сети, а не в приложении.</td></tr>
   </table>
 
-  <div class="note" style="margin-top:6mm"><b>Что присылать, если ничего
+  <div class="note" style="margin-top:5mm"><b>Что присылать, если ничего
     не помогло.</b> Четыре числа из замера скорости, отчёт диагностики
-    («Ещё» &#8594; «Скопировать отчёт»), название сети (домашний Wi-Fi, мобильный
-    интернет, кафе) и что именно не открывается. По одному слову «не работает»
+    («Ещё» &#8594; «Скопировать отчёт»), название сети и что именно не открывается. По одному слову «не работает»
     починить нельзя.</div>
 
-  <div class="warn"><b>Чего делать не нужно.</b> Не пересылайте ссылку
+  <div class="warn" style="margin-top:3mm"><b>Чего делать не нужно.</b> Не пересылайте ссылку
     <span class="mono">vpn://…</span> и файл <span class="mono">.conf</span>
-    в переписке «чтобы посмотрели» — в них приватный ключ. Для разбора
-    достаточно отчёта диагностики: ключей в нём нет.</div>
+    «чтобы посмотрели» — в них приватный ключ. Для разбора хватает отчёта
+    диагностики: ключей в нём нет.</div>
   <div class="foot"><span>Если что-то не работает</span><span>Ссылки на сборки не меняются — стр. 1</span></div>
 </section></body></html>

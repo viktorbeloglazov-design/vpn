@@ -40,5 +40,9 @@ out = subprocess.run(
      f"file://{tmp.resolve()}"],
     capture_output=True, text=True).stdout
 title = re.search(r"<title>(.*?)</title>", out, re.S)
-print(title.group(1) if title else "не удалось измерить")
-sys.exit(0 if title and title.group(1) == "ВСЁ ВЛЕЗАЕТ" else 1)
+if not title:
+    # Браузер не отдал разметку: молчать нельзя, иначе проверка сойдёт за успех.
+    print(f"не удалось измерить — {CHROME} не вернул страницу", file=sys.stderr)
+    sys.exit(1)
+print(title.group(1))
+sys.exit(0 if title.group(1) == "ВСЁ ВЛЕЗАЕТ" else 1)
