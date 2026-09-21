@@ -47,9 +47,9 @@ jobs:
 
           # Если QR-коды не читаются, инструкция бесполезна: по ней и
           # скачивают приложение. Проверяем в разрешении принтера.
-          page = pdf[0].render(scale=300 / 72).to_pil().convert("RGB")
+          page = pdf[0].render(scale=300 / 72).to_numpy()
           found = cv2.QRCodeDetector().detectAndDecodeMulti(
-              cv2.cvtColor(np.array(page), cv2.COLOR_RGB2BGR))
+              cv2.cvtColor(page, cv2.COLOR_RGB2BGR))
           texts = sorted(found[1]) if found[0] else []
           expected = sorted(
               "https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/" + name
