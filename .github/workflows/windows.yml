@@ -108,4 +108,7 @@ jobs:
               --title "QP VPN для Windows $version" --notes-file .github/release-notes-windows.md
           }
           Copy-Item $archive "dist\QPVPN-windows.zip"
-          gh release upload latest "dist\QPVPN-windows.zip" --clobber
+          # Рядом с файлом кладём версию строкой: по ней приложение
+          # понимает, что вышло обновление, не скачивая сам архив.
+          [IO.File]::WriteAllText("dist\windows-version.txt", $version)
+          gh release upload latest "dist\QPVPN-windows.zip" "dist\windows-version.txt" --clobber

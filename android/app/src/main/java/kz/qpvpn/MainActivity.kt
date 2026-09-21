@@ -30,6 +30,7 @@ import kz.qpvpn.model.ConnectionState
 import kz.qpvpn.model.TunnelOptions
 import kz.qpvpn.net.IpCheck
 import kz.qpvpn.net.SpeedTest
+import kz.qpvpn.net.UpdateCheck
 import kz.qpvpn.net.RuZone
 import kz.qpvpn.ui.Format
 import kz.qpvpn.ui.QrScannerScreen
@@ -50,6 +51,9 @@ class MainActivity : ComponentActivity() {
     private var checkingIp by mutableStateOf(false)
     private var ruZoneCount by mutableStateOf(0)
     private var directApps by mutableStateOf<List<String>>(emptyList())
+    private var updateVersion by mutableStateOf("")
+    private var updateBusy by mutableStateOf(false)
+    private var updateNote by mutableStateOf("")
     private var speedText by mutableStateOf("")
     private var speedHint by mutableStateOf("")
     private var measuringSpeed by mutableStateOf(false)
@@ -98,6 +102,10 @@ class MainActivity : ComponentActivity() {
 
         handleSharedIntent(intent)
 
+        // Приложение ставится файлом, мимо магазина: напомнить о новой
+        // версии некому, поэтому смотрим сами — раз в сутки.
+        lifecycleScope.launch { checkForUpdate(force = false) }
+
         // Туннель мог остаться поднятым с прошлого запуска: сверяем, что
         // показано на экране, с тем, что на самом деле держит система.
         lifecycleScope.launch { app.tunnel.syncState() }
@@ -138,11 +146,15 @@ class MainActivity : ComponentActivity() {
                         directApps = directApps,
                         masterCount = MasterFilter.count,
                         masterSections = MasterFilter.sections.map { it.title to it.domains.size },
+                        currentVersion = BuildConfig.VERSION_NAME,
                         notificationsAllowed = notificationsAllowed,
                         diagnostics = { diagnostics(status) },
                         ipText = ipText,
                         ipIsKazakhstan = ipIsKazakhstan,
                         checkingIp = checkingIp,
+                        updateVersion = updateVersion,
+                        updateBusy = updateBusy,
+                        updateNote = updateNote,
                         speedText = speedText,
                         speedHint = speedHint,
                         measuringSpeed = measuringSpeed,
@@ -157,6 +169,8 @@ class MainActivity : ComponentActivity() {
                         onOptionsChange = ::changeOptions,
                         onCheckIp = ::checkIp,
                         onMeasureSpeed = ::measureSpeed,
+                        onInstallUpdate = ::installUpdate,
+                        onCheckUpdate = { lifecycleScope.launch { checkForUpdate(force = true) } },
                         onCopyDiagnostics = ::copyDiagnostics,
                         onScanQr = { showScanner = true },
                         onPickQrImage = { pickQrImage.launch("image/*") },
@@ -286,6 +300,10 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleSharedIntent(intent)
+
+        // Приложение ставится файлом, мимо магазина: напомнить о новой
+        // версии некому, поэтому смотрим сами — раз в сутки.
+        lifecycleScope.launch { checkForUpdate(force = false) }
     }
 
     private fun handleSharedIntent(intent: Intent?) {
@@ -481,6 +499,68 @@ class MainActivity : ComponentActivity() {
      * Одно число ничего не говорит: в кафе Wi-Fi бывает медленнее любого
      * VPN. Сравнение с прямой закачкой отвечает, виноват туннель или сеть.
      */
+    // MARK: - Обновление
+
+    /**
+     * Смотрит, не вышла ли новая версия.
+     *
+     * Ссылка постоянная и не зависит от номера версии, поэтому ничего
+     * настраивать не нужно: рядом со сборкой лежит файл с номером.
+     */
+    private suspend fun checkForUpdate(force: Boolean) {
+        val config = app.store.config.value
+        val now = System.currentTimeMillis()
+        if (!force && now - config.lastUpdateCheck < UpdateCheck.CHECK_INTERVAL_MILLIS) return
+
+        if (force) updateNote = "Проверяю…"
+        val latest = UpdateCheck.latestVersion()
+        app.store.update { it.copy(lastUpdateCheck = now) }
+
+        if (latest == null) {
+            updateNote = if (force) "Не удалось проверить — нет связи с хранилищем." else ""
+            return
+        }
+        if (UpdateCheck.isNewer(latest, BuildConfig.VERSION_NAME)) {
+            updateVersion = latest
+            updateNote = ""
+        } else {
+            updateVersion = ""
+            updateNote = if (force) "Установлена свежая версия ${BuildConfig.VERSION_NAME}." else ""
+        }
+    }
+
+    /** Скачивает сборку и отдаёт её системному установщику. */
+    private fun installUpdate() {
+        if (updateBusy) return
+        updateBusy = true
+        updateNote = "Скачиваю…"
+
+        lifecycleScope.launch {
+            val file = UpdateCheck.download(cacheDir) { percent ->
+                updateNote = "Скачиваю… $percent%"
+            }
+            updateBusy = false
+
+            if (file == null) {
+                updateNote = "Скачать не удалось. Попробуйте ещё раз или скачайте вручную."
+                return@launch
+            }
+
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this@MainActivity,
+                "$packageName.files",
+                file,
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            runCatching { startActivity(intent) }.onFailure {
+                updateNote = "Система не открыла установщик: разрешите установку из этого приложения."
+            }
+        }
+    }
+
     private fun measureSpeed() {
         if (measuringSpeed) return
         measuringSpeed = true

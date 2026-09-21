@@ -151,6 +151,9 @@ data class AppConfig(
      */
     val backupEndpoint: String = "",
 
+    /** Когда в последний раз смотрели, нет ли обновления. */
+    val lastUpdateCheck: Long = 0,
+
     val mode: TunnelMode = TunnelMode.EXCLUDE,
     val rules: List<RoutingRule> = emptyList(),
     val appsMode: AppsMode = AppsMode.OFF,

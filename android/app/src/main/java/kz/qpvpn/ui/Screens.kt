@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -89,12 +90,20 @@ data class ScreenState(
     val masterCount: Int,
     val masterSections: List<Pair<String, Int>>,
 
+    /** Какая версия установлена сейчас. */
+    val currentVersion: String,
+
     /** Разрешены ли уведомления: без них значка вверху не будет. */
     val notificationsAllowed: Boolean,
     val diagnostics: () -> String,
     val ipText: String,
     val ipIsKazakhstan: Boolean,
     val checkingIp: Boolean,
+
+    /** Свежая версия, если она вышла; пусто — обновлять нечего. */
+    val updateVersion: String,
+    val updateBusy: Boolean,
+    val updateNote: String,
 
     /** Замер скорости: строка с двумя числами и подсказка под ней. */
     val speedText: String,
@@ -114,6 +123,8 @@ data class ScreenActions(
     val onOptionsChange: (TunnelOptions) -> Unit,
     val onCheckIp: () -> Unit,
     val onMeasureSpeed: () -> Unit,
+    val onInstallUpdate: () -> Unit,
+    val onCheckUpdate: () -> Unit,
     val onCopyDiagnostics: () -> Unit,
     val onScanQr: () -> Unit,
     val onPickQrImage: () -> Unit,
@@ -323,6 +334,40 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                         onClick = actions.onOpenNotificationSettings,
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Разрешить уведомления") }
+                }
+            }
+
+            if (state.updateVersion.isNotEmpty()) {
+                InfoCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Download,
+                            contentDescription = null,
+                            tint = colors.connected,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Вышла версия ${state.updateVersion}", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Установлена ${state.currentVersion}. Скачается сюда же, " +
+                                    "ключ и настройки останутся на месте.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (state.updateNote.isNotEmpty()) {
+                        Text(
+                            state.updateNote,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Button(
+                        onClick = actions.onInstallUpdate,
+                        enabled = !state.updateBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (state.updateBusy) "Обновляю…" else "Обновить") }
                 }
             }
 
@@ -829,6 +874,37 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+
+        InfoCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Обновление", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (state.updateVersion.isNotEmpty())
+                            "Вышла версия ${state.updateVersion}, установлена ${state.currentVersion}"
+                        else
+                            "Установлена версия ${state.currentVersion}. Проверяется раз в сутки.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = actions.onCheckUpdate) { Text("Проверить") }
+            }
+            if (state.updateNote.isNotEmpty()) {
+                Text(
+                    state.updateNote,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (state.updateVersion.isNotEmpty()) {
+                OutlinedButton(
+                    onClick = actions.onInstallUpdate,
+                    enabled = !state.updateBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (state.updateBusy) "Обновляю…" else "Обновить до ${state.updateVersion}") }
             }
         }
 
