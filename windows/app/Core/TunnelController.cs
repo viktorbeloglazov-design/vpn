@@ -78,7 +78,7 @@ public sealed class TunnelController
             return Status = new TunnelStatus(ConnectionState.Error, $"Маршруты не посчитались: {error.Message}");
         }
 
-        var text = profile.ToConfigText(routes, _store.Config.UseTunnelDns && _store.Config.EffectiveMode != TunnelMode.Include);
+        var text = profile.ToConfigText(routes, _store.Config.UseTunnelDns, _store.Config.Mtu);
 
         try
         {
@@ -146,81 +146,71 @@ public sealed class TunnelController
     // MARK: - Маршруты
 
     /// <summary>Считает список подсетей, которые должны уходить в туннель.</summary>
+    /// <summary>
+    /// Что уходит в туннель.
+    ///
+    /// Маршрутизация зашита: через VPN идёт всё, кроме российской зоны.
+    /// Так заблокированный сервис открывается, даже если его адрес программе
+    /// незнаком, а МАХ, госуслуги, банки и маркетплейсы работают напрямую.
+    /// </summary>
     public static async Task<List<string>> RoutesForAsync(AppConfig config, WgProfile profile)
     {
-        var nets = await ResolveRulesAsync(config).ConfigureAwait(false);
         var work = await WorkNetsAsync().ConfigureAwait(false);
+        var zone = FittingRuZone();
 
-        switch (config.EffectiveMode)
+        if (config.WorkFilter)
         {
-            case TunnelMode.Full:
-                if (config.WorkFilter || work.Count == 0) return new List<string> { "0.0.0.0/0" };
-                // Рабочие ресурсы выключены — вычитаем их из полного туннеля.
-                return Cidr.Complement(work).Select(net => net.ToString()).ToList();
-
-            case TunnelMode.Include:
-            {
-                var included = config.WorkFilter ? nets.Concat(work).ToList() : nets;
-                if (included.Count == 0)
-                {
-                    // Пустой список туннель не примет: оставляем адрес самого клиента.
-                    var address = profile.Addresses.FirstOrDefault()?.Split('/')[0];
-                    return new List<string> { address is null ? "0.0.0.0/32" : $"{address}/32" };
-                }
-                return Cidr.Merge(included).Select(net => net.ToString()).ToList();
-            }
-
-            default:
-            {
-                var excluded = config.BypassRuZone
-                    ? nets.Concat(RuZone.Networks()).ToList()
-                    : nets;
-
-                if (config.WorkFilter)
-                {
-                    // Рабочие ресурсы сильнее исключений: возвращаем их в туннель.
-                    var background = excluded.Count == 0
-                        ? new List<Ipv4Net> { new(0, 0) }
-                        : Cidr.Complement(excluded);
-                    return Cidr.Merge(background.Concat(work)).Select(net => net.ToString()).ToList();
-                }
-
-                var all = excluded.Concat(work).ToList();
-                return all.Count == 0
-                    ? new List<string> { "0.0.0.0/0" }
-                    : Cidr.Complement(all).Select(net => net.ToString()).ToList();
-            }
+            // Рабочие ресурсы сильнее исключений: возвращаем их в туннель,
+            // даже если они попали в российскую зону.
+            var background = zone.Count == 0
+                ? new List<Ipv4Net> { new(0, 0) }
+                : Cidr.Complement(zone);
+            return Cidr.Merge(background.Concat(work)).Select(net => net.ToString()).ToList();
         }
+
+        var all = zone.Concat(work).ToList();
+        return all.Count == 0
+            ? new List<string> { "0.0.0.0/0" }
+            : Cidr.Complement(all).Select(net => net.ToString()).ToList();
     }
 
+    /// <summary>Столько маршрутов система принимает спокойно.</summary>
+    private const int MaxRoutes = 4_000;
+
+    /// <summary>Шаги укрупнения: какой промежуток между подсетями прощаем.</summary>
+    private static readonly long[] Gaps = { 4_096, 16_384, 65_536, 262_144, 1_048_576 };
+
+    private static List<Ipv4Net>? _cachedZone;
+
     /// <summary>
-    /// Разворачивает правила в адреса. Когда включён главный фильтр,
-    /// к правилам добавляется встроенный список сервисов.
+    /// Российская зона, ужатая до размера, который система принимает.
+    ///
+    /// Точный список даёт больше двадцати тысяч маршрутов: столько Windows
+    /// прокладывает заметными секундами. Список укрупняется, пока маршрутов
+    /// не станет разумное количество, а сервисы, которые при этом могли бы
+    /// уйти мимо туннеля, возвращаются обратно.
     /// </summary>
-    private static async Task<List<Ipv4Net>> ResolveRulesAsync(AppConfig config)
+    private static List<Ipv4Net> FittingRuZone()
     {
-        var result = new List<Ipv4Net>();
-        var domains = new List<string>();
+        if (_cachedZone is not null) return _cachedZone;
 
-        foreach (var rule in config.ActiveRules)
+        var exact = RuZone.Networks();
+        if (exact.Count == 0) return new List<Ipv4Net>();
+
+        var keep = KeepInTunnel.Nets();
+        var zone = Cidr.Subtract(exact, keep);
+        var routes = Cidr.Complement(zone).Count;
+        var step = 0;
+
+        while (routes > MaxRoutes && step < Gaps.Length)
         {
-            if (rule.Kind == RuleKind.Cidr)
-            {
-                if (Cidr.Parse(rule.Value) is { } net) result.Add(net);
-            }
-            else
-            {
-                domains.Add(rule.Value.Trim().ToLowerInvariant());
-            }
+            zone = Cidr.Subtract(Cidr.MergeWithGap(exact, Gaps[step]), keep);
+            routes = Cidr.Complement(zone).Count;
+            step++;
         }
 
-        if (config.MainFilter) domains.AddRange(MasterFilter.Domains);
-
-        if (domains.Count > 0)
-        {
-            result.AddRange(await DomainResolver.ResolveAllAsync(domains).ConfigureAwait(false));
-        }
-        return result.Distinct().ToList();
+        _cachedZone = zone;
+        return zone;
     }
 
     /// <summary>Адреса рабочих ресурсов: заложенные в приложение узлы.</summary>

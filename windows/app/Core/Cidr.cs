@@ -100,6 +100,70 @@ public static class Cidr
     }
 
     /// <summary>Всё адресное пространство минус перечисленные подсети.</summary>
+    /// <summary>
+    /// Схлопывает подсети, прощая небольшие промежутки между ними.
+    ///
+    /// Точный список России — тысячи кусков, и соседние почти всегда
+    /// разделены сотней-другой свободных адресов. Если такие промежутки
+    /// прощать, список становится в разы короче, а туннель поднимается
+    /// заметно быстрее.
+    /// </summary>
+    public static List<Ipv4Net> MergeWithGap(IEnumerable<Ipv4Net> nets, long gap)
+    {
+        var ranges = nets.Select(net => (Start: (long)net.Start, End: net.EndInclusive))
+            .OrderBy(range => range.Start)
+            .ToList();
+        if (ranges.Count == 0) return new List<Ipv4Net>();
+
+        var merged = new List<(long Start, long End)>();
+        foreach (var range in ranges)
+        {
+            if (merged.Count > 0 && range.Start <= merged[^1].End + 1 + gap)
+            {
+                merged[^1] = (merged[^1].Start, Math.Max(merged[^1].End, range.End));
+            }
+            else
+            {
+                merged.Add(range);
+            }
+        }
+
+        var result = new List<Ipv4Net>();
+        foreach (var range in merged) result.AddRange(RangeToNets(range.Start, range.End));
+        return result;
+    }
+
+    /// <summary>Подсети за вычетом дыр: то, что остаётся снаружи туннеля.</summary>
+    public static List<Ipv4Net> Subtract(IEnumerable<Ipv4Net> nets, IEnumerable<Ipv4Net> removed)
+    {
+        var holes = Merge(removed).Select(net => (Start: (long)net.Start, End: net.EndInclusive)).ToList();
+        if (holes.Count == 0) return Merge(nets);
+
+        var result = new List<Ipv4Net>();
+        foreach (var net in Merge(nets))
+        {
+            var pieces = new List<(long Start, long End)> { ((long)net.Start, net.EndInclusive) };
+            foreach (var hole in holes)
+            {
+                var next = new List<(long Start, long End)>();
+                foreach (var piece in pieces)
+                {
+                    if (hole.End < piece.Start || hole.Start > piece.End)
+                    {
+                        next.Add(piece);
+                        continue;
+                    }
+                    if (hole.Start > piece.Start) next.Add((piece.Start, hole.Start - 1));
+                    if (hole.End < piece.End) next.Add((hole.End + 1, piece.End));
+                }
+                pieces = next;
+                if (pieces.Count == 0) break;
+            }
+            foreach (var piece in pieces) result.AddRange(RangeToNets(piece.Start, piece.End));
+        }
+        return result;
+    }
+
     public static List<Ipv4Net> Complement(IEnumerable<Ipv4Net> excluded)
     {
         var ranges = excluded.Select(net => (Start: (long)net.Start, End: net.EndInclusive))

@@ -53,13 +53,14 @@ public sealed class WgProfile
     /// AllowedIPs здесь — главное: именно этот список решает, что пойдёт
     /// в туннель.
     /// </summary>
-    public string ToConfigText(IEnumerable<string> allowedIps, bool includeDns)
+    /// <param name="mtuOverride">Размер пакета вместо записанного в ключе; 0 — из ключа.</param>
+    public string ToConfigText(IEnumerable<string> allowedIps, bool includeDns, int mtuOverride = 0)
     {
         var builder = new StringBuilder();
         builder.AppendLine("[Interface]");
         builder.AppendLine($"PrivateKey = {PrivateKey}");
         builder.AppendLine($"Address = {string.Join(", ", Addresses)}");
-        builder.AppendLine($"MTU = {Mtu}");
+        builder.AppendLine($"MTU = {(mtuOverride > 0 ? mtuOverride : Mtu)}");
         if (includeDns && Dns.Count > 0)
         {
             builder.AppendLine($"DNS = {string.Join(", ", Dns)}");

@@ -44,13 +44,11 @@ public partial class MainWindow : Window
     private void ApplyConfigToControls()
     {
         var config = _store.Config;
-        MainFilterSwitch.IsChecked = config.MainFilter;
         WorkFilterSwitch.IsChecked = config.WorkFilter;
-        ModeFull.IsChecked = config.Mode == TunnelMode.Full;
-        ModeInclude.IsChecked = config.Mode == TunnelMode.Include;
-        ModeExclude.IsChecked = config.Mode == TunnelMode.Exclude;
-        RuZoneCheck.IsChecked = config.BypassRuZone;
-        DnsCheck.IsChecked = config.UseTunnelDns;
+        Mtu1420.IsChecked = config.Mtu == 1420;
+        MtuKey.IsChecked = config.Mtu == 0;
+        Mtu1380.IsChecked = config.Mtu == 1380;
+        Mtu1280.IsChecked = config.Mtu == 1280;
     }
 
     private void Render()
@@ -91,22 +89,17 @@ public partial class MainWindow : Window
         RxText.Text = status.State == ConnectionState.Connected ? Bytes(status.RxBytes) : "—";
         TxText.Text = status.State == ConnectionState.Connected ? Bytes(status.TxBytes) : "—";
 
-        MasterHint.Text = $"{MasterFilter.Count} сервисов · нейросети, соцсети, мессенджеры, видео, работа";
-        MasterText.Text = config.MainFilter
-            ? "Через VPN идут только эти сервисы. Всё остальное — банки, госуслуги, маркетплейсы, любой российский сайт — работает напрямую."
-            : "Выключен: маршруты задаются вручную в расширенных настройках.";
+        MasterText.Text = $"Российские сайты — МАХ, госуслуги, банки, маркетплейсы — напрямую "
+            + $"({RuZone.Count} подсетей России)";
+        MasterHint.Text = status.RouteCount > 0
+            ? $"Маршрутов в туннеле: {status.RouteCount}"
+            : $"Встроенный список сервисов: {MasterFilter.Count}";
 
         WorkHint.Text = $"{WorkFilter.Count} адреса · заложены в приложение";
         WorkList.Text = string.Join("\n", WorkFilter.Resources.Select(resource => $"{resource.Title}  {resource.Url}"));
 
         ProfileText.Text = _store.HasProfile ? ProfileSummary() : "Ключа нет. Вставьте ссылку vpn:// или откройте файл.";
         ClearProfileButton.Visibility = _store.HasProfile ? Visibility.Visible : Visibility.Collapsed;
-
-        AdvancedNote.Text = config.MainFilter
-            ? "Главный фильтр включён — он задаёт маршруты сам. Настройки ниже начнут действовать, когда вы его выключите."
-            : "";
-        RuZoneHint.Text = $"Встроенный список: {RuZone.Count} подсетей России.";
-        RoutesInfo.Text = status.RouteCount > 0 ? $"Сейчас в туннеле маршрутов: {status.RouteCount}" : "";
 
         VersionText.Text = "QP VPN 1.0 · AmneziaWG и WireGuard";
     }
@@ -173,15 +166,6 @@ public partial class MainWindow : Window
 
     // MARK: - Переключатели
 
-    private void OnMainFilterChanged(object sender, RoutedEventArgs e)
-    {
-        if (_loading) return;
-        _store.Config.MainFilter = MainFilterSwitch.IsChecked == true;
-        _store.Save();
-        Render();
-        _ = ReapplyAsync();
-    }
-
     private void OnWorkFilterChanged(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
@@ -191,24 +175,56 @@ public partial class MainWindow : Window
         _ = ReapplyAsync();
     }
 
-    private void OnModeChanged(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Размер пакета. Задаётся при подключении, поэтому туннель пересобирается.
+    /// </summary>
+    private void OnMtuChanged(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
-        _store.Config.Mode = ModeInclude.IsChecked == true ? TunnelMode.Include
-            : ModeExclude.IsChecked == true ? TunnelMode.Exclude
-            : TunnelMode.Full;
+        _store.Config.Mtu = Mtu1420.IsChecked == true ? 1420
+            : Mtu1380.IsChecked == true ? 1380
+            : Mtu1280.IsChecked == true ? 1280
+            : 0;
         _store.Save();
-        Render();
         _ = ReapplyAsync();
     }
 
-    private void OnOptionChanged(object sender, RoutedEventArgs e)
+    // MARK: - Замер скорости
+
+    /// <summary>
+    /// Меряет приём и отдачу двумя путями сразу.
+    ///
+    /// Одно число ничего не говорит: гостевой Wi-Fi бывает медленнее любого
+    /// VPN. Сравнение с прямой закачкой отвечает, виноват туннель или сеть.
+    /// </summary>
+    private async void OnMeasureSpeed(object sender, RoutedEventArgs e)
     {
-        if (_loading) return;
-        _store.Config.BypassRuZone = RuZoneCheck.IsChecked == true;
-        _store.Config.UseTunnelDns = DnsCheck.IsChecked == true;
-        _store.Save();
-        _ = ReapplyAsync();
+        if (!SpeedButton.IsEnabled) return;
+
+        SpeedButton.IsEnabled = false;
+        SpeedButton.Content = "Измеряю…";
+        SpeedText.Text = "";
+        SpeedHint.Text = "";
+
+        var result = await SpeedTest.MeasureAsync();
+
+        SpeedButton.IsEnabled = true;
+        SpeedButton.Content = "Замерить скорость";
+
+        SpeedText.Text = result.HasAny
+            ? $"приём:   через VPN {SpeedTest.Format(result.DownThroughTunnel)}"
+              + $"   без VPN {SpeedTest.Format(result.DownDirect)}\n"
+              + $"отдача:  через VPN {SpeedTest.Format(result.UpThroughTunnel)}"
+              + $"   без VPN {SpeedTest.Format(result.UpDirect)}"
+            : "";
+
+        SpeedHint.Text = result.Note.Length > 0 ? result.Note
+            : result.TunnelIsSlower
+                ? "Туннель заметно медленнее прямой закачки. Попробуйте другой размер пакета, "
+                  + "а если не поможет — дело в сервере или в этой сети."
+                : result.HasAny
+                    ? "Туннель не режет скорость — она такая же, как без него. Значит, упирается сама сеть."
+                    : "";
     }
 
     /// <summary>Правки применяются сразу: поднятый туннель пересобирается.</summary>

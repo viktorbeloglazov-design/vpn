@@ -46,7 +46,7 @@ public sealed class AppConfig
     /// <summary>Рабочие ресурсы: заложенные адреса идут через VPN.</summary>
     public bool WorkFilter { get; set; } = true;
 
-    public TunnelMode Mode { get; set; } = TunnelMode.Full;
+    public TunnelMode Mode { get; set; } = TunnelMode.Exclude;
     public List<RoutingRule> Rules { get; set; } = new();
 
     /// <summary>Использовать DNS-серверы из профиля.</summary>
@@ -55,9 +55,34 @@ public sealed class AppConfig
     /// <summary>Вся российская зона идёт мимо туннеля.</summary>
     public bool BypassRuZone { get; set; } = true;
 
-    /// <summary>Режим, который действительно применяется с учётом главного фильтра.</summary>
+    /// <summary>
+    /// Размер пакета. 0 — как записано в ключе.
+    ///
+    /// От него зависит скорость: чем больше, тем лучше, но если сеть такие
+    /// пакеты не пропускает, страницы наоборот встают.
+    /// </summary>
+    public int Mtu { get; set; }
+
+    /// <summary>Режим, который действительно применяется.</summary>
     [JsonIgnore]
-    public TunnelMode EffectiveMode => MainFilter ? TunnelMode.Include : Mode;
+    public TunnelMode EffectiveMode => TunnelMode.Exclude;
+
+    /// <summary>
+    /// Настройки, приведённые к зашитому поведению.
+    ///
+    /// Маршрутизация не настраивается: заблокированные сервисы всегда идут
+    /// через VPN, российские адреса — всегда напрямую. Человек выбирает
+    /// только рабочие ресурсы и размер пакета, их здесь не трогаем.
+    /// </summary>
+    public AppConfig Pinned()
+    {
+        MainFilter = true;
+        Mode = TunnelMode.Exclude;
+        Rules = new List<RoutingRule>();
+        UseTunnelDns = true;
+        BypassRuZone = true;
+        return this;
+    }
 
     [JsonIgnore]
     public IEnumerable<RoutingRule> ActiveRules
@@ -109,7 +134,10 @@ public sealed class Store
         {
             if (File.Exists(ConfigPath))
             {
-                Config = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath), Options) ?? new AppConfig();
+                // Что бы ни лежало в файле от прошлых версий, в работу
+                // уходит одно и то же поведение: настраивать негде.
+                Config = (JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath), Options)
+                    ?? new AppConfig()).Pinned();
             }
         }
         catch (Exception)
@@ -123,7 +151,7 @@ public sealed class Store
         try
         {
             Directory.CreateDirectory(SettingsDirectory);
-            File.WriteAllText(ConfigPath, JsonSerializer.Serialize(Config, Options));
+            File.WriteAllText(ConfigPath, JsonSerializer.Serialize(Config.Pinned(), Options));
         }
         catch (Exception)
         {

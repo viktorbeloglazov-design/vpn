@@ -94,22 +94,15 @@
                 </StackPanel>
             </Border>
 
-            <!-- Главный фильтр -->
+            <!-- Как идёт трафик: настраивать нечего, маршрутизация зашита -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="Обход блокировок" Style="{StaticResource Title}" />
-                            <TextBlock x:Name="MasterHint" Style="{StaticResource Hint}" />
-                        </StackPanel>
-                        <CheckBox x:Name="MainFilterSwitch" Grid.Column="1" Style="{StaticResource Switch}"
-                                  Checked="OnMainFilterChanged" Unchecked="OnMainFilterChanged" />
-                    </Grid>
-                    <TextBlock x:Name="MasterText" Style="{StaticResource Hint}" Margin="0,8,0,0" />
+                    <TextBlock Text="Как идёт трафик" Style="{StaticResource Title}" />
+                    <TextBlock Style="{StaticResource Hint}" Text="Настраивать ничего не нужно" />
+                    <TextBlock Text="Заблокированные сервисы — через VPN, казахстанский адрес"
+                               Foreground="{StaticResource OnSurface}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                    <TextBlock x:Name="MasterText" Style="{StaticResource Hint}" Margin="0,4,0,0" />
+                    <TextBlock x:Name="MasterHint" Style="{StaticResource Hint}" Margin="0,8,0,0" />
                 </StackPanel>
             </Border>
 
@@ -144,6 +137,34 @@
                 </StackPanel>
             </Border>
 
+            <!-- Скорость -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Скорость" Style="{StaticResource Title}" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="Через VPN и без него — на одной и той же закачке" />
+                    <TextBlock x:Name="SpeedText" Style="{StaticResource Hint}" FontFamily="Consolas"
+                               Margin="0,8,0,0" />
+                    <TextBlock x:Name="SpeedHint" Style="{StaticResource Hint}" TextWrapping="Wrap" />
+                    <Button x:Name="SpeedButton" Content="Замерить скорость" Click="OnMeasureSpeed" />
+
+                    <TextBlock Text="Размер пакета (MTU)" Foreground="{StaticResource OnSurface}"
+                               Margin="0,12,0,0" />
+                    <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap"
+                               Text="В гостевых сетях — в кафе, гостиницах — большие пакеты часто не проходят целиком, и скорость падает в разы. Если замер расстроил, пробуйте по порядку." />
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <RadioButton x:Name="Mtu1420" GroupName="Mtu" Foreground="{StaticResource OnSurface}"
+                                     Content="1420" Checked="OnMtuChanged" Margin="0,0,14,0" />
+                        <RadioButton x:Name="MtuKey" GroupName="Mtu" Foreground="{StaticResource OnSurface}"
+                                     Content="Из ключа" Checked="OnMtuChanged" Margin="0,0,14,0" />
+                        <RadioButton x:Name="Mtu1380" GroupName="Mtu" Foreground="{StaticResource OnSurface}"
+                                     Content="1380" Checked="OnMtuChanged" Margin="0,0,14,0" />
+                        <RadioButton x:Name="Mtu1280" GroupName="Mtu" Foreground="{StaticResource OnSurface}"
+                                     Content="1280" Checked="OnMtuChanged" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- Проверка -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>
@@ -153,33 +174,6 @@
                     <TextBlock x:Name="IpText" Style="{StaticResource Hint}" Margin="0,8,0,0" />
                 </StackPanel>
             </Border>
-
-            <!-- Расширенные настройки -->
-            <Expander x:Name="Advanced" Header="Расширенные настройки" Foreground="{StaticResource Muted}"
-                      Margin="0,4,0,0">
-                <Border Style="{StaticResource Card}" Margin="0,8,0,0">
-                    <StackPanel>
-                        <TextBlock x:Name="AdvancedNote" Style="{StaticResource Hint}" />
-
-                        <TextBlock Text="Режим маршрутизации" Style="{StaticResource Title}" Margin="0,10,0,6" />
-                        <RadioButton x:Name="ModeFull" GroupName="Mode" Foreground="{StaticResource OnSurface}"
-                                     Content="Весь трафик через VPN" Checked="OnModeChanged" Margin="0,3,0,0" />
-                        <RadioButton x:Name="ModeInclude" GroupName="Mode" Foreground="{StaticResource OnSurface}"
-                                     Content="Только правила через VPN" Checked="OnModeChanged" Margin="0,3,0,0" />
-                        <RadioButton x:Name="ModeExclude" GroupName="Mode" Foreground="{StaticResource OnSurface}"
-                                     Content="Всё через VPN, кроме правил" Checked="OnModeChanged" Margin="0,3,0,0" />
-
-                        <CheckBox x:Name="RuZoneCheck" Foreground="{StaticResource OnSurface}" Margin="0,12,0,0"
-                                  Content="Российская зона мимо VPN" Checked="OnOptionChanged" Unchecked="OnOptionChanged" />
-                        <TextBlock x:Name="RuZoneHint" Style="{StaticResource Hint}" />
-
-                        <CheckBox x:Name="DnsCheck" Foreground="{StaticResource OnSurface}" Margin="0,10,0,0"
-                                  Content="DNS-серверы из профиля" Checked="OnOptionChanged" Unchecked="OnOptionChanged" />
-
-                        <TextBlock x:Name="RoutesInfo" Style="{StaticResource Hint}" Margin="0,12,0,0" />
-                    </StackPanel>
-                </Border>
-            </Expander>
 
             <TextBlock x:Name="VersionText" Style="{StaticResource Hint}" HorizontalAlignment="Center"
                        Margin="0,10,0,0" />
