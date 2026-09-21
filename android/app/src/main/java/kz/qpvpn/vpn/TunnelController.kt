@@ -28,6 +28,7 @@ import kz.qpvpn.model.DirectApps
 import kz.qpvpn.model.TunnelMode
 import kz.qpvpn.model.TunnelStatus
 import kz.qpvpn.model.WorkFilter
+import kz.qpvpn.net.BulkCheck
 import kz.qpvpn.net.Cidr
 import kz.qpvpn.net.DomainResolver
 import kz.qpvpn.net.Ipv4Net
@@ -63,6 +64,14 @@ class TunnelController(
 
         /** Столько ждём ответа, пока шлём, прежде чем поднимать туннель заново. */
         const val SILENCE_MILLIS = 45_000L
+
+        /**
+         * Размеры пакета сверху вниз: чем больше, тем быстрее.
+         *
+         * 1280 — нижняя ступень: столько обязана пропускать любая сеть,
+         * это минимум, заданный самим протоколом IPv6.
+         */
+        val MTU_LADDER = listOf(1420, 1380, 1320, 1280)
     }
 
     private val backend: Backend by lazy { GoBackend(context) }
@@ -619,6 +628,13 @@ class TunnelController(
         }
 
         usedBackupEntry = viaBackup
+
+        // Связь есть — но «есть» ещё не значит «работает». Проверяем, что
+        // проходят большие порции данных, и если нет — уменьшаем пакет.
+        if (config.options.mtu == 0) {
+            tuneMtu(profile, config, routes, withIpv6)
+        }
+
         publish(
             TunnelStatus(
                 state = ConnectionState.CONNECTED,
@@ -632,6 +648,61 @@ class TunnelController(
         startWatching()
         return Outcome.CONNECTED
     }
+
+    /**
+     * Подбирает размер пакета, пока не пойдут большие порции данных.
+     *
+     * Симптом неподходящего размера узнаваемый: сообщения отправляются,
+     * а видео крутится и не скачивается, потоковый ответ обрывается на
+     * середине. Мелкое пролезает, крупное — нет.
+     *
+     * Начинаем с того, что подошло в прошлый раз: сеть обычно та же, и
+     * перебирать заново незачем.
+     */
+    private suspend fun tuneMtu(
+        profile: WgProfile,
+        config: AppConfig,
+        routes: List<String>,
+        withIpv6: Boolean,
+    ) {
+        val remembered = config.options.probedMtu
+        val start = if (remembered > 0) remembered else profile.mtu.coerceAtMost(MTU_LADDER.first())
+        val ladder = (listOf(start) + MTU_LADDER.filter { it < start }).distinct()
+
+        // Туннель уже поднят с размером из ключа: если начинаем с другого,
+        // его надо применить, иначе проверим не то, что думаем.
+        var applied = profile.mtu
+
+        for (mtu in ladder) {
+            if (mtu != applied) {
+                publish(_status.value.copy(message = "Подбираю размер пакета: $mtu…"))
+                try {
+                    applyConfig(profile.copy(mtu = mtu), config, routes, withIpv6 = withIpv6)
+                } catch (error: Exception) {
+                    return
+                }
+                applied = mtu
+                if (!awaitHandshake(10_000)) continue
+            }
+
+            if (BulkCheck.works()) {
+                activeMtu = mtu
+                if (mtu != remembered) {
+                    store.update { it.copy(options = it.options.copy(probedMtu = mtu)) }
+                }
+                return
+            }
+        }
+
+        // Ни один размер не помог — значит, дело не в нём. Остаёмся на
+        // нижней ступени: она хотя бы заведомо проходит.
+        activeMtu = ladder.last()
+    }
+
+    /** С каким размером пакета туннель сейчас работает. */
+    @Volatile
+    var activeMtu: Int = 0
+        private set
 
     /** Куда подключились в итоге — видно в отчёте диагностики. */
     @Volatile

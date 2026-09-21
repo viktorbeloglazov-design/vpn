@@ -407,7 +407,14 @@ class MainActivity : ComponentActivity() {
                 appendLine("Сервер: ${profile.endpoint}")
                 appendLine("Протокол: ${profile.protocolName}, параметров маскировки: ${profile.amneziaParams.size}")
                 appendLine("DNS из ключа: ${profile.dns.joinToString(", ").ifEmpty { "нет, подставляем 1.1.1.1" }}")
-                appendLine("MTU: ${if (config.options.mtu > 0) "${config.options.mtu} (задан вручную)" else "${profile.mtu} (из ключа)"}")
+                val active = app.tunnel.activeMtu
+                appendLine(
+                    "MTU: " + when {
+                        config.options.mtu > 0 -> "${config.options.mtu} (задан вручную)"
+                        active > 0 -> "$active (подобран автоматически, в ключе ${profile.mtu})"
+                        else -> "${profile.mtu} (из ключа)"
+                    }
+                )
             } else {
                 appendLine("Ключ: не загружен")
             }

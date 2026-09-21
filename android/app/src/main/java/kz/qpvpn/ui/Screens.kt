@@ -463,14 +463,14 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                 // Размер пакета — единственное, чем скорость лечится со
                 // стороны телефона, поэтому он здесь же, а не в настройках.
                 Text(
-                    "Размер пакета (MTU). В гостевых сетях — в кафе, гостиницах — " +
-                        "большие пакеты часто не проходят целиком, и скорость падает в разы. " +
-                        "Если замер расстроил, пробуйте по порядку.",
+                    "Размер пакета (MTU). В гостевых и мобильных сетях большие пакеты часто " +
+                        "не проходят целиком: сообщения уходят, а видео крутится и не качается. " +
+                        "На «Авто» приложение подбирает размер само при подключении.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(1420 to "1420", 0 to "Из ключа", 1380 to "1380", 1280 to "1280")
+                    listOf(0 to "Авто", 1420 to "1420", 1380 to "1380", 1280 to "1280")
                         .forEach { (value, title) ->
                             FilterChip(
                                 selected = state.config.options.mtu == value,
@@ -774,8 +774,8 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
             Text("Размер пакета (MTU)", style = MaterialTheme.typography.titleMedium)
             Text(
                 "От него зависит скорость. Чем больше — тем быстрее, но если сеть " +
-                    "не пропускает такие пакеты, страницы наоборот встают. Порядок " +
-                    "подбора: 1420 → из ключа → 1380 → 1280.",
+                    "не пропускает такие пакеты, видео и потоковые ответы встают. " +
+                    "На «Авто» приложение подбирает размер само при подключении.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -783,7 +783,7 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
                 modifier = Modifier.padding(top = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf(1420 to "1420", 0 to "Из ключа", 1380 to "1380", 1280 to "1280").forEach { (value, title) ->
+                listOf(0 to "Авто", 1420 to "1420", 1380 to "1380", 1280 to "1280").forEach { (value, title) ->
                     FilterChip(
                         selected = options.mtu == value,
                         onClick = { actions.onOptionsChange(options.copy(mtu = value)) },
