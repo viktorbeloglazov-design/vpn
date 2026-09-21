@@ -133,6 +133,15 @@ data class AppConfig(
 
     // Режим остался в настройках ради старых сохранённых файлов: выбрать
     // его негде, приложение всегда работает как «всё через VPN, кроме правил».
+    /**
+     * Запасной вход: адрес:порт узла, который пересылает пакеты на сервер.
+     *
+     * Нужен там, где оператор пропускает не все адреса. Ключ при этом тот
+     * же самый — узел ничего не расшифровывает, только перебрасывает, —
+     * поэтому меняется ровно одна строка.
+     */
+    val backupEndpoint: String = "",
+
     val mode: TunnelMode = TunnelMode.EXCLUDE,
     val rules: List<RoutingRule> = emptyList(),
     val appsMode: AppsMode = AppsMode.OFF,
@@ -159,6 +168,18 @@ data class AppConfig(
      * не трогается. Остальное приводится к заводскому виду, в том числе
      * настройки, сохранённые прежними версиями программы.
      */
+    /**
+     * Куда пробовать подключаться, по порядку.
+     *
+     * Сначала сервер напрямую: так короче путь и выше скорость. Если он
+     * не отвечает — через запасной вход.
+     */
+    fun endpointsToTry(primary: String): List<String> {
+        val backup = backupEndpoint.trim()
+        return if (backup.isEmpty() || backup == primary) listOf(primary)
+        else listOf(primary, backup)
+    }
+
     fun pinned(): AppConfig = copy(
         fullTunnel = false,
         mainFilter = true,

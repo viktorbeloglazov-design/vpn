@@ -171,50 +171,27 @@ class TunnelController(
             }
         }
 
+        // Входов может быть два: сам сервер и узел-пересыльщик. Там, где
+        // оператор пропускает не все адреса, до сервера напрямую не достучаться,
+        // а до узла — да; ключ при этом один и тот же.
+        val endpoints = config.endpointsToTry(profile.endpoint)
+
         var lastError: Exception? = null
         for ((useRuZone, withIpv6, note) in attempts) {
             val routes = routesFor(config, profile, useRuZone)
-            try {
-                applyConfig(profile, config, routes, withIpv6 = withIpv6)
-                appliedRoutes = routes
-                publish(
-                    TunnelStatus(
-                        state = ConnectionState.CONNECTING,
-                        routeCount = routes.size,
-                        serverName = profile.endpointHost,
-                        message = "Устанавливаю связь с сервером…",
-                    )
-                )
 
-                // Поднятый туннель — ещё не связь. Пока сервер не ответил на
-                // рукопожатие, трафик уходит в пустоту, а телефон при этом
-                // уже считает, что VPN работает: интернета нет, и непонятно
-                // почему. Поэтому дожидаемся ответа и только тогда говорим
-                // «подключён».
-                if (!awaitHandshake()) {
-                    takeDown()
-                    fail(
-                        "Сервер ${profile.endpointHost} не ответил. Обычно это значит одно из трёх: " +
-                            "ключ выдан для другого протокола (нужен AmneziaWG или WireGuard), " +
-                            "сервер недоступен, или эта сеть режет VPN — попробуйте мобильный интернет вместо Wi-Fi."
-                    )
-                    return
+            for ((index, endpoint) in endpoints.withIndex()) {
+                val viaBackup = index > 0
+                val last = index == endpoints.lastIndex
+                val attempt = if (viaBackup) profile.copy(endpoint = endpoint) else profile
+
+                val outcome = tryEndpoint(attempt, config, routes, withIpv6, viaBackup, last, note)
+                when (outcome) {
+                    Outcome.CONNECTED -> return
+                    Outcome.GAVE_UP -> return
+                    Outcome.NEXT_ENDPOINT -> Unit
+                    is Outcome.BROKEN -> lastError = outcome.error
                 }
-
-                publish(
-                    TunnelStatus(
-                        state = ConnectionState.CONNECTED,
-                        connectedSince = System.currentTimeMillis(),
-                        routeCount = routes.size,
-                        serverName = profile.endpointHost,
-                        message = note,
-                        lastHandshake = lastHandshakeMillis(),
-                    )
-                )
-                startWatching()
-                return
-            } catch (error: Exception) {
-                lastError = error
             }
         }
 
@@ -581,6 +558,94 @@ class TunnelController(
                 }
             }
         }
+    }
+
+    /** Чем кончилась попытка поднять туннель через один вход. */
+    private sealed interface Outcome {
+        /** Связь есть — больше ничего не нужно. */
+        data object CONNECTED : Outcome
+
+        /** Сервер не ответил, а других входов не осталось. */
+        data object GAVE_UP : Outcome
+
+        /** Сервер не ответил, но есть запасной вход. */
+        data object NEXT_ENDPOINT : Outcome
+
+        /** Туннель не поднялся вовсе — пробуем следующий набор маршрутов. */
+        data class BROKEN(val error: Exception) : Outcome
+    }
+
+    /**
+     * Одна попытка: поднять туннель к указанному входу и дождаться ответа.
+     *
+     * Первому входу даём меньше времени, когда есть запасной: лучше быстро
+     * перебрать оба, чем двадцать секунд ждать молчащий.
+     */
+    private suspend fun tryEndpoint(
+        profile: WgProfile,
+        config: AppConfig,
+        routes: List<String>,
+        withIpv6: Boolean,
+        viaBackup: Boolean,
+        last: Boolean,
+        note: String,
+    ): Outcome {
+        try {
+            applyConfig(profile, config, routes, withIpv6 = withIpv6)
+        } catch (error: Exception) {
+            return Outcome.BROKEN(error)
+        }
+
+        appliedRoutes = routes
+        publish(
+            TunnelStatus(
+                state = ConnectionState.CONNECTING,
+                routeCount = routes.size,
+                serverName = profile.endpointHost,
+                message = if (viaBackup) "Пробую запасной вход…" else "Устанавливаю связь с сервером…",
+            )
+        )
+
+        // Поднятый туннель — ещё не связь. Пока сервер не ответил на
+        // рукопожатие, трафик уходит в пустоту, а телефон при этом уже
+        // считает, что VPN работает: интернета нет, и непонятно почему.
+        if (!awaitHandshake(if (last) 20_000 else 12_000)) {
+            takeDown()
+            // Есть запасной вход — молча пробуем его: человеку важен
+            // результат, а не то, каким путём он получен.
+            if (!last) return Outcome.NEXT_ENDPOINT
+            fail(failureText(profile.endpointHost, viaBackup))
+            return Outcome.GAVE_UP
+        }
+
+        usedBackupEntry = viaBackup
+        publish(
+            TunnelStatus(
+                state = ConnectionState.CONNECTED,
+                connectedSince = System.currentTimeMillis(),
+                routeCount = routes.size,
+                serverName = profile.endpointHost,
+                message = if (viaBackup) "Через запасной вход" else note,
+                lastHandshake = lastHandshakeMillis(),
+            )
+        )
+        startWatching()
+        return Outcome.CONNECTED
+    }
+
+    /** Куда подключились в итоге — видно в отчёте диагностики. */
+    @Volatile
+    var usedBackupEntry: Boolean = false
+        private set
+
+    private fun failureText(host: String, viaBackup: Boolean): String = buildString {
+        append(if (viaBackup) "Запасной вход $host тоже молчит. " else "Сервер $host не ответил. ")
+        append(
+            "Обычно это значит одно из трёх: ключ выдан для другого протокола " +
+                "(нужен AmneziaWG или WireGuard), сервер недоступен, или эта сеть не выпускает " +
+                "наружу ничего, кроме разрешённых адресов — так бывает при отключении " +
+                "мобильного интернета, и тогда помогает только Wi-Fi."
+        )
     }
 
     private fun fail(message: String) {

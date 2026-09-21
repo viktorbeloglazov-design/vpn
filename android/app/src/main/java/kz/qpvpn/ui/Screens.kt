@@ -107,6 +107,7 @@ data class ScreenActions(
 
     /** Единственный переключатель программы: рабочие ресурсы. */
     val onWorkFilterChange: (Boolean) -> Unit,
+    val onBackupEndpointChange: (String) -> Unit,
     val onOpenNotificationSettings: () -> Unit,
     val onPickProfile: () -> Unit,
     val onClearProfile: () -> Unit,
@@ -642,6 +643,8 @@ private fun ProfileSection(state: ScreenState, actions: ScreenActions) {
             Text("Выбрать файл .conf")
         }
 
+        BackupEntryCard(state, actions)
+
         if (state.hasProfile) {
             TextButton(onClick = actions.onClearProfile, modifier = Modifier.fillMaxWidth()) {
                 Text("Удалить профиль")
@@ -709,6 +712,47 @@ private fun ProfileSection(state: ScreenState, actions: ScreenActions) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * Запасной вход — узел, который пересылает пакеты на сервер.
+ *
+ * Бывают сети, где наружу выпускают не все адреса: до сервера напрямую не
+ * достучаться, а до такого узла — да. Ключ при этом тот же самый: узел
+ * ничего не расшифровывает, только перебрасывает.
+ */
+@Composable
+private fun BackupEntryCard(state: ScreenState, actions: ScreenActions) {
+    var value by remember(state.config.backupEndpoint) {
+        mutableStateOf(state.config.backupEndpoint)
+    }
+
+    InfoCard {
+        Text("Запасной вход", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Необязательно. Адрес узла-пересыльщика в виде адрес:порт. " +
+                "Приложение попробует сервер напрямую, а если он не ответит — этот узел.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = value,
+            onValueChange = {
+                value = it
+                actions.onBackupEndpointChange(it)
+            },
+            singleLine = true,
+            placeholder = { Text("95.213.0.1:31984") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (state.config.backupEndpoint.isNotEmpty()) {
+            Text(
+                "Сохранён. Он вступит в дело только если сервер не ответит за двенадцать секунд.",
+                style = MaterialTheme.typography.bodySmall,
+                color = LocalAppColors.current.connected,
+            )
+        }
     }
 }
 

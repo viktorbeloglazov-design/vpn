@@ -150,6 +150,7 @@ class MainActivity : ComponentActivity() {
                     actions = ScreenActions(
                         onToggle = ::toggleTunnel,
                         onWorkFilterChange = ::changeWorkFilter,
+                        onBackupEndpointChange = ::changeBackupEndpoint,
                         onOpenNotificationSettings = ::openNotificationSettings,
                         onPickProfile = { pickProfile.launch(arrayOf("*/*")) },
                         onClearProfile = ::clearProfile,
@@ -257,6 +258,16 @@ class MainActivity : ComponentActivity() {
      * Иначе человек выбирает другое число, ничего не меняется, и он решает,
      * что настройка не работает.
      */
+    /**
+     * Запасной вход: адрес узла, который пересылает пакеты на сервер.
+     *
+     * Ключ при этом не меняется, поэтому и переподключаться незачем —
+     * адрес пригодится при следующем включении.
+     */
+    private fun changeBackupEndpoint(value: String) {
+        app.store.update { it.copy(backupEndpoint = value.trim()) }
+    }
+
     private fun changeOptions(options: TunnelOptions) {
         val was = app.store.config.value.options
         app.store.update { it.copy(options = options) }
@@ -399,6 +410,10 @@ class MainActivity : ComponentActivity() {
                 appendLine("MTU: ${if (config.options.mtu > 0) "${config.options.mtu} (задан вручную)" else "${profile.mtu} (из ключа)"}")
             } else {
                 appendLine("Ключ: не загружен")
+            }
+            appendLine("Вход: ${if (app.tunnel.usedBackupEntry) "запасной узел" else "сервер напрямую"}")
+            if (config.backupEndpoint.isNotEmpty()) {
+                appendLine("Запасной вход: ${config.backupEndpoint}")
             }
             appendLine("Маршрутов в туннеле: ${status.routeCount}")
             appendLine("Рукопожатие: $handshake")
