@@ -129,6 +129,18 @@ enum NetworkTool {
         return Shell.runTool("wg", ["set", name, "peer", peerKey, "allowed-ips", list], timeout: 15)
     }
 
+    /// Переводит туннель на другой вход, не пересоздавая его.
+    @discardableResult
+    static func setPeerEndpoint(interface name: String, peerKey: String, endpoint: String) -> CommandResult {
+        Shell.runTool("wg", ["set", name, "peer", peerKey, "endpoint", endpoint], timeout: 15)
+    }
+
+    /// Меняет размер пакета на лету: интерфейс при этом остаётся на месте.
+    @discardableResult
+    static func setMTU(interface name: String, mtu: Int) -> CommandResult {
+        Shell.runTool("ifconfig", [name, "mtu", String(mtu)], timeout: 15)
+    }
+
     static func interfaceExists(_ name: String) -> Bool {
         Shell.runTool("ifconfig", [name], timeout: 10).succeeded
     }

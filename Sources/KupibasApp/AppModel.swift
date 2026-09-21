@@ -20,6 +20,11 @@ final class AppModel: ObservableObject {
     /// Служба осталась от прошлой версии приложения.
     @Published var helperNeedsUpdate = false
 
+    /// Свежая версия, если она вышла; пусто — обновлять нечего.
+    @Published var updateVersion = ""
+    @Published var updateBusy = false
+    @Published var updateNote = ""
+
     private var helperUpdateAttempted = false
 
     private var ruZoneCountCache: Int?
@@ -82,10 +87,16 @@ final class AppModel: ObservableObject {
         scheduleSave()
     }
 
-    /// Размер пакета: 0 — как записано в ключе.
+    /// Размер пакета: 0 — подобрать самому.
     func setMTU(_ value: Int) {
         config.options.mtu = value
         saveNow()
+    }
+
+    /// Запасной вход: узел, который пересылает пакеты на сервер.
+    func setBackupEndpoint(_ value: String) {
+        config.backupEndpoint = value.trimmingCharacters(in: .whitespaces)
+        scheduleSave()
     }
 
     /// Сколько подсетей России знает программа — показываем в подписи.
@@ -270,6 +281,58 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Обновление приложения
+
+    /// Смотрит, не вышла ли новая версия. Раз в сутки, если не просили иначе.
+    func checkForUpdate(force: Bool) {
+        let now = Date().timeIntervalSince1970
+        if !force, now - config.lastUpdateCheck < UpdateCheck.checkInterval { return }
+
+        if force { updateNote = "Проверяю…" }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let latest = UpdateCheck.latestVersion()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.config.lastUpdateCheck = now
+                self.saveNow()
+
+                guard let latest else {
+                    self.updateNote = force ? "Не удалось проверить — нет связи с хранилищем." : ""
+                    return
+                }
+                if UpdateCheck.isNewer(latest, than: self.appVersion) {
+                    self.updateVersion = latest
+                    self.updateNote = ""
+                } else {
+                    self.updateVersion = ""
+                    self.updateNote = force ? "Установлена свежая версия \(self.appVersion)." : ""
+                }
+            }
+        }
+    }
+
+    /// Скачивает образ и открывает его в Finder.
+    func installUpdate() {
+        guard !updateBusy else { return }
+        updateBusy = true
+        updateNote = "Скачиваю…"
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let image = UpdateCheck.download()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.updateBusy = false
+                guard let image else {
+                    self.updateNote = "Скачать не удалось. Попробуйте ещё раз."
+                    return
+                }
+                self.updateNote = "Образ открыт: перетащите QP VPN в «Программы» с заменой. "
+                    + "Служба обновится сама при следующем запуске."
+                UpdateCheck.open(image)
+            }
+        }
+    }
+
     // MARK: - Диагностика
 
     /// Короткий отчёт о состоянии — его можно переслать тому, кто выдал ключ.
@@ -279,9 +342,14 @@ final class AppModel: ObservableObject {
     func diagnosticsReport() -> String {
         let server = config.server
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
-        let mtu = config.options.mtu > 0
-            ? "\(config.options.mtu) (задан вручную)"
-            : "\(server.mtu) (из ключа)"
+        let mtu: String
+        if config.options.mtu > 0 {
+            mtu = "\(config.options.mtu) (задан вручную)"
+        } else if status.activeMtu > 0 {
+            mtu = "\(status.activeMtu) (подобран автоматически, в ключе \(server.mtu))"
+        } else {
+            mtu = "\(server.mtu) (из ключа)"
+        }
 
         var lines: [String] = []
         lines.append("QP VPN \(version) для Mac, macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
@@ -296,6 +364,10 @@ final class AppModel: ObservableObject {
             lines.append("Протокол: \(server.protocolName), параметров маскировки: \(server.amneziaParams.count)")
             lines.append("DNS из ключа: \(server.dns.isEmpty ? "нет" : server.dns.joined(separator: ", "))")
             lines.append("MTU: \(mtu)")
+        }
+        lines.append("Вход: \(status.viaBackupEntry ? "запасной узел" : "сервер напрямую")")
+        if !config.backupEndpoint.isEmpty {
+            lines.append("Запасной вход: \(config.backupEndpoint)")
         }
         lines.append("Интерфейс: \(status.interfaceName.isEmpty ? "—" : status.interfaceName)")
         lines.append("Маршрутов мимо туннеля: \(status.routeCount)")

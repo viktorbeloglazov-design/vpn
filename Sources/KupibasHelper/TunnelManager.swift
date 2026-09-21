@@ -252,7 +252,104 @@ final class TunnelManager {
         state = .connecting
         message = ""
         log.info("Туннель поднят (\(config.effectiveMode.rawValue), интерфейс \(realInterfaceName.isEmpty ? Paths.interfaceName : realInterfaceName), правил: \(resolved.count)).")
+
+        verifyAndTune(config, interfaceName: interfaceName)
     }
+
+    // MARK: - Проверка и подгонка
+
+    /// Размеры пакета сверху вниз: чем больше, тем быстрее.
+    ///
+    /// 1280 — нижняя ступень: столько обязана пропускать любая сеть.
+    private static let mtuLadder = [1420, 1380, 1320, 1280]
+
+    /// Ждёт первого ответа сервера.
+    private func waitForHandshake(seconds: Int) -> Bool {
+        let deadline = Date().addingTimeInterval(TimeInterval(seconds))
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 1)
+            if let stats = NetworkTool.peerStats(interface: realInterfaceName), stats.lastHandshake > 0 {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Доводит поднятый туннель до рабочего состояния.
+    ///
+    /// Сначала убеждаемся, что сервер вообще отвечает: не отвечает — пробуем
+    /// запасной вход, если он задан. Потом проверяем, что проходят большие
+    /// порции данных, и если нет — уменьшаем размер пакета. Всё это делается
+    /// на живом интерфейсе: ни маршруты, ни адреса пересоздавать не нужно.
+    private func verifyAndTune(_ config: TunnelConfig, interfaceName: String) {
+        let entries = config.endpointsToTry()
+
+        if !waitForHandshake(seconds: entries.count > 1 ? 12 : 20) {
+            guard entries.count > 1 else {
+                message = "Сервер \(config.server.endpointHost) не отвечает."
+                log.error(message)
+                return
+            }
+            let backup = entries[1]
+            log.info("Сервер молчит — пробую запасной вход \(backup).")
+            message = "Пробую запасной вход…"
+            NetworkTool.setPeerEndpoint(interface: interfaceName,
+                                        peerKey: config.server.publicKey,
+                                        endpoint: backup)
+            guard waitForHandshake(seconds: 20) else {
+                message = "Ни сервер, ни запасной вход не отвечают."
+                log.error(message)
+                return
+            }
+            usedBackupEntry = true
+            message = "Через запасной вход"
+            log.info("Связь через запасной вход \(backup).")
+        } else {
+            usedBackupEntry = false
+        }
+
+        guard config.options.mtu == 0 else {
+            activeMtu = config.options.mtu
+            return
+        }
+        tuneMTU(config, interfaceName: interfaceName)
+    }
+
+    /// Подбирает размер пакета, пока не пойдут большие порции данных.
+    private func tuneMTU(_ config: TunnelConfig, interfaceName: String) {
+        let remembered = config.options.probedMtu
+        let start = remembered > 0 ? remembered : min(config.server.mtu, Self.mtuLadder[0])
+        // Повторов тут быть не может: ниже start берём только меньшие.
+        let ladder = [start] + Self.mtuLadder.filter { $0 < start }
+
+        var applied = config.server.mtu
+        for mtu in ladder {
+            if mtu != applied {
+                log.info("Подбираю размер пакета: \(mtu).")
+                NetworkTool.setMTU(interface: interfaceName, mtu: mtu)
+                applied = mtu
+            }
+            if BulkCheck.works() {
+                activeMtu = mtu
+                if mtu != remembered {
+                    var updated = ConfigStore.loadConfig()
+                    updated.options.probedMtu = mtu
+                    try? ConfigStore.saveConfig(updated)
+                }
+                log.info("Размер пакета \(mtu) — большие порции проходят.")
+                return
+            }
+        }
+
+        // Ни один размер не помог — значит, дело не в нём. Остаёмся на нижней
+        // ступени: она хотя бы заведомо проходит.
+        activeMtu = ladder.last ?? config.server.mtu
+        log.error("Размер пакета не помог: большие порции не проходят ни при каком.")
+    }
+
+    /// Каким входом поднялась связь и с каким размером пакета.
+    private(set) var usedBackupEntry = false
+    private(set) var activeMtu = 0
 
     // MARK: - Опускание туннеля
 
@@ -595,6 +692,8 @@ final class TunnelManager {
         status.state = state
         status.mode = config.effectiveMode
         status.interfaceName = realInterfaceName.isEmpty ? Paths.interfaceName : realInterfaceName
+        status.viaBackupEntry = usedBackupEntry
+        status.activeMtu = activeMtu
         status.serverName = config.server.name
         status.endpoint = config.server.endpoint
         status.connectedSince = connectedSince

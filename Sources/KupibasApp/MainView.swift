@@ -9,6 +9,8 @@ struct MainView: View {
         VStack(spacing: 0) {
             if !model.isHelperInstalled {
                 InstallBanner(text: "Служба QP VPN не установлена — без неё переключатель не сработает.")
+            } else if !model.updateVersion.isEmpty {
+                UpdateBanner()
             } else if model.helperNeedsUpdate {
                 InstallBanner(
                     text: "Служба осталась от прошлой версии приложения — обновите её, "
@@ -199,6 +201,33 @@ struct PowerHeader: View {
         case .error: return .red
         case .disconnected: return .secondary
         }
+    }
+}
+
+/// Вышла новая версия — полоса наверху с кнопкой.
+struct UpdateBanner: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundColor(.green)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Вышла версия \(model.updateVersion) — у вас \(model.appVersion)")
+                    .font(.callout)
+                if !model.updateNote.isEmpty {
+                    Text(model.updateNote)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer()
+            Button(model.updateBusy ? "Скачиваю…" : "Обновить") { model.installUpdate() }
+                .disabled(model.updateBusy)
+        }
+        .padding(10)
+        .background(Color.green.opacity(0.12))
     }
 }
 

@@ -34,6 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // старая служба — и человек видит ошибку, которой уже нет в коде.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak model] in
             model?.updateHelperIfNeeded()
+            // Приложение ставится образом с сайта: напомнить о новой версии
+            // некому, поэтому смотрим сами — раз в сутки.
+            model?.checkForUpdate(force: false)
         }
     }
 

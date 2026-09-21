@@ -22,8 +22,8 @@ struct SettingsView: View {
                         .labelsHidden()
 
                         Text("От него зависит скорость. Чем больше — тем быстрее, но если сеть "
-                             + "не пропускает такие пакеты, страницы наоборот встают. Порядок "
-                             + "подбора: 1420 → из ключа → 1380 → 1280. "
+                             + "не пропускает такие пакеты, видео и потоковые ответы встают. "
+                             + "На «Авто» служба подбирает размер сама при подключении. "
                              + "Сейчас в ключе: \(model.config.server.mtu).")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -32,6 +32,30 @@ struct SettingsView: View {
                         Text("При смене туннель переподнимется сам — связь пропадёт на секунду.")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                    }
+
+                    Section("Обновление") {
+                        LabeledContent("Версия") {
+                            HStack(spacing: 10) {
+                                Text(model.updateVersion.isEmpty
+                                     ? "установлена \(model.appVersion), проверяется раз в сутки"
+                                     : "вышла \(model.updateVersion), установлена \(model.appVersion)")
+                                    .foregroundColor(model.updateVersion.isEmpty ? .secondary : .green)
+                                Button("Проверить") { model.checkForUpdate(force: true) }
+                                if !model.updateVersion.isEmpty {
+                                    Button(model.updateBusy ? "Скачиваю…" : "Обновить") {
+                                        model.installUpdate()
+                                    }
+                                    .disabled(model.updateBusy)
+                                }
+                            }
+                        }
+                        if !model.updateNote.isEmpty {
+                            Text(model.updateNote)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
 
                     Section("Приложение") {
@@ -45,6 +69,19 @@ struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
+                    }
+
+                    Section("Запасной вход") {
+                        TextField("95.213.0.1:31984", text: Binding(
+                            get: { model.config.backupEndpoint },
+                            set: { model.setBackupEndpoint($0) }
+                        ))
+                        Text("Необязательно. Адрес узла-пересыльщика в виде адрес:порт. Служба "
+                             + "пробует сервер напрямую, а если он не ответит — этот узел. "
+                             + "Ключ менять не нужно.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Section("Диагностика") {

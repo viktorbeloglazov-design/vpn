@@ -194,23 +194,28 @@ public struct TunnelOptions: Codable, Hashable, Sendable {
     /// Перезапускать туннель, если связь оборвалась.
     public var autoReconnect: Bool
 
-    /// Размер пакета. 0 — как записано в ключе.
+    /// Размер пакета. 0 — подобрать самому.
     ///
     /// От него зависит скорость: чем больше, тем лучше, но если сеть такие
-    /// пакеты не пропускает, страницы наоборот встают. Ключ при этом не
-    /// трогается, поэтому «из ключа» всегда можно вернуть.
+    /// пакеты не пропускает, видео и потоковые ответы встают. Ключ при этом
+    /// не трогается.
     public var mtu: Int
+
+    /// Что подобралось в прошлый раз. 0 — ещё не подбирали.
+    public var probedMtu: Int
 
     public init(useTunnelDNS: Bool = true,
                 disableIPv6: Bool = true,
                 reresolveMinutes: Int = 5,
                 autoReconnect: Bool = true,
-                mtu: Int = 0) {
+                mtu: Int = 0,
+                probedMtu: Int = 0) {
         self.useTunnelDNS = useTunnelDNS
         self.disableIPv6 = disableIPv6
         self.reresolveMinutes = reresolveMinutes
         self.autoReconnect = autoReconnect
         self.mtu = mtu
+        self.probedMtu = probedMtu
     }
 
     public init(from decoder: Decoder) throws {
@@ -220,6 +225,7 @@ public struct TunnelOptions: Codable, Hashable, Sendable {
         self.reresolveMinutes = (try? c.decode(Int.self, forKey: .reresolveMinutes)) ?? 5
         self.autoReconnect = (try? c.decode(Bool.self, forKey: .autoReconnect)) ?? true
         self.mtu = (try? c.decode(Int.self, forKey: .mtu)) ?? 0
+        self.probedMtu = (try? c.decode(Int.self, forKey: .probedMtu)) ?? 0
     }
 }
 
@@ -242,6 +248,15 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
     /// Рабочие ресурсы компании идут через VPN.
     public var workFilter: Bool
 
+    /// Запасной вход: адрес:порт узла, который пересылает пакеты на сервер.
+    ///
+    /// Нужен там, где до сервера напрямую не достучаться. Ключ при этом тот
+    /// же самый — узел ничего не расшифровывает, только перебрасывает.
+    public var backupEndpoint: String
+
+    /// Когда в последний раз смотрели, нет ли обновления.
+    public var lastUpdateCheck: Double
+
     public var mode: TunnelMode
     public var server: ServerConfig
     public var rules: [RoutingRule]
@@ -252,6 +267,8 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
                 fullTunnel: Bool = false,
                 mainFilter: Bool = true,
                 workFilter: Bool = true,
+                backupEndpoint: String = "",
+                lastUpdateCheck: Double = 0,
                 mode: TunnelMode = .exclude,
                 server: ServerConfig = ServerConfig(),
                 rules: [RoutingRule] = [],
@@ -261,6 +278,8 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
         self.fullTunnel = fullTunnel
         self.mainFilter = mainFilter
         self.workFilter = workFilter
+        self.backupEndpoint = backupEndpoint
+        self.lastUpdateCheck = lastUpdateCheck
         self.mode = mode
         self.server = server
         self.rules = rules
@@ -274,6 +293,8 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
         self.fullTunnel = (try? c.decode(Bool.self, forKey: .fullTunnel)) ?? false
         self.mainFilter = (try? c.decode(Bool.self, forKey: .mainFilter)) ?? true
         self.workFilter = (try? c.decode(Bool.self, forKey: .workFilter)) ?? true
+        self.backupEndpoint = (try? c.decode(String.self, forKey: .backupEndpoint)) ?? ""
+        self.lastUpdateCheck = (try? c.decode(Double.self, forKey: .lastUpdateCheck)) ?? 0
         self.mode = (try? c.decode(TunnelMode.self, forKey: .mode)) ?? .exclude
         self.server = (try? c.decode(ServerConfig.self, forKey: .server)) ?? ServerConfig()
         self.rules = (try? c.decode([RoutingRule].self, forKey: .rules)) ?? []
@@ -299,6 +320,13 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
     /// не трогается; MTU к маршрутизации не относится и тоже остаётся.
     /// Остальное приводится к заводскому виду, в том числе настройки,
     /// сохранённые прежними версиями программы.
+    /// Куда пробовать подключаться, по порядку: сервер, затем запасной вход.
+    public func endpointsToTry() -> [String] {
+        let primary = server.endpoint
+        let backup = backupEndpoint.trimmingCharacters(in: .whitespaces)
+        return backup.isEmpty || backup == primary ? [primary] : [primary, backup]
+    }
+
     public func pinned() -> TunnelConfig {
         var copy = self
         copy.fullTunnel = false
@@ -321,6 +349,7 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
         parts.append(server.addresses.joined(separator: ","))
         parts.append(server.dns.joined(separator: ","))
         parts.append(String(options.mtu > 0 ? options.mtu : server.mtu))
+        parts.append(backupEndpoint)
         parts.append(String(server.persistentKeepalive))
         parts.append(server.amneziaParams.sorted { $0.key < $1.key }
             .map { "\($0.key)=\($0.value)" }
@@ -373,6 +402,10 @@ public struct TunnelStatus: Codable, Hashable, Sendable {
     public var txBytes: Int
     /// Сколько маршрутов сейчас обслуживает демон.
     public var routeCount: Int
+    /// Каким входом поднялась связь: false — сервером напрямую.
+    public var viaBackupEntry: Bool
+    /// С каким размером пакета работает туннель. 0 — как в ключе.
+    public var activeMtu: Int
     public var message: String
     /// Момент последнего обновления файла — по нему GUI понимает, жив ли демон.
     public var updatedAt: Double
@@ -387,6 +420,8 @@ public struct TunnelStatus: Codable, Hashable, Sendable {
                 rxBytes: Int = 0,
                 txBytes: Int = 0,
                 routeCount: Int = 0,
+                viaBackupEntry: Bool = false,
+                activeMtu: Int = 0,
                 message: String = "",
                 updatedAt: Double = 0) {
         self.state = state
@@ -399,6 +434,8 @@ public struct TunnelStatus: Codable, Hashable, Sendable {
         self.rxBytes = rxBytes
         self.txBytes = txBytes
         self.routeCount = routeCount
+        self.viaBackupEntry = viaBackupEntry
+        self.activeMtu = activeMtu
         self.message = message
         self.updatedAt = updatedAt
     }
@@ -415,6 +452,8 @@ public struct TunnelStatus: Codable, Hashable, Sendable {
         self.rxBytes = (try? c.decode(Int.self, forKey: .rxBytes)) ?? 0
         self.txBytes = (try? c.decode(Int.self, forKey: .txBytes)) ?? 0
         self.routeCount = (try? c.decode(Int.self, forKey: .routeCount)) ?? 0
+        self.viaBackupEntry = (try? c.decode(Bool.self, forKey: .viaBackupEntry)) ?? false
+        self.activeMtu = (try? c.decode(Int.self, forKey: .activeMtu)) ?? 0
         self.message = (try? c.decode(String.self, forKey: .message)) ?? ""
         self.updatedAt = (try? c.decode(Double.self, forKey: .updatedAt)) ?? 0
     }
