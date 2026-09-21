@@ -22,6 +22,14 @@ public partial class MainWindow : Window
     private readonly TunnelController _tunnel;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(2) };
 
+    /// <summary>
+    /// Повторная проверка обновления у программы, которую не закрывают.
+    ///
+    /// Одной проверки при запуске мало: окно висит неделями. Суточный
+    /// промежуток выдерживается внутри самой проверки.
+    /// </summary>
+    private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(6) };
+
     private bool _loading = true;
     private bool _busy;
 
@@ -39,6 +47,8 @@ public partial class MainWindow : Window
             _timer.Tick += async (_, _) => await RefreshAsync();
             _timer.Start();
             await CheckForUpdateAsync(force: false);
+            _updateTimer.Tick += async (_, _) => await CheckForUpdateAsync(force: false);
+            _updateTimer.Start();
         };
     }
 
