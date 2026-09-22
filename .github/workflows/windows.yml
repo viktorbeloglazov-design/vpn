@@ -61,6 +61,13 @@ jobs:
       - name: Проверить сборку
         run: |
           Get-ChildItem "$env:GITHUB_WORKSPACE\dist" | Format-Table Name, Length
+          # Версия в программе должна совпадать с версией выпуска. На Mac
+          # она однажды не подставилась — программа называла себя одним
+          # и тем же числом, и обновление предлагалось бесконечно.
+          $want = "${{ github.event.inputs.version || '1.0.0' }}"
+          $got = (Get-Item "$env:GITHUB_WORKSPACE\dist\QPVPN.exe").VersionInfo.FileVersion
+          Write-Host "Версия в программе: $got (ожидалось $want)"
+          if (-not $got.StartsWith($want)) { throw "версия в программе не совпала с версией выпуска" }
           foreach ($name in @("QPVPN.exe", "qpvpn-tunnel.exe", "wintun.dll")) {
             if (-not (Test-Path "$env:GITHUB_WORKSPACE\dist\$name")) { throw "в сборке нет $name" }
           }
