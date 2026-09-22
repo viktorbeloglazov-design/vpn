@@ -56,6 +56,20 @@ jobs:
           # Приложение должно хотя бы стартовать: проверяем, что бинарник
           # запускается и отвечает системе, а не падает сразу.
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist"
+
+          # Версия в бандле должна совпадать с версией выпуска. Когда она
+          # не подставлялась, приложение называло себя одним и тем же числом:
+          # в «О программе» стояла неправда, обновление предлагалось вечно,
+          # а служба не обновлялась ни разу — её отметка version совпадала
+          # с версией приложения просто потому, что обе не менялись.
+          WANT="${{ steps.version.outputs.value }}"
+          GOT="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+          echo "Версия в бандле: $GOT (ожидалось $WANT)"
+          if [ "$GOT" != "$WANT" ]; then
+            echo "Версия в бандле не совпала с версией выпуска." >&2
+            exit 1
+          fi
+
           test -f "$APP/Contents/Resources/com.kupibas.vpn.helper.plist"
           for tool in kupibasvpnd amneziawg-go awg wireguard-go wg; do
             test -x "$APP/Contents/Library/Helpers/$tool"
