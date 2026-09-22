@@ -39,7 +39,9 @@ jobs:
         run: ./scripts/ci/build-wireguard.sh "$RUNNER_TEMP/wg-tools"
 
       - name: Собрать приложение (universal)
-        run: ./scripts/build.sh --universal --tools "$RUNNER_TEMP/wg-tools"
+        run: |
+          ./scripts/build.sh --universal --tools "$RUNNER_TEMP/wg-tools" \
+            --version "${{ steps.version.outputs.value }}"
 
       - name: Проверить бандл
         run: |

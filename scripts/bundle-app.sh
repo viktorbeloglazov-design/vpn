@@ -2,21 +2,28 @@
 # Собирает QPVPN.app из уже скомпилированных бинарников.
 #
 #   scripts/bundle-app.sh --bin-dir .build/release [--tools КАТАЛОГ] [--out dist]
+#                         [--version 2.5.0]
 #
 # --tools: каталог с утилитами туннеля (форк Amnezia). Если указан, они кладутся
 # внутрь приложения и Homebrew пользователю не нужен.
+#
+# --version: номер версии выпуска. Он попадает в Info.plist, а оттуда — в окно
+# «О программе», в сравнение с тем, что лежит на сервере, и в отметку версии
+# службы. Без него собирается сборка из исходников с версией 0.0.0.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_DIR=""
 TOOLS_DIR=""
 OUT_DIR="$ROOT/dist"
+VERSION="0.0.0"
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --bin-dir) BIN_DIR="$2"; shift 2 ;;
         --tools) TOOLS_DIR="$2"; shift 2 ;;
         --out) OUT_DIR="$2"; shift 2 ;;
+        --version) VERSION="$2"; shift 2 ;;
         *) echo "Неизвестный аргумент: $1" >&2; exit 1 ;;
     esac
 done
@@ -32,6 +39,12 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/
 
 install -m 0755 "$BIN_DIR/KupibasVPNApp" "$APP/Contents/MacOS/QPVPN"
 install -m 0644 "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+
+# Версия проставляется здесь, а не лежит в файле: иначе приложение всегда
+# сообщает одно и то же число. Тогда оно считает себя устаревшим сразу после
+# обновления, а служба — наоборот, свежей, и не обновляется никогда.
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # Служба и всё, что нужно для её установки, едут внутри приложения.

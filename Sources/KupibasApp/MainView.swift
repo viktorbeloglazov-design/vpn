@@ -223,7 +223,9 @@ struct UpdateBanner: View {
                 }
             }
             Spacer()
-            Button(model.updateBusy ? "Скачиваю…" : "Обновить") { model.installUpdate() }
+            // Что именно сейчас происходит — написано рядом, в updateNote:
+            // скачиваю, устанавливаю, перезапускаюсь.
+            Button(model.updateBusy ? "Обновляю…" : "Обновить") { model.installUpdate() }
                 .disabled(model.updateBusy)
         }
         .padding(10)

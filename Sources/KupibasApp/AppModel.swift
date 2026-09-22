@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Combine
 import ServiceManagement
 import KupibasCore
@@ -311,7 +312,11 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Скачивает образ и открывает его в Finder.
+    /// Скачивает новую версию, ставит её вместо текущей и перезапускается.
+    ///
+    /// Человек нажал «Обновить» — значит всё остальное должно произойти само:
+    /// старая программа закрывается, новая открывается уже обновлённой.
+    /// Перетаскивать что-то в «Программы» он не должен.
     func installUpdate() {
         guard !updateBusy else { return }
         updateBusy = true
@@ -319,16 +324,32 @@ final class AppModel: ObservableObject {
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let image = UpdateCheck.download()
+            guard let image else {
+                DispatchQueue.main.async {
+                    self?.updateBusy = false
+                    self?.updateNote = "Скачать не удалось. Попробуйте ещё раз."
+                }
+                return
+            }
+
+            DispatchQueue.main.async { self?.updateNote = "Устанавливаю…" }
+            let outcome = UpdateCheck.install(image)
+
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.updateBusy = false
-                guard let image else {
-                    self.updateNote = "Скачать не удалось. Попробуйте ещё раз."
-                    return
+                switch outcome {
+                case .replaced:
+                    // Туннель поднимает служба, и она продолжит работать
+                    // сама по себе — связь на время перезапуска не рвётся.
+                    self.updateNote = "Обновлено. Перезапускаюсь…"
+                    UpdateCheck.relaunchAfterQuit()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        NSApp.terminate(nil)
+                    }
+                case .openedInFinder(let reason):
+                    self.updateNote = reason
                 }
-                self.updateNote = "Образ открыт: перетащите QP VPN в «Программы» с заменой. "
-                    + "Служба обновится сама при следующем запуске."
-                UpdateCheck.open(image)
             }
         }
     }
