@@ -344,20 +344,11 @@ public sealed class TunnelController
         if (_cachedZone is not null) return _cachedZone;
 
         var exact = RuZone.Networks();
+        // Пустую зону не запоминаем: иначе один неудачный заход означал бы,
+        // что весь трафик идёт через VPN до перезапуска программы.
         if (exact.Count == 0) return new List<Ipv4Net>();
 
-        var keep = KeepInTunnel.Nets();
-        var zone = Cidr.Subtract(exact, keep);
-        var routes = Cidr.Complement(zone).Count;
-        var step = 0;
-
-        while (routes > MaxRoutes && step < Gaps.Length)
-        {
-            zone = Cidr.Subtract(Cidr.MergeWithGap(exact, Gaps[step]), keep);
-            routes = Cidr.Complement(zone).Count;
-            step++;
-        }
-
+        var zone = RuZonePlan.Fit(exact, KeepInTunnel.Nets(), MaxRoutes, Gaps);
         _cachedZone = zone;
         return zone;
     }

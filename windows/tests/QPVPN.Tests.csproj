@@ -24,6 +24,11 @@
     <Compile Include="../app/Core/Cidr.cs" />
     <Compile Include="../app/Core/WgProfile.cs" />
     <Compile Include="../app/Core/KeepInTunnel.cs" />
+    <Compile Include="../app/Core/RuZonePlan.cs" />
+    <Compile Include="../app/Core/RuZone.cs" />
+    <!-- Тот же список, что и в программе: проверять надо на настоящих
+         данных, а не на выдуманной паре подсетей. -->
+    <EmbeddedResource Include="../app/Assets/ru_ipv4.txt" />
   </ItemGroup>
 
 </Project>
