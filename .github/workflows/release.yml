@@ -93,6 +93,14 @@ jobs:
             echo "--- журнал запуска ---"
             cat "$LOG" 2>/dev/null || echo "(журнал пуст)"
             pkill -f "QPVPN.app/Contents/MacOS/QPVPN" || true
+            # Ждём, пока процесс действительно уйдёт: пока он жив, файлы
+            # приложения остаются занятыми и образ потом не собирается.
+            for _ in $(seq 1 20); do
+              pgrep -f "QPVPN.app/Contents/MacOS/QPVPN" >/dev/null || break
+              sleep 0.5
+            done
+            pkill -9 -f "QPVPN.app/Contents/MacOS/QPVPN" 2>/dev/null || true
+            sleep 1
           else
             echo "Приложение не осталось в памяти — запуск оборвался." >&2
             echo "--- журнал запуска ---" >&2

@@ -25,7 +25,9 @@ if [ ! -d "$APP" ]; then
 fi
 
 STAGE="$(mktemp -d)"
-trap 'rm -rf "$STAGE"' EXIT
+# Лог кладём вне папки, которая пойдёт в образ, — иначе он окажется внутри.
+HDIUTIL_LOG="$(mktemp)"
+trap 'rm -rf "$STAGE" "$HDIUTIL_LOG"' EXIT
 
 cp -R "$APP" "$STAGE/QPVPN.app"
 ln -s /Applications "$STAGE/Applications"
@@ -84,10 +86,29 @@ DMG="$OUT_DIR/QPVPN-$VERSION.dmg"
 mkdir -p "$OUT_DIR"
 rm -f "$DMG"
 
-hdiutil create \
-    -volname "QP VPN" \
-    -srcfolder "$STAGE" \
-    -ov -format UDZO \
-    "$DMG" >/dev/null
+# hdiutil иногда отвечает «Resource busy»: файлы, которые только что
+# копировали, ещё не отпущены системой. Это проходит само за секунды,
+# поэтому пробуем несколько раз, а не роняем сборку с первого отказа.
+attempt=1
+while true; do
+    if hdiutil create \
+        -volname "QP VPN" \
+        -srcfolder "$STAGE" \
+        -ov -format UDZO \
+        "$DMG" >/dev/null 2>"$HDIUTIL_LOG"; then
+        break
+    fi
+
+    if [ "$attempt" -ge 4 ]; then
+        echo "Не удалось собрать образ:" >&2
+        cat "$HDIUTIL_LOG" >&2
+        exit 1
+    fi
+
+    echo "Образ не собрался с попытки $attempt, пробую ещё раз"
+    cat "$HDIUTIL_LOG" || true
+    attempt=$((attempt + 1))
+    sleep 5
+done
 
 echo "Готово: $DMG"
