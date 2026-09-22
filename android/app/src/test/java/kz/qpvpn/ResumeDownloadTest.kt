@@ -1,6 +1,5 @@
 package kz.qpvpn
 
-import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
 import kz.qpvpn.net.UpdateCheck
 import org.junit.After
@@ -10,7 +9,10 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
-import java.net.InetSocketAddress
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.ServerSocket
+import java.net.Socket
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -21,12 +23,12 @@ import java.util.concurrent.atomic.AtomicInteger
  * посередине большого файла. Закачка с нуля в таком канале не доходит
  * никогда, поэтому приложение обязано продолжать с места обрыва.
  *
- * Поднимаем свой сервер, который честно рвёт соединение, и проверяем,
- * что файл всё равно собирается целиком и побайтово совпадает с исходным.
+ * Поднимаем свой сервер, который честно рвёт связь, и проверяем, что файл
+ * всё равно собирается целиком и побайтово совпадает с исходным.
  */
 class ResumeDownloadTest {
 
-    /** «PK» в начале — как у настоящего APK, дальше просто узнаваемый мусор. */
+    /** «PK» в начале — как у настоящего APK, дальше узнаваемый мусор. */
     private val content = ByteArray(300_000) { index ->
         when (index) {
             0 -> 'P'.code.toByte()
@@ -35,41 +37,85 @@ class ResumeDownloadTest {
         }
     }
 
-    private lateinit var server: HttpServer
-    private val breaks = AtomicInteger(0)
+    private lateinit var socket: ServerSocket
+    private lateinit var worker: Thread
 
     /** Сколько первых ответов оборвать на середине. */
-    private var breakFirst = 0
+    @Volatile private var breakFirst = 0
+
+    /** Отдавать вместо сборки страницу с ошибкой. */
+    @Volatile private var serveGarbage = false
+
+    private val breaks = AtomicInteger(0)
 
     @Before
     fun start() {
-        server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.createContext("/apk") { exchange ->
-            val range = exchange.requestHeaders.getFirst("Range")
-            val from = range?.removePrefix("bytes=")?.substringBefore('-')?.toIntOrNull() ?: 0
-            val rest = content.copyOfRange(from, content.size)
-
-            exchange.sendResponseHeaders(if (from > 0) 206 else 200, rest.size.toLong())
-            val body = exchange.responseBody
-            if (breaks.get() < breakFirst) {
-                // Обещали целое, отдаём половину и обрываем — ровно так
-                // ведёт себя канал, из-за которого всё это и понадобилось.
-                breaks.incrementAndGet()
-                body.write(rest, 0, rest.size / 2)
-                body.flush()
-                exchange.close()
-            } else {
-                body.write(rest)
-                body.close()
+        socket = ServerSocket(0)
+        worker = Thread {
+            while (!socket.isClosed) {
+                try {
+                    socket.accept().use(::serve)
+                } catch (error: Exception) {
+                    return@Thread
+                }
             }
         }
-        server.start()
+        worker.isDaemon = true
+        worker.start()
     }
 
     @After
-    fun stop() = server.stop(0)
+    fun stop() {
+        socket.close()
+        worker.join(2_000)
+    }
 
-    private fun url() = "http://127.0.0.1:${server.address.port}/apk"
+    /** Минимальный HTTP: разбираем Range и отвечаем куском файла. */
+    private fun serve(client: Socket) {
+        val reader = BufferedReader(InputStreamReader(client.getInputStream()))
+        var from = 0
+        while (true) {
+            val line = reader.readLine() ?: break
+            if (line.isEmpty()) break
+            if (line.startsWith("Range:", ignoreCase = true)) {
+                from = line.substringAfter("bytes=").substringBefore('-').trim().toIntOrNull() ?: 0
+            }
+        }
+
+        val output = client.getOutputStream()
+        if (serveGarbage) {
+            val body = "<html>Ошибка</html>".toByteArray()
+            output.write(head(200, body.size).toByteArray())
+            output.write(body)
+            output.flush()
+            return
+        }
+
+        val rest = content.copyOfRange(from, content.size)
+        output.write(head(if (from > 0) 206 else 200, rest.size).toByteArray())
+
+        if (breaks.get() < breakFirst) {
+            // Обещали целое, отдаём половину и обрываем — ровно так ведёт
+            // себя канал, из-за которого всё это и понадобилось.
+            breaks.incrementAndGet()
+            output.write(rest, 0, rest.size / 2)
+            output.flush()
+            client.close()
+            return
+        }
+
+        output.write(rest)
+        output.flush()
+    }
+
+    private fun head(code: Int, length: Int) = buildString {
+        append("HTTP/1.1 $code OK\r\n")
+        append("Content-Length: $length\r\n")
+        append("ETag: \"qpvpn-test\"\r\n")
+        append("Connection: close\r\n\r\n")
+    }
+
+    private fun url() = "http://127.0.0.1:${socket.localPort}/apk"
 
     @Test
     fun wholeFileArrivesWhenNothingBreaks() = runBlocking {
@@ -89,20 +135,16 @@ class ResumeDownloadTest {
 
         assertNotNull("после обрывов файл всё равно должен собраться", file)
         assertEquals(content.size.toLong(), file!!.length())
-        // Главное: куски склеились правильно, а не внахлёст и не с дырой.
+        // Главное: куски склеились правильно — не внахлёст и не с дырой.
         assertArrayEquals(content, file.readBytes())
-        assertEquals("сервер должен был оборвать связь трижды", 3, breaks.get())
+        assertEquals("связь должна была оборваться трижды", 3, breaks.get())
     }
 
     @Test
-    fun nonApkIsRejected() = runBlocking {
-        server.createContext("/notapk") { exchange ->
-            val body = "<html>Ошибка</html>".toByteArray()
-            exchange.sendResponseHeaders(200, body.size.toLong())
-            exchange.responseBody.use { it.write(body) }
-        }
+    fun errorPageIsNotAccepted() = runBlocking {
+        serveGarbage = true
         val directory = Files.createTempDirectory("qpvpn").toFile()
-        val file = UpdateCheck.download(directory, "http://127.0.0.1:${server.address.port}/notapk")
+        val file = UpdateCheck.download(directory, url())
 
         assertNull("страница с ошибкой не должна сойти за сборку", file)
     }

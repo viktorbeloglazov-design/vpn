@@ -88,7 +88,19 @@ jobs:
 
       - name: Тесты
         working-directory: android
-        run: gradle test --no-daemon --stacktrace
+        run: |
+          # Полный лог Gradle — это тысячи строк стектрейса, в которых
+          # сама ошибка теряется. Сохраняем его и при падении показываем
+          # отдельно то, ради чего лог и открывают.
+          set -o pipefail
+          if gradle test --no-daemon --stacktrace 2>&1 | tee /tmp/gradle-test.log; then
+            exit 0
+          fi
+          echo
+          echo "=============== что именно не собралось ==============="
+          grep -E "^e: |^w: .*error|FAILED$" /tmp/gradle-test.log | head -40 || true
+          echo "======================================================="
+          exit 1
 
       - name: Сборка релизного APK
         working-directory: android
