@@ -165,10 +165,75 @@ enum WireGuardInterface {
     /// Убирает интерфейс: туннель следит за своим сокетом и уходит сам.
     static func stop(interface: String?, logicalName: String) {
         if let interface, !interface.isEmpty {
+            // Сначала завершаем сам туннель, и только потом убираем за ним.
+            // Раньше процесс оставался жить: интерфейс просто гасили, а он
+            // продолжал держать utun. Каждое переподключение заводило новый
+            // — utun4, utun5, utun6 — и старые копились, мешая друг другу,
+            // пока связь не переставала подниматься совсем. Помогала только
+            // переустановка службы: она их убивала.
+            terminate(holdingSocket: socketFile(interface))
             try? FileManager.default.removeItem(atPath: socketFile(interface))
             Shell.runTool("ifconfig", [interface, "down"], timeout: 15)
         }
         try? FileManager.default.removeItem(atPath: nameFile(logicalName))
+    }
+
+    /// Завершает туннель, который держит этот сокет.
+    ///
+    /// Процесс уходит в фон сам, поэтому его номер нам неизвестен — зато
+    /// известен файл сокета, который он держит открытым. По нему процесс
+    /// и находится. Завершается он по обычному сигналу: получив его,
+    /// туннель закрывает устройство и убирает за собой.
+    private static func terminate(holdingSocket socketPath: String) {
+        for pid in processes(holding: socketPath) {
+            kill(pid, SIGTERM)
+        }
+
+        // Даём закрыть устройство. Не ушёл за три секунды — снимаем силой:
+        // оставить его жить хуже, чем оборвать.
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            let alive = processes(holding: socketPath)
+            if alive.isEmpty { return }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        for pid in processes(holding: socketPath) {
+            kill(pid, SIGKILL)
+        }
+    }
+
+    /// Номера процессов, держащих файл открытым.
+    private static func processes(holding path: String) -> [pid_t] {
+        guard FileManager.default.fileExists(atPath: path) else { return [] }
+        let result = Shell.runTool("lsof", ["-t", path], timeout: 10)
+        return result.stdout
+            .split(whereSeparator: { $0 == "\n" || $0 == " " })
+            .compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }
+    }
+
+    /// Убирает туннели, оставшиеся от прошлых запусков службы.
+    ///
+    /// Служба могла быть снята или перезапущена, пока туннель работал:
+    /// тогда процесс остаётся без хозяина и продолжает держать интерфейс.
+    /// Вызывается при старте службы, до первого подъёма.
+    static func cleanUpOrphans(logicalName: String) {
+        let keep = existingInterface(logicalName: logicalName)
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: socketDir)) ?? []
+
+        for entry in entries where entry.hasSuffix(".sock") {
+            let interface = String(entry.dropLast(".sock".count))
+            if let keep, interface == keep { continue }
+
+            let path = socketDir + "/" + entry
+            guard !processes(holding: path).isEmpty else {
+                // Сокет без хозяина — просто мусор от прошлого раза.
+                try? FileManager.default.removeItem(atPath: path)
+                continue
+            }
+            terminate(holdingSocket: path)
+            try? FileManager.default.removeItem(atPath: path)
+            Shell.runTool("ifconfig", [interface, "down"], timeout: 15)
+        }
     }
 
     /// Имя интерфейса, оставшегося от прошлого запуска, если он ещё жив.

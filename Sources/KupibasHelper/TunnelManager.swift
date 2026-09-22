@@ -55,10 +55,15 @@ final class TunnelManager {
 
     /// После падения или перезагрузки демона в системе мог остаться поднятый туннель.
     func recoverOnStartup() {
-        guard let name = WireGuardInterface.existingInterface(logicalName: Paths.interfaceName) else { return }
-        log.info("Обнаружен туннель от прошлого запуска (\(name)) — опускаю его.")
-        realInterfaceName = name
-        tearDownInterface()
+        if let name = WireGuardInterface.existingInterface(logicalName: Paths.interfaceName) {
+            log.info("Обнаружен туннель от прошлого запуска (\(name)) — опускаю его.")
+            realInterfaceName = name
+            tearDownInterface()
+        }
+
+        // И всё, что осталось от предыдущих запусков службы. Такие туннели
+        // продолжают держать свои utun и мешают поднять новый.
+        WireGuardInterface.cleanUpOrphans(logicalName: Paths.interfaceName)
     }
 
     func shutdown() {
@@ -581,17 +586,34 @@ final class TunnelManager {
 
     /// Прокладывает крупный список обхода одним заходом.
     private func installBulkBypass(_ nets: [Ipv4Net]) {
-        guard !nets.isEmpty, let via = savedDefaultRoute, !via.gateway.isEmpty else { return }
+        guard !nets.isEmpty else {
+            // Список пуст — значит российская зона не прочиталась. Молчать
+            // об этом нельзя: весь трафик пойдёт через VPN, и банки
+            // с госуслугами увидят казахстанский адрес.
+            log.error("Список российской зоны пуст — обход не проложен.")
+            message = "Обход российской зоны не работает: переустановите службу."
+            return
+        }
+        guard let via = savedDefaultRoute, !via.gateway.isEmpty else {
+            log.error("Не известен шлюз по умолчанию — обход не проложен.")
+            message = "Обход российской зоны не работает: переподключитесь."
+            return
+        }
 
         let started = Date()
         let outcome = RouteSocket.add(nets, gateway: via.gateway)
-        bulkBypass = Set(nets)
+
+        // Запоминаем то, что действительно проложено. Раньше сюда попадал
+        // весь список независимо от исхода: состояние врало, а снять потом
+        // пытались маршруты, которых не было.
+        bulkBypass = outcome.handled > 0 ? Set(nets) : []
 
         let seconds = String(format: "%.1f", Date().timeIntervalSince(started))
         log.info("Обход российской зоны: маршрутов \(outcome.handled) из \(nets.count) за \(seconds) с (ошибок \(outcome.failed)).")
 
-        if outcome.handled == 0 && outcome.failed > 0 {
+        if outcome.handled == 0 {
             log.error("Сокет маршрутизации не принял список — обход не работает.")
+            message = "Обход российской зоны не работает: переподключитесь."
         }
     }
 
@@ -710,7 +732,12 @@ final class TunnelManager {
         switch config.effectiveMode {
         case .full: status.routeCount = 0
         case .include: status.routeCount = tunnelRoutes.count
-        case .exclude: status.routeCount = bypassRoutes.count
+        case .exclude:
+            // Основная часть обхода — российская зона — лежит в bulkBypass,
+            // а в bypassRoutes только поштучные правила по IPv6. Считался
+            // раньше лишь второй набор, поэтому в окне стоял ноль, хотя
+            // тысячи маршрутов были проложены.
+            status.routeCount = bulkBypass.count + bypassRoutes.count
         }
 
         do {

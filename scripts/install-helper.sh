@@ -27,6 +27,25 @@ log "=== запуск установщика: $* ==="
 # Служба поднимает туннель сама, поэтому и снимается он вручную: удаляем
 # сокет — процесс туннеля видит это и уходит.
 stop_tunnel() {
+    # Сам туннель — отдельный процесс, который уходит в фон и держит своё
+    # устройство utun. Раньше его не трогали: гасили интерфейс и удаляли
+    # сокет, а процесс оставался жить. Каждое переподключение заводило
+    # новый, старые копились и мешали друг другу, пока связь не переставала
+    # подниматься. Завершаем их по-настоящему.
+    for sock in /var/run/amneziawg/*.sock; do
+        [ -e "$sock" ] || continue
+        PIDS="$(lsof -t "$sock" 2>/dev/null || true)"
+        if [ -n "$PIDS" ]; then
+            kill $PIDS 2>/dev/null || true
+            sleep 1
+            PIDS="$(lsof -t "$sock" 2>/dev/null || true)"
+            [ -n "$PIDS" ] && kill -9 $PIDS 2>/dev/null || true
+        fi
+        IFACE="$(basename "$sock" .sock)"
+        ifconfig "$IFACE" down >/dev/null 2>&1 || true
+        rm -f "$sock"
+    done
+
     NAME_FILE="/var/run/amneziawg/kb0.name"
     if [ -f "$NAME_FILE" ]; then
         IFACE="$(cat "$NAME_FILE" 2>/dev/null || true)"
