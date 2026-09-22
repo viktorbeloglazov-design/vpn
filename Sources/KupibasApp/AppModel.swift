@@ -282,6 +282,27 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Куда на самом деле идёт трафик
+
+    @Published var routeCheck: [RouteProbe.Result] = []
+    @Published var routeCheckNote: String = ""
+
+    /// Спрашивает систему, идут ли российские сервисы мимо туннеля.
+    ///
+    /// Это единственный способ ответить на «МАХ не грузит файлы» точно,
+    /// а не догадками: система знает, через какой интерфейс уйдёт пакет.
+    func checkRouting() {
+        routeCheckNote = "Проверяю…"
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let results = RouteProbe.check()
+            let note = RouteProbe.summary(results)
+            DispatchQueue.main.async {
+                self?.routeCheck = results
+                self?.routeCheckNote = note
+            }
+        }
+    }
+
     // MARK: - Лишние копии программы
 
     /// Сколько копий программы нашлось, кроме этой.
@@ -457,6 +478,16 @@ final class AppModel: ObservableObject {
         }
         lines.append("Интерфейс: \(status.interfaceName.isEmpty ? "—" : status.interfaceName)")
         lines.append("Маршрутов мимо туннеля: \(status.routeCount)")
+
+        // Куда на самом деле уходят пакеты: по этому видно, работает ли
+        // обход, — без него разговор упирается в догадки.
+        for result in RouteProbe.check() {
+            let path = result.interface.isEmpty
+                ? "маршрут не найден"
+                : (result.bypassesTunnel ? "напрямую (\(result.interface))"
+                                         : "через VPN (\(result.interface))")
+            lines.append("  \(result.name): \(path)")
+        }
         lines.append("Handshake: \(Formatting.relative(status.lastHandshake))")
         lines.append("Принято/отправлено: \(Formatting.bytes(status.rxBytes)) / \(Formatting.bytes(status.txBytes))")
         return lines.joined(separator: "\n")

@@ -34,6 +34,35 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
 
+                    Section("Куда идёт трафик на самом деле") {
+                        Text("Российские сервисы должны идти напрямую. Если они идут "
+                             + "через VPN, МАХ и банки начинают капризничать: сообщения "
+                             + "ходят, а файлы не грузятся.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        ForEach(model.routeCheck, id: \.address) { result in
+                            LabeledContent(result.name) {
+                                Text(result.interface.isEmpty
+                                     ? "маршрут не найден"
+                                     : (result.bypassesTunnel
+                                        ? "напрямую (\(result.interface))"
+                                        : "через VPN (\(result.interface))"))
+                                    .foregroundColor(result.bypassesTunnel ? .green : .orange)
+                            }
+                        }
+
+                        HStack(spacing: 10) {
+                            Button("Проверить") { model.checkRouting() }
+                            if !model.routeCheckNote.isEmpty {
+                                Text(model.routeCheckNote)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
                     Section("Эта копия программы") {
                         // Когда копий несколько, первый вопрос — какая из них
                         // сейчас работает. Путь отвечает на него сразу.
