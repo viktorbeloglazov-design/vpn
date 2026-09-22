@@ -159,28 +159,6 @@ jobs:
           path: dist/*.apk
           if-no-files-found: error
 
-      - name: Опубликовать в релизе
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION="${{ steps.version.outputs.value }}"
-          TAG="android-v$VERSION"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "${{ steps.apk.outputs.path }}" \
-              "${{ steps.apk.outputs.universal }}" --clobber
-            gh release edit "$TAG" --notes-file .github/release-notes-android.md
-          else
-            gh release create "$TAG" "${{ steps.apk.outputs.path }}" \
-              "${{ steps.apk.outputs.universal }}" \
-              --target "$GITHUB_SHA" \
-              --title "QP VPN для Android $VERSION" \
-              --notes-file .github/release-notes-android.md
-          fi
-          echo "Ссылка: $(gh release view "$TAG" --json url --jq .url)"
-
-      # Постоянная ссылка: имя файла без версии, выпуск с меткой latest.
-      # Её печатают в инструкциях, и она всегда ведёт на свежую сборку.
       - name: Обновить постоянную ссылку
         if: github.event_name == 'workflow_dispatch'
         env:
@@ -204,3 +182,29 @@ jobs:
               --title "QP VPN — свежие сборки" \
               --notes-file .github/latest-notes.md
           fi
+
+      - name: Опубликовать в релизе
+        # Постоянные ссылки важнее архива версий: если прав на создание
+        # нового выпуска нет, сборка не должна из-за этого падать.
+        continue-on-error: true
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          TAG="android-v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${{ steps.apk.outputs.path }}" \
+              "${{ steps.apk.outputs.universal }}" --clobber
+            gh release edit "$TAG" --notes-file .github/release-notes-android.md
+          else
+            gh release create "$TAG" "${{ steps.apk.outputs.path }}" \
+              "${{ steps.apk.outputs.universal }}" \
+              --target "$GITHUB_SHA" \
+              --title "QP VPN для Android $VERSION" \
+              --notes-file .github/release-notes-android.md
+          fi
+          echo "Ссылка: $(gh release view "$TAG" --json url --jq .url)"
+
+      # Постоянная ссылка: имя файла без версии, выпуск с меткой latest.
+      # Её печатают в инструкциях, и она всегда ведёт на свежую сборку.

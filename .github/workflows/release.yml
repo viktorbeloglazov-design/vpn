@@ -111,24 +111,6 @@ jobs:
           path: dist/*.dmg
           if-no-files-found: error
 
-      - name: Опубликовать релиз
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION="${{ steps.version.outputs.value }}"
-          TAG="v$VERSION"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/*.dmg --clobber
-            gh release edit "$TAG" --notes-file .github/release-notes.md
-          else
-            gh release create "$TAG" dist/*.dmg \
-              --target "$GITHUB_SHA" \
-              --title "QP VPN для Mac $VERSION" \
-              --notes-file .github/release-notes.md
-          fi
-          echo "Ссылка на релиз: $(gh release view "$TAG" --json url --jq .url)"
-
-      # Постоянная ссылка: имя файла без версии, выпуск с меткой latest.
       - name: Обновить постоянную ссылку
         env:
           GH_TOKEN: ${{ github.token }}
@@ -145,3 +127,23 @@ jobs:
               --title "QP VPN — свежие сборки" \
               --notes-file .github/latest-notes.md
           fi
+
+      - name: Опубликовать релиз
+        # Постоянные ссылки важнее архива версий: если прав на создание
+        # нового выпуска нет, сборка не должна из-за этого падать.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.dmg --clobber
+            gh release edit "$TAG" --notes-file .github/release-notes.md
+          else
+            gh release create "$TAG" dist/*.dmg \
+              --target "$GITHUB_SHA" \
+              --title "QP VPN для Mac $VERSION" \
+              --notes-file .github/release-notes.md
+          fi
+          echo "Ссылка на релиз: $(gh release view "$TAG" --json url --jq .url)"
