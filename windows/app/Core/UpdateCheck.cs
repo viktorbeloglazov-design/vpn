@@ -22,22 +22,44 @@ public static class UpdateCheck
     private const string VersionUrl = Base + "/windows-version.txt";
     private const string ArchiveUrl = Base + "/QPVPN-windows.zip";
 
+    /// <summary>Куда отправить человека, если спросить сервер не вышло.</summary>
+    public const string PageUrl = ArchiveUrl;
+
+    /// <summary>
+    /// Сколько раз спросить, прежде чем сдаться.
+    ///
+    /// Канал, по которому раздаются сборки, рвётся: одна неудачная попытка
+    /// ничего не значит, а человек из-за неё остаётся на старой версии.
+    /// </summary>
+    private const int Attempts = 3;
+
     /// <summary>Раз в сутки — чаще незачем, реже можно пропустить важное.</summary>
     public static readonly TimeSpan CheckInterval = TimeSpan.FromDays(1);
 
     /// <summary>Свежая версия на сервере, либо null — узнать не вышло.</summary>
     public static async Task<string?> LatestVersionAsync()
     {
-        try
+        for (var attempt = 1; attempt <= Attempts; attempt++)
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-            var text = (await client.GetStringAsync(VersionUrl).ConfigureAwait(false)).Trim();
-            return text.Length > 0 && char.IsDigit(text[0]) ? text : null;
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+                // Ответ не должен браться из кэша: иначе программа будет
+                // видеть вчерашний номер версии и молчать про новую.
+                client.DefaultRequestHeaders.CacheControl =
+                    new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
+
+                var text = (await client.GetStringAsync(VersionUrl).ConfigureAwait(false)).Trim();
+                if (text.Length > 0 && char.IsDigit(text[0])) return text;
+            }
+            catch (Exception)
+            {
+                // Обрыв — обычное дело для этого канала. Пробуем ещё.
+            }
+
+            if (attempt < Attempts) await Task.Delay(1500 * attempt).ConfigureAwait(false);
         }
-        catch (Exception)
-        {
-            return null;
-        }
+        return null;
     }
 
     /// <summary>Скачивает архив во временный каталог. null — не вышло.</summary>

@@ -226,15 +226,23 @@ public partial class MainWindow : Window
         if (!force && now - _store.Config.LastUpdateCheck < UpdateCheck.CheckInterval) return;
 
         var latest = await UpdateCheck.LatestVersionAsync();
-        _store.Config.LastUpdateCheck = now;
-        _store.Save();
 
         if (latest is null)
         {
+            // Неудачу за проверку не засчитываем. Иначе один сбой связи
+            // означал бы, что программа промолчит целые сутки — и человек
+            // всё это время сидит на старой версии, не зная об этом.
             UpdateCard.Visibility = Visibility.Collapsed;
-            if (force) UpdateStateText.Text = "Не удалось спросить сервер. Попробуйте позже.";
+            if (force)
+            {
+                UpdateStateText.Text = "Не удалось спросить сервер. Проверьте связь "
+                    + $"или скачайте вручную: {UpdateCheck.PageUrl} (у вас {AppVersion}).";
+            }
             return;
         }
+
+        _store.Config.LastUpdateCheck = now;
+        _store.Save();
 
         if (!UpdateCheck.IsNewer(latest, AppVersion))
         {
