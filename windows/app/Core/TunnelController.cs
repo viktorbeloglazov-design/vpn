@@ -98,8 +98,11 @@ public sealed class TunnelController
                 stderr.Length > 0 ? stderr : "Служба туннеля не запустилась.");
         }
 
+        // Служба запущена — но это ещё не связь. «Подключён» ставится
+        // только после того, как сервер ответил: иначе человек видит
+        // зелёную надпись и гадает, почему ничего не открывается.
         Status = new TunnelStatus(
-            ConnectionState.Connected,
+            ConnectionState.Connecting,
             RouteCount: routes.Count,
             ServerName: profile.EndpointHost);
 
@@ -212,24 +215,9 @@ public sealed class TunnelController
             await Task.Delay(700).ConfigureAwait(false);
 
             var (code, stdout, _) = await RunToolAsync("/status", TunnelName).ConfigureAwait(false);
-            if (code != 0 || stdout.Length == 0) continue;
+            if (code != 0) continue;
 
-            try
-            {
-                using var json = JsonDocument.Parse(stdout);
-                var root = json.RootElement;
-                if (!root.GetProperty("running").GetBoolean()) continue;
-
-                // Приветствие от сервера — единственный надёжный признак,
-                // что туннель не просто создан, а работает.
-                var handshake = root.TryGetProperty("lastHandshake", out var value)
-                    ? value.GetInt64() : 0;
-                if (handshake > 0) return true;
-            }
-            catch (JsonException)
-            {
-                // Служба ещё поднимается и отвечает не полностью.
-            }
+            if (TunnelReadiness.Parse(stdout).IsReady) return true;
         }
         return false;
     }
@@ -257,6 +245,7 @@ public sealed class TunnelController
             && await BulkCheck.WorksAsync().ConfigureAwait(false))
         {
             ActiveMtu = firstMtu;
+            Status = Status with { State = ConnectionState.Connected, Message = "" };
             return;
         }
 
@@ -278,6 +267,7 @@ public sealed class TunnelController
             }
             Status = Status with
             {
+                State = ConnectionState.Connected,
                 ServerName = HostOf(attempt.Endpoint),
                 Message = attempt.ViaBackup ? "Через запасной вход" : "",
             };
@@ -291,12 +281,15 @@ public sealed class TunnelController
         ActiveMtu = firstMtu;
         Status = Status with
         {
+            // Сервер ответил, но крупные порции данных не проходят —
+            // связь есть, пользоваться ею тяжело. Это не то же самое,
+            // что «туннель не поднялся».
+            State = restored ? ConnectionState.Connected : ConnectionState.Error,
             ServerName = profile.EndpointHost,
             Message = restored
                 ? "Связь нестабильна — проверьте сеть или задайте запасной вход"
-                : "Туннель не поднялся. Выключите и включите заново.",
+                : "Сервер не отвечает. Проверьте ключ и подключение к интернету.",
         };
-        if (!restored) Status = Status with { State = ConnectionState.Error };
     }
 
     /// <summary>

@@ -20,6 +20,7 @@
     <!-- Берём файлы напрямую: проект программы собирается только под
          Windows, а проверять его логику надо на любой машине. -->
     <Compile Include="../app/Core/TuningPlan.cs" />
+    <Compile Include="../app/Core/TunnelReadiness.cs" />
     <Compile Include="../app/Core/Cidr.cs" />
     <Compile Include="../app/Core/WgProfile.cs" />
     <Compile Include="../app/Core/KeepInTunnel.cs" />
