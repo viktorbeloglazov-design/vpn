@@ -1,0 +1,32 @@
+name: windows-tests
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Проверки логики Windows
+    # Логика от Windows не зависит, а обычная машина освобождается быстрее.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Прогнать трижды
+        working-directory: windows/tests
+        run: |
+          # Три прогона подряд: разовый зелёный результат ничего не значит,
+          # если проверка зависит от порядка или времени.
+          for run in 1 2 3; do
+            echo "=========== прогон $run из 3 ==========="
+            dotnet test --nologo --verbosity normal || exit 1
+          done
+          echo "Все три прогона прошли."

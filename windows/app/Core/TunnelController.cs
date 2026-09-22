@@ -184,71 +184,150 @@ public sealed class TunnelController
 
     public int ActiveMtu { get; private set; }
 
-    /// <summary>Размеры пакета сверху вниз: чем больше, тем быстрее.</summary>
-    private static readonly int[] MtuLadder = { 1420, 1380, 1320, 1280 };
+    /// <summary>
+    /// Сколько ждать, пока поднятый туннель начнёт работать.
+    ///
+    /// Служба запускается не мгновенно: ей нужно создать сетевой адаптер,
+    /// задать адрес, проложить маршруты и обменяться приветствием
+    /// с сервером. Маршрутов тысячи, и на медленной машине это секунды.
+    /// </summary>
+    private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(25);
+
+    /// <summary>
+    /// Ждёт, пока туннель действительно заработает.
+    ///
+    /// Раньше этого ожидания не было: проверка связи запускалась сразу
+    /// после команды на запуск службы, когда туннеля ещё не существовало.
+    /// Она, конечно, не проходила — и программа принималась перебирать
+    /// размеры пакета, переустанавливая службу снова и снова. Туннелю
+    /// не давали подняться ни разу: отправка шла, ответа не было,
+    /// и адрес не определялся.
+    /// </summary>
+    /// <returns>true — сервер ответил.</returns>
+    private async Task<bool> WaitUntilReadyAsync()
+    {
+        var deadline = DateTimeOffset.UtcNow + ReadyTimeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(700).ConfigureAwait(false);
+
+            var (code, stdout, _) = await RunToolAsync("/status", TunnelName).ConfigureAwait(false);
+            if (code != 0 || stdout.Length == 0) continue;
+
+            try
+            {
+                using var json = JsonDocument.Parse(stdout);
+                var root = json.RootElement;
+                if (!root.GetProperty("running").GetBoolean()) continue;
+
+                // Приветствие от сервера — единственный надёжный признак,
+                // что туннель не просто создан, а работает.
+                var handshake = root.TryGetProperty("lastHandshake", out var value)
+                    ? value.GetInt64() : 0;
+                if (handshake > 0) return true;
+            }
+            catch (JsonException)
+            {
+                // Служба ещё поднимается и отвечает не полностью.
+            }
+        }
+        return false;
+    }
 
     /// <summary>
     /// Доводит поднятый туннель до рабочего состояния.
     ///
-    /// Сначала убеждаемся, что через него вообще идут большие порции данных.
-    /// Не идут — пробуем запасной вход, если он задан, а потом уменьшаем
-    /// размер пакета, пока не пойдут. Каждая перенастройка — это короткий
-    /// перезапуск службы туннеля, маршруты при этом те же самые.
+    /// Сначала дожидаемся, пока туннель вообще заработает, и только потом
+    /// проверяем, идут ли через него большие порции данных. Не идут —
+    /// перебираем размеры пакета, а затем запасной вход. Каждая попытка —
+    /// это перезапуск службы, поэтому их порядок считается заранее
+    /// и лишних не делается.
+    ///
+    /// Если не помогло ничего, возвращаем ту настройку, с которой начинали:
+    /// оставить человека с последней неудачной — значит оставить его вовсе
+    /// без связи.
     /// </summary>
     private async Task VerifyAndTuneAsync(WgProfile profile, List<string> routes, List<string> endpoints)
     {
         var config = _store.Config;
         UsedBackupEntry = false;
+        var firstMtu = config.Mtu > 0 ? config.Mtu : profile.Mtu;
 
-        if (await BulkCheck.WorksAsync().ConfigureAwait(false))
+        if (await WaitUntilReadyAsync().ConfigureAwait(false)
+            && await BulkCheck.WorksAsync().ConfigureAwait(false))
         {
-            ActiveMtu = config.Mtu > 0 ? config.Mtu : profile.Mtu;
+            ActiveMtu = firstMtu;
             return;
         }
 
-        // Размеры пакета: с того, что подошло в прошлый раз, и ниже.
-        var start = config.ProbedMtu > 0 ? config.ProbedMtu : Math.Min(profile.Mtu, MtuLadder[0]);
-        var ladder = config.Mtu > 0
-            ? new List<int> { config.Mtu }
-            : new List<int> { start }.Concat(MtuLadder.Where(value => value < start)).ToList();
-
-        // Одно сочетание уже проверено выше — им туннель и поднимался.
-        // Повторять его значит зря гонять службу туда-обратно.
-        var triedMtu = config.Mtu > 0 ? config.Mtu : profile.Mtu;
-
-        foreach (var endpoint in endpoints)
+        var attempts = TuningPlan.Build(endpoints, profile.Mtu, config.Mtu, config.ProbedMtu);
+        foreach (var attempt in attempts)
         {
-            var viaBackup = endpoint != endpoints[0];
-            foreach (var mtu in ladder)
+            if (!await ApplyAsync(profile, routes, attempt.Endpoint, attempt.Mtu).ConfigureAwait(false))
             {
-                if (!viaBackup && mtu == triedMtu) continue;
-
-                var attempt = profile with { Endpoint = endpoint };
-                WriteTunnelConfig(attempt.ToConfigText(routes, config.UseTunnelDns, mtu));
-                await RunToolAsync("/uninstalltunnelservice", TunnelName).ConfigureAwait(false);
-                var (code, _, _) = await RunToolAsync("/installtunnelservice", Store.ProfilePath)
-                    .ConfigureAwait(false);
-                if (code != 0) continue;
-
-                if (!await BulkCheck.WorksAsync().ConfigureAwait(false)) continue;
-
-                UsedBackupEntry = viaBackup;
-                ActiveMtu = mtu;
-                if (config.Mtu == 0 && mtu != config.ProbedMtu)
-                {
-                    _store.Config.ProbedMtu = mtu;
-                    _store.Save();
-                }
-                Status = Status with
-                {
-                    ServerName = attempt.EndpointHost,
-                    Message = viaBackup ? "Через запасной вход" : "",
-                };
-                return;
+                continue;
             }
+            if (!await BulkCheck.WorksAsync().ConfigureAwait(false)) continue;
+
+            UsedBackupEntry = attempt.ViaBackup;
+            ActiveMtu = attempt.Mtu;
+            if (config.Mtu == 0 && attempt.Mtu != config.ProbedMtu)
+            {
+                _store.Config.ProbedMtu = attempt.Mtu;
+                _store.Save();
+            }
+            Status = Status with
+            {
+                ServerName = HostOf(attempt.Endpoint),
+                Message = attempt.ViaBackup ? "Через запасной вход" : "",
+            };
+            return;
         }
 
-        ActiveMtu = ladder[^1];
+        // Ничего не подошло. Возвращаем исходную настройку: пусть связь
+        // и неидеальна, но это лучше, чем брошенная посередине перебора
+        // служба, с которой не работает ничего.
+        var restored = await ApplyAsync(profile, routes, endpoints[0], firstMtu).ConfigureAwait(false);
+        ActiveMtu = firstMtu;
+        Status = Status with
+        {
+            ServerName = profile.EndpointHost,
+            Message = restored
+                ? "Связь нестабильна — проверьте сеть или задайте запасной вход"
+                : "Туннель не поднялся. Выключите и включите заново.",
+        };
+        if (!restored) Status = Status with { State = ConnectionState.Error };
+    }
+
+    /// <summary>
+    /// Переподнимает туннель с другим входом или размером пакета.
+    /// </summary>
+    /// <returns>true — служба запустилась и сервер ответил.</returns>
+    private async Task<bool> ApplyAsync(WgProfile profile, List<string> routes, string endpoint, int mtu)
+    {
+        var attempt = profile with { Endpoint = endpoint };
+        try
+        {
+            WriteTunnelConfig(attempt.ToConfigText(routes, _store.Config.UseTunnelDns, mtu));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        await RunToolAsync("/uninstalltunnelservice", TunnelName).ConfigureAwait(false);
+        var (code, _, _) = await RunToolAsync("/installtunnelservice", Store.ProfilePath)
+            .ConfigureAwait(false);
+        if (code != 0) return false;
+
+        return await WaitUntilReadyAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Имя узла из адреса вида «адрес:порт».</summary>
+    private static string HostOf(string endpoint)
+    {
+        var colon = endpoint.LastIndexOf(':');
+        return colon > 0 ? endpoint[..colon] : endpoint;
     }
 
     /// <summary>Столько маршрутов система принимает спокойно.</summary>
