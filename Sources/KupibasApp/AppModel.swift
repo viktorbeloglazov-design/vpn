@@ -282,6 +282,71 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Лишние копии программы
+
+    /// Сколько копий программы нашлось, кроме этой.
+    @Published var otherCopies: Int = 0
+    @Published var cleanupNote: String = ""
+    @Published var cleanupBusy: Bool = false
+
+    /// Ищет другие копии программы на компьютере.
+    ///
+    /// Программа ставится перетаскиванием, поэтому копий легко набирается
+    /// несколько. Работает при этом та, что уже в памяти, — и человек,
+    /// поставив новую версию, продолжает видеть старую.
+    func scanCopies() {
+        cleanupNote = "Ищу…"
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let mine = Bundle.main.bundlePath
+            let others = Leftovers.applications().filter { $0 != mine }
+            let running = Leftovers.running().filter { $0 != mine }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.otherCopies = others.count
+                if others.isEmpty {
+                    self.cleanupNote = "Других копий не найдено — эта единственная."
+                    return
+                }
+                var lines = others.map { path -> String in
+                    let version = Leftovers.version(of: path) ?? "версия неизвестна"
+                    let mark = running.contains(path) ? " — сейчас работает" : ""
+                    return "\(version): \(path)\(mark)"
+                }
+                if !running.isEmpty {
+                    lines.append("Работающие копии будут завершены при уборке.")
+                }
+                self.cleanupNote = lines.joined(separator: "\n")
+            }
+        }
+    }
+
+    /// Убирает все копии, кроме этой. Ключ и настройки остаются.
+    func removeOtherCopies() {
+        guard !cleanupBusy else { return }
+        let mine = Bundle.main.bundlePath
+        let others = Leftovers.applications().filter { $0 != mine }
+        guard !others.isEmpty else {
+            cleanupNote = "Убирать нечего."
+            return
+        }
+
+        cleanupBusy = true
+        cleanupNote = "Убираю…"
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let error = HelperInstaller.run(.removeCopies(others))
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.cleanupBusy = false
+                if let error {
+                    self.cleanupNote = error
+                } else {
+                    self.cleanupNote = "Убрано копий: \(others.count). Ключ и настройки на месте."
+                    self.scanCopies()
+                }
+            }
+        }
+    }
+
     // MARK: - Обновление приложения
 
     /// Смотрит, не вышла ли новая версия. Раз в сутки, если не просили иначе.

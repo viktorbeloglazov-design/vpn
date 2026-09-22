@@ -34,6 +34,42 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
 
+                    Section("Эта копия программы") {
+                        // Когда копий несколько, первый вопрос — какая из них
+                        // сейчас работает. Путь отвечает на него сразу.
+                        LabeledContent("Версия") {
+                            Text(model.appVersion).foregroundColor(.secondary)
+                        }
+                        LabeledContent("Откуда запущена") {
+                            Text(Bundle.main.bundlePath)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        if model.otherCopies > 0 {
+                            Text("На компьютере есть ещё копии программы: \(model.otherCopies). "
+                                 + "Пока они лежат рядом, система может открывать не ту.")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        HStack(spacing: 10) {
+                            Button("Найти все копии") { model.scanCopies() }
+                            if model.otherCopies > 0 {
+                                Button(model.cleanupBusy ? "Убираю…" : "Убрать лишние копии") {
+                                    model.removeOtherCopies()
+                                }
+                                .disabled(model.cleanupBusy)
+                            }
+                        }
+                        if !model.cleanupNote.isEmpty {
+                            Text(model.cleanupNote)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
                     Section("Обновление") {
                         LabeledContent("Версия") {
                             HStack(spacing: 10) {

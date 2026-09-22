@@ -50,6 +50,9 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 # Служба и всё, что нужно для её установки, едут внутри приложения.
 install -m 0755 "$BIN_DIR/kupibasvpnd" "$APP/Contents/Library/Helpers/kupibasvpnd"
 install -m 0755 "$ROOT/scripts/install-helper.sh" "$APP/Contents/Resources/install-helper.sh"
+# Уборка лишних копий — тем же способом, что и установка службы: через
+# системное окно с паролем, без терминала.
+install -m 0755 "$ROOT/scripts/uninstall-mac.sh" "$APP/Contents/Resources/uninstall-mac.sh"
 # Список подсетей России: по нему главный фильтр решает, что идёт мимо VPN.
 install -m 0644 "$ROOT/Resources/ru_ipv4.txt" "$APP/Contents/Resources/ru_ipv4.txt"
 install -m 0644 "$ROOT/launchd/com.kupibas.vpn.helper.plist" "$APP/Contents/Resources/com.kupibas.vpn.helper.plist"

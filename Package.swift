@@ -19,6 +19,11 @@ let package = Package(
             dependencies: ["KupibasCore"],
             path: "Sources/KupibasApp"
         ),
+        .executableTarget(
+            name: "KupibasUninstaller",
+            dependencies: ["KupibasCore"],
+            path: "Sources/KupibasUninstaller"
+        ),
         .testTarget(
             name: "KupibasCoreTests",
             dependencies: ["KupibasCore"],

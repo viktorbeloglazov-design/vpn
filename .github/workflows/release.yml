@@ -49,6 +49,7 @@ jobs:
           test -x "$APP/Contents/MacOS/QPVPN"
           test -f "$APP/Contents/Info.plist"
           test -x "$APP/Contents/Resources/install-helper.sh"
+          test -x "$APP/Contents/Resources/uninstall-mac.sh"
           test -f "$APP/Contents/Resources/AppIcon.icns"
           test -f "$APP/Contents/PkgInfo"
           test -f "$APP/Contents/Resources/kupibas-logo-on-light.png"
@@ -101,6 +102,18 @@ jobs:
             find "$HOME/Library/Logs/DiagnosticReports" -name "QPVPN*" -mmin -5 -exec head -40 {} \; 2>/dev/null >&2 || true
             exit 1
           fi
+
+      - name: Проверить программу удаления
+        run: |
+          UNINSTALLER="dist/Удалить QP VPN.app"
+          test -x "$UNINSTALLER/Contents/MacOS/QPVPNUninstaller"
+          test -x "$UNINSTALLER/Contents/Resources/uninstall-mac.sh"
+          # Опознавательный знак должен отличаться от основной программы,
+          # иначе система сочтёт их одной и будет путать при запуске.
+          ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$UNINSTALLER/Contents/Info.plist")"
+          echo "Опознавательный знак удалятора: $ID"
+          test "$ID" = "com.kupibas.vpn.uninstaller"
+          codesign --verify --strict "$UNINSTALLER"
 
       - name: Собрать DMG
         run: ./scripts/make-dmg.sh "${{ steps.version.outputs.value }}"

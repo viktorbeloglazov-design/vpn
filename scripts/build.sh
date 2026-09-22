@@ -39,6 +39,9 @@ else
     "$ROOT/scripts/bundle-app.sh" --bin-dir "$BIN_DIR" --out "$DIST" --version "$VERSION"
 fi
 
+echo "==> Собираю программу удаления"
+"$ROOT/scripts/bundle-uninstaller.sh" --bin-dir "$BIN_DIR" --out "$DIST" --version "$VERSION"
+
 echo "==> Кладу рядом демон (для установки из исходников)"
 install -m 0755 "$BIN_DIR/kupibasvpnd" "$DIST/kupibasvpnd"
 codesign --force --sign - --timestamp=none "$DIST/kupibasvpnd"
@@ -46,6 +49,7 @@ codesign --force --sign - --timestamp=none "$DIST/kupibasvpnd"
 echo
 echo "Готово:"
 echo "  приложение: $DIST/QPVPN.app"
+echo "  удаление:   $DIST/Удалить QP VPN.app"
 echo "  демон:      $DIST/kupibasvpnd"
 echo
 if [ -n "$TOOLS_DIR" ]; then
