@@ -17,6 +17,8 @@ BASE = "https://github.com/viktorbeloglazov-design/vpn/releases/download/latest"
 ANDROID_URL = f"{BASE}/QPVPN-android.apk"
 MAC_URL = f"{BASE}/QPVPN-mac.dmg"
 WINDOWS_URL = f"{BASE}/QPVPN-windows.zip"
+# Сборка для совсем старых телефонов: тяжелее, зато встанет на любой.
+ANDROID_UNIVERSAL_URL = f"{BASE}/QPVPN-android-universal.apk"
 RELEASES_URL = "https://github.com/viktorbeloglazov-design/vpn/releases"
 
 
@@ -140,6 +142,11 @@ def android_install():
       <div class="note"><b>Зачем уведомления.</b> Без них Android не покажет значок
         VPN в строке состояния рядом с Wi-Fi и 4G — вы не будете видеть,
         включена защита или нет. Само уведомление можно свернуть, оно не шумит.</div>
+      <div class="note" style="background:#F2F6F9;border-color:#94A4B0">
+        <b>Если телефон пишет «приложение не установлено».</b> Такое бывает
+        на совсем старых телефонах, выпущенных до 2015 года. Для них рядом
+        лежит запасная сборка — она встанет на любой телефон, но весит вдвое
+        больше: {link(ANDROID_UNIVERSAL_URL, "QPVPN-android-universal.apk")}.</div>
     </div>
   </div>"""
     return page(2, "Android — установка", body)
@@ -440,7 +447,8 @@ def features():
     <tr><td><b>Обновление</b></td>
       <td>Android: «Ещё»<br>Mac: «Ещё»<br>Windows: «Проверка»</td>
       <td>Смотрит раз в сутки само и показывает карточку «Вышла версия…».
-        Кнопка — на случай, если ждать не хочется.</td></tr>
+        Нажали «Обновить» — программа скачает новую версию, поставит её
+        вместо старой и перезапустится сама. Ключ и настройки остаются.</td></tr>
 
     <tr><td><b>Диагностика</b></td>
       <td>Android и Mac: «Ещё»</td>
