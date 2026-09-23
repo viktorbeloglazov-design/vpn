@@ -113,8 +113,19 @@ public partial class MainWindow : Window
         RxText.Text = status.State == ConnectionState.Connected ? Bytes(status.RxBytes) : "—";
         TxText.Text = status.State == ConnectionState.Connected ? Bytes(status.TxBytes) : "—";
 
-        MasterText.Text = $"Российские сайты — МАХ, госуслуги, банки, маркетплейсы — напрямую "
-            + $"({RuZone.Count} подсетей России)";
+        // Пустой список российской зоны — тихая и тяжёлая поломка: через
+        // VPN уходит всё, включая Ozon, банки и госуслуги, и они перестают
+        // открываться. Об этом надо сказать прямо, а не прятать в скобки.
+        var zone = RuZone.Count;
+        MasterText.Text = zone > 0
+            ? "Российские сайты — МАХ, госуслуги, банки, маркетплейсы — напрямую "
+              + $"({zone} подсетей России)"
+            : "Список российских подсетей не прочитан — через VPN идёт всё, "
+              + "включая банки и госуслуги. Переустановите программу.";
+        MasterText.Foreground = zone > 0
+            ? (System.Windows.Media.Brush)FindResource("Muted")
+            : (System.Windows.Media.Brush)FindResource("Danger");
+
         MasterHint.Text = status.RouteCount > 0
             ? $"Маршрутов в туннеле: {status.RouteCount}"
             : $"Встроенный список сервисов: {MasterFilter.Count}";
