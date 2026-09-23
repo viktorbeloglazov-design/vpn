@@ -5,12 +5,12 @@ using System.Linq;
 namespace QPVPN.Core;
 
 /// <summary>
-/// Второй переключатель: рабочие ресурсы.
+/// Рабочая зона для 1С.
 ///
-/// Адреса заложены в приложение. Включён — они идут через VPN, выключен —
-/// напрямую. Списки те же, что в версии для Android.
+/// Адреса сервера 1С заложены в программу. Они идут через VPN всегда:
+/// без доступа к 1С работать нельзя, и выбирать тут нечего.
 /// </summary>
-public static class WorkFilter
+public static class OneCZone
 {
     public sealed record Resource(string Title, string Url)
     {
@@ -33,8 +33,8 @@ public static class WorkFilter
 
     public static readonly IReadOnlyList<Resource> Resources = new List<Resource>
     {
-        new("Ka", "https://135.106.142.73/Ka"),
-        new("Ka_old", "https://135.106.142.73/Ka_old"),
+        new("1С", "https://135.106.142.73/Ka"),
+        new("1С, прошлая база", "https://135.106.142.73/Ka_old"),
     };
 
     public static IReadOnlyList<string> Hosts =>

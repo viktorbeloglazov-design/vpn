@@ -20,16 +20,12 @@
     <!-- Берём файлы напрямую: проект программы собирается только под
          Windows, а проверять его логику надо на любой машине. -->
     <Compile Include="../app/Core/TuningPlan.cs" />
+    <Compile Include="../app/Core/OneCZone.cs" />
+    <Compile Include="../app/Core/VpnServices.cs" />
     <Compile Include="../app/Core/TunnelReadiness.cs" />
     <Compile Include="../app/Core/Cidr.cs" />
     <Compile Include="../app/Core/WgProfile.cs" />
-    <Compile Include="../app/Core/KeepInTunnel.cs" />
-    <Compile Include="../app/Core/RuZonePlan.cs" />
-    <Compile Include="../app/Core/RuZone.cs" />
     <Compile Include="../app/Core/Updater.cs" />
-    <!-- Тот же список, что и в программе: проверять надо на настоящих
-         данных, а не на выдуманной паре подсетей. -->
-    <EmbeddedResource Include="../app/Assets/ru_ipv4.txt" />
   </ItemGroup>
 
 </Project>

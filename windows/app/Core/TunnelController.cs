@@ -168,23 +168,52 @@ public sealed class TunnelController
     /// </summary>
     public static async Task<List<string>> RoutesForAsync(AppConfig config, WgProfile profile)
     {
-        var work = await WorkNetsAsync().ConfigureAwait(false);
-        var zone = FittingRuZone();
+        _ = profile;
 
-        if (config.WorkFilter)
+        // Рабочая зона для 1С идёт через VPN всегда: без доступа к базе
+        // работать нельзя, и выбирать тут нечего.
+        var nets = await ResolveAsync(OneCZone.Hosts).ConfigureAwait(false);
+
+        // Переключатель в окне управляет вторым списком. Выключен — через
+        // VPN идёт только 1С, весь остальной трафик уходит мимо туннеля.
+        if (config.ServicesThroughVpn)
         {
-            // Рабочие ресурсы сильнее исключений: возвращаем их в туннель,
-            // даже если они попали в российскую зону.
-            var background = zone.Count == 0
-                ? new List<Ipv4Net> { new(0, 0) }
-                : Cidr.Complement(zone);
-            return Cidr.Merge(background.Concat(work)).Select(net => net.ToString()).ToList();
+            nets.AddRange(VpnServices.Nets());
+            nets.AddRange(await ResolveAsync(VpnServices.Domains()).ConfigureAwait(false));
         }
 
-        var all = zone.Concat(work).ToList();
-        return all.Count == 0
-            ? new List<string> { "0.0.0.0/0" }
-            : Cidr.Complement(all).Select(net => net.ToString()).ToList();
+        if (nets.Count == 0)
+        {
+            // Пустой список туннель не примет. Ставим адрес самого клиента:
+            // он никуда не ведёт, туннель просто стоит пустым.
+            var address = profile.Addresses.FirstOrDefault() ?? "10.0.0.1/32";
+            var slash = address.IndexOf('/');
+            return [slash > 0 ? address : address + "/32"];
+        }
+
+        return Cidr.Merge(nets).Select(net => net.ToString()).ToList();
+    }
+
+    /// <summary>
+    /// Превращает список узлов в подсети: адреса берём как есть, имена
+    /// спрашиваем у DNS.
+    /// </summary>
+    private static async Task<List<Ipv4Net>> ResolveAsync(IEnumerable<string> hosts)
+    {
+        var result = new List<Ipv4Net>();
+        var domains = new List<string>();
+
+        foreach (var host in hosts)
+        {
+            if (Cidr.Parse(host) is { } net) result.Add(net);
+            else domains.Add(host.ToLowerInvariant());
+        }
+
+        if (domains.Count > 0)
+        {
+            result.AddRange(await DomainResolver.ResolveAllAsync(domains).ConfigureAwait(false));
+        }
+        return result.Distinct().ToList();
     }
 
     /// <summary>Каким входом поднялась связь и с каким размером пакета.</summary>
@@ -361,55 +390,6 @@ public sealed class TunnelController
     {
         var colon = endpoint.LastIndexOf(':');
         return colon > 0 ? endpoint[..colon] : endpoint;
-    }
-
-    /// <summary>Столько маршрутов система принимает спокойно.</summary>
-    private const int MaxRoutes = 4_000;
-
-    /// <summary>Шаги укрупнения: какой промежуток между подсетями прощаем.</summary>
-    private static readonly long[] Gaps = { 4_096, 16_384, 65_536, 262_144, 1_048_576 };
-
-    private static List<Ipv4Net>? _cachedZone;
-
-    /// <summary>
-    /// Российская зона, ужатая до размера, который система принимает.
-    ///
-    /// Точный список даёт больше двадцати тысяч маршрутов: столько Windows
-    /// прокладывает заметными секундами. Список укрупняется, пока маршрутов
-    /// не станет разумное количество, а сервисы, которые при этом могли бы
-    /// уйти мимо туннеля, возвращаются обратно.
-    /// </summary>
-    private static List<Ipv4Net> FittingRuZone()
-    {
-        if (_cachedZone is not null) return _cachedZone;
-
-        var exact = RuZone.Networks();
-        // Пустую зону не запоминаем: иначе один неудачный заход означал бы,
-        // что весь трафик идёт через VPN до перезапуска программы.
-        if (exact.Count == 0) return new List<Ipv4Net>();
-
-        var zone = RuZonePlan.Fit(exact, KeepInTunnel.Nets(), MaxRoutes, Gaps);
-        _cachedZone = zone;
-        return zone;
-    }
-
-    /// <summary>Адреса рабочих ресурсов: заложенные в приложение узлы.</summary>
-    private static async Task<List<Ipv4Net>> WorkNetsAsync()
-    {
-        var result = new List<Ipv4Net>();
-        var domains = new List<string>();
-
-        foreach (var host in WorkFilter.Hosts)
-        {
-            if (Cidr.Parse(host) is { } net) result.Add(net);
-            else domains.Add(host.ToLowerInvariant());
-        }
-
-        if (domains.Count > 0)
-        {
-            result.AddRange(await DomainResolver.ResolveAllAsync(domains).ConfigureAwait(false));
-        }
-        return result.Distinct().ToList();
     }
 
     // MARK: - Файлы и запуск

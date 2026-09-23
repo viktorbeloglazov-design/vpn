@@ -6,54 +6,23 @@ using System.Text.Json.Serialization;
 
 namespace QPVPN.Core;
 
-/// <summary>Что уходит в туннель.</summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum TunnelMode
-{
-    /// <summary>Весь трафик через VPN.</summary>
-    Full,
-
-    /// <summary>Через VPN идут только адреса из правил.</summary>
-    Include,
-
-    /// <summary>Через VPN идёт всё, кроме адресов из правил.</summary>
-    Exclude,
-}
-
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum RuleKind
-{
-    Domain,
-    Cidr,
-}
-
-public sealed class RoutingRule
-{
-    public string Id { get; set; } = Guid.NewGuid().ToString();
-    public RuleKind Kind { get; set; } = RuleKind.Domain;
-    public string Value { get; set; } = "";
-    public bool Enabled { get; set; } = true;
-    public string Note { get; set; } = "";
-}
-
 public sealed class AppConfig
 {
     public int Version { get; set; } = 1;
 
-    /// <summary>Главный фильтр: через VPN идёт только то, что не работает из России.</summary>
-    public bool MainFilter { get; set; } = true;
-
-    /// <summary>Рабочие ресурсы: заложенные адреса идут через VPN.</summary>
-    public bool WorkFilter { get; set; } = true;
-
-    public TunnelMode Mode { get; set; } = TunnelMode.Exclude;
-    public List<RoutingRule> Rules { get; set; } = new();
+    /// <summary>
+    /// Сервисы через VPN: ChatGPT, Claude, WhatsApp, YouTube.
+    ///
+    /// Единственный переключатель в окне. Выключен — через VPN идёт только
+    /// рабочая зона для 1С, весь остальной трафик уходит мимо туннеля.
+    /// </summary>
+    public bool ServicesThroughVpn { get; set; } = true;
 
     /// <summary>Использовать DNS-серверы из профиля.</summary>
-    public bool UseTunnelDns { get; set; } = true;
-
-    /// <summary>Вся российская зона идёт мимо туннеля.</summary>
-    public bool BypassRuZone { get; set; } = true;
+    ///
+    /// Через туннель идёт только список, поэтому DNS оставляем свой:
+    /// чужой DNS заворачивал бы в туннель и всё остальное.
+    public bool UseTunnelDns { get; set; }
 
     /// <summary>
     /// Размер пакета. 0 — как записано в ключе.
@@ -77,10 +46,6 @@ public sealed class AppConfig
     /// <summary>Когда в последний раз смотрели, нет ли обновления.</summary>
     public DateTimeOffset LastUpdateCheck { get; set; }
 
-    /// <summary>Режим, который действительно применяется.</summary>
-    [JsonIgnore]
-    public TunnelMode EffectiveMode => TunnelMode.Exclude;
-
     /// <summary>Куда пробовать подключаться: сервер, затем запасной вход.</summary>
     public List<string> EndpointsToTry(string primary)
     {
@@ -93,30 +58,15 @@ public sealed class AppConfig
     /// <summary>
     /// Настройки, приведённые к зашитому поведению.
     ///
-    /// Маршрутизация не настраивается: заблокированные сервисы всегда идут
-    /// через VPN, российские адреса — всегда напрямую. Человек выбирает
-    /// только рабочие ресурсы и размер пакета, их здесь не трогаем.
+    /// Маршрутизация не настраивается: через VPN идёт рабочая зона для 1С
+    /// и, если включён переключатель, список сервисов. Всё остальное —
+    /// мимо туннеля. Человек выбирает только этот переключатель и размер
+    /// пакета, их здесь не трогаем.
     /// </summary>
     public AppConfig Pinned()
     {
-        MainFilter = true;
-        Mode = TunnelMode.Exclude;
-        Rules = new List<RoutingRule>();
-        UseTunnelDns = true;
-        BypassRuZone = true;
+        UseTunnelDns = false;
         return this;
-    }
-
-    [JsonIgnore]
-    public IEnumerable<RoutingRule> ActiveRules
-    {
-        get
-        {
-            foreach (var rule in Rules)
-            {
-                if (rule.Enabled && !string.IsNullOrWhiteSpace(rule.Value)) yield return rule;
-            }
-        }
     }
 }
 

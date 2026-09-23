@@ -57,7 +57,7 @@ public partial class MainWindow : Window
     private void ApplyConfigToControls()
     {
         var config = _store.Config;
-        WorkFilterSwitch.IsChecked = config.WorkFilter;
+        ServicesSwitch.IsChecked = config.ServicesThroughVpn;
         BackupEndpointBox.Text = config.BackupEndpoint;
         Mtu1420.IsChecked = config.Mtu == 1420;
         MtuKey.IsChecked = config.Mtu == 0;
@@ -113,25 +113,18 @@ public partial class MainWindow : Window
         RxText.Text = status.State == ConnectionState.Connected ? Bytes(status.RxBytes) : "—";
         TxText.Text = status.State == ConnectionState.Connected ? Bytes(status.TxBytes) : "—";
 
-        // Пустой список российской зоны — тихая и тяжёлая поломка: через
-        // VPN уходит всё, включая Ozon, банки и госуслуги, и они перестают
-        // открываться. Об этом надо сказать прямо, а не прятать в скобки.
-        var zone = RuZone.Count;
-        MasterText.Text = zone > 0
-            ? "Российские сайты — МАХ, госуслуги, банки, маркетплейсы — напрямую "
-              + $"({zone} подсетей России)"
-            : "Список российских подсетей не прочитан — через VPN идёт всё, "
-              + "включая банки и госуслуги. Переустановите программу.";
-        MasterText.Foreground = zone > 0
-            ? (System.Windows.Media.Brush)FindResource("Muted")
-            : (System.Windows.Media.Brush)FindResource("Danger");
+        OneCHint.Text = $"{OneCZone.Count} адреса · через VPN всегда";
+        OneCList.Text = string.Join("\n",
+            OneCZone.Resources.Select(resource => $"{resource.Title}  {resource.Url}"));
 
-        MasterHint.Text = status.RouteCount > 0
-            ? $"Маршрутов в туннеле: {status.RouteCount}"
-            : $"Встроенный список сервисов: {MasterFilter.Count}";
-
-        WorkHint.Text = $"{WorkFilter.Count} адреса · заложены в приложение";
-        WorkList.Text = string.Join("\n", WorkFilter.Resources.Select(resource => $"{resource.Title}  {resource.Url}"));
+        var on = config.ServicesThroughVpn;
+        ServicesHint.Text = on
+            ? "Идут через VPN"
+            : "Выключено — весь трафик идёт мимо VPN";
+        ServicesList.Text = string.Join(" · ", VpnServices.Titles);
+        ServicesNote.Text = status.RouteCount > 0
+            ? $"В туннель уходит {status.RouteCount} подсетей. Всё остальное — мимо VPN."
+            : "Всё, чего нет в этих двух списках, идёт мимо VPN напрямую.";
 
         ProfileText.Text = _store.HasProfile ? ProfileSummary() : "Ключа нет. Вставьте ссылку vpn:// или откройте файл.";
         ClearProfileButton.Visibility = _store.HasProfile ? Visibility.Visible : Visibility.Collapsed;
@@ -205,10 +198,10 @@ public partial class MainWindow : Window
 
     // MARK: - Переключатели
 
-    private void OnWorkFilterChanged(object sender, RoutedEventArgs e)
+    private void OnServicesChanged(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
-        _store.Config.WorkFilter = WorkFilterSwitch.IsChecked == true;
+        _store.Config.ServicesThroughVpn = ServicesSwitch.IsChecked == true;
         _store.Save();
         Render();
         _ = ReapplyAsync();

@@ -29,7 +29,6 @@
 
   <ItemGroup>
     <!-- Адресное пространство России уезжает внутрь программы. -->
-    <EmbeddedResource Include="Assets\ru_ipv4.txt" />
     <Resource Include="Assets\logo-dark.png" />
     <Resource Include="Assets\logo-light.png" />
   </ItemGroup>
