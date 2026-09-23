@@ -47,7 +47,7 @@ public sealed class TunnelController
 
     // MARK: - Управление
 
-    public async Task<TunnelStatus> ConnectAsync()
+    public async Task<TunnelStatus> ConnectAsync(IProgress<string>? progress = null)
     {
         var profileText = _store.ProfileText();
         if (string.IsNullOrWhiteSpace(profileText))
@@ -71,6 +71,7 @@ public sealed class TunnelController
         List<string> routes;
         try
         {
+            progress?.Report("Считаю маршруты…");
             routes = await RoutesForAsync(_store.Config, profile).ConfigureAwait(false);
         }
         catch (Exception error)
@@ -91,6 +92,7 @@ public sealed class TunnelController
             return Status = new TunnelStatus(ConnectionState.Error, $"Не удалось сохранить настройки туннеля: {error.Message}");
         }
 
+        progress?.Report("Поднимаю туннель…");
         var (code, _, stderr) = await RunToolAsync("/installtunnelservice", Store.ProfilePath).ConfigureAwait(false);
         if (code != 0)
         {
@@ -106,7 +108,7 @@ public sealed class TunnelController
             RouteCount: routes.Count,
             ServerName: profile.EndpointHost);
 
-        await VerifyAndTuneAsync(profile, routes, endpoints).ConfigureAwait(false);
+        await VerifyAndTuneAsync(profile, routes, endpoints, progress).ConfigureAwait(false);
         return Status;
     }
 
@@ -197,7 +199,26 @@ public sealed class TunnelController
     /// задать адрес, проложить маршруты и обменяться приветствием
     /// с сервером. Маршрутов тысячи, и на медленной машине это секунды.
     /// </summary>
-    private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(25);
+    private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// Сколько ждать при повторных попытках.
+    ///
+    /// Первый раз туннель поднимается дольше всего: создаётся адаптер,
+    /// прокладываются маршруты. При переподключении всё это уже сделано,
+    /// и если сервер не ответил за восемь секунд — он не ответит и за
+    /// двадцать, а человек всё это время сидит без связи.
+    /// </summary>
+    private static readonly TimeSpan RetryReadyTimeout = TimeSpan.FromSeconds(8);
+
+    /// <summary>
+    /// Сколько всего можно потратить на подбор.
+    ///
+    /// Восемь попыток по двадцать секунд — это почти три минуты молчания,
+    /// за которые человек успевает решить, что программа повисла. Лучше
+    /// честно сказать, что не вышло, чем перебирать до бесконечности.
+    /// </summary>
+    private static readonly TimeSpan TuningBudget = TimeSpan.FromSeconds(75);
 
     /// <summary>
     /// Ждёт, пока туннель действительно заработает.
@@ -210,9 +231,9 @@ public sealed class TunnelController
     /// и адрес не определялся.
     /// </summary>
     /// <returns>true — сервер ответил.</returns>
-    private async Task<bool> WaitUntilReadyAsync()
+    private async Task<bool> WaitUntilReadyAsync(TimeSpan? limit = null)
     {
-        var deadline = DateTimeOffset.UtcNow + ReadyTimeout;
+        var deadline = DateTimeOffset.UtcNow + (limit ?? ReadyTimeout);
         while (DateTimeOffset.UtcNow < deadline)
         {
             await Task.Delay(700).ConfigureAwait(false);
@@ -238,23 +259,38 @@ public sealed class TunnelController
     /// оставить человека с последней неудачной — значит оставить его вовсе
     /// без связи.
     /// </summary>
-    private async Task VerifyAndTuneAsync(WgProfile profile, List<string> routes, List<string> endpoints)
+    private async Task VerifyAndTuneAsync(WgProfile profile, List<string> routes,
+                                          List<string> endpoints, IProgress<string>? progress)
     {
         var config = _store.Config;
         UsedBackupEntry = false;
         var firstMtu = config.Mtu > 0 ? config.Mtu : profile.Mtu;
 
-        if (await WaitUntilReadyAsync().ConfigureAwait(false)
-            && await BulkCheck.WorksAsync().ConfigureAwait(false))
+        progress?.Report("Жду ответа сервера…");
+        if (await WaitUntilReadyAsync().ConfigureAwait(false))
         {
-            ActiveMtu = firstMtu;
-            Status = Status with { State = ConnectionState.Connected, Message = "" };
-            return;
+            progress?.Report("Сервер ответил, проверяю связь…");
+            if (await BulkCheck.WorksAsync().ConfigureAwait(false))
+            {
+                ActiveMtu = firstMtu;
+                Status = Status with { State = ConnectionState.Connected, Message = "" };
+                return;
+            }
         }
 
+        var deadline = DateTimeOffset.UtcNow + TuningBudget;
         var attempts = TuningPlan.Build(endpoints, profile.Mtu, config.Mtu, config.ProbedMtu);
+        var number = 0;
+
         foreach (var attempt in attempts)
         {
+            number++;
+            if (DateTimeOffset.UtcNow > deadline) break;
+
+            progress?.Report(attempt.ViaBackup
+                ? $"Пробую запасной вход, пакет {attempt.Mtu} ({number} из {attempts.Count})…"
+                : $"Пробую размер пакета {attempt.Mtu} ({number} из {attempts.Count})…");
+
             if (!await ApplyAsync(profile, routes, attempt.Endpoint, attempt.Mtu).ConfigureAwait(false))
             {
                 continue;
@@ -280,6 +316,7 @@ public sealed class TunnelController
         // Ничего не подошло. Возвращаем исходную настройку: пусть связь
         // и неидеальна, но это лучше, чем брошенная посередине перебора
         // служба, с которой не работает ничего.
+        progress?.Report("Возвращаю исходные настройки…");
         var restored = await ApplyAsync(profile, routes, endpoints[0], firstMtu).ConfigureAwait(false);
         ActiveMtu = firstMtu;
         Status = Status with
@@ -316,7 +353,7 @@ public sealed class TunnelController
             .ConfigureAwait(false);
         if (code != 0) return false;
 
-        return await WaitUntilReadyAsync().ConfigureAwait(false);
+        return await WaitUntilReadyAsync(RetryReadyTimeout).ConfigureAwait(false);
     }
 
     /// <summary>Имя узла из адреса вида «адрес:порт».</summary>

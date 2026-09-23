@@ -170,8 +170,12 @@ public partial class MainWindow : Window
             }
             else
             {
-                StateSubtitle.Text = "Считаю маршруты…";
-                await _tunnel.ConnectAsync();
+                // Подключение — дело небыстрое: поднять туннель, дождаться
+                // ответа сервера, при неудаче подобрать размер пакета.
+                // Пока об этом молчали, человек видел одну и ту же надпись
+                // минуты подряд и решал, что программа повисла.
+                var progress = new Progress<string>(text => StateSubtitle.Text = text);
+                await _tunnel.ConnectAsync(progress);
             }
         }
         finally
