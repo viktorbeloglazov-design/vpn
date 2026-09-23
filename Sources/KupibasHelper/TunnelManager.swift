@@ -27,6 +27,13 @@ final class TunnelManager {
     /// Крупный список обхода: российская зона. Хранится подсетями, а не
     /// строками, — его тысячи, и снимать его нужно так же быстро.
     private var bulkBypass: Set<Ipv4Net> = []
+
+    /// Через какой шлюз проложен обход.
+    ///
+    /// Снимать маршруты нужно тем же шлюзом, которым их ставили. Если брать
+    /// текущий, а он успел смениться, система их не найдёт — и тысячи
+    /// маршрутов в никуда останутся висеть, обрывая связь до перезагрузки.
+    private var bulkGateway: String = ""
     private var tunnelRoutes: Set<String> = []   // include: в туннель
 
     /// Маршруты, направленные в сам туннель, — их ставим вместо wg-quick.
@@ -46,6 +53,9 @@ final class TunnelManager {
     private var lastResolveAt = Date.distantPast
     private var lastRestartAt = Date.distantPast
     private var lastStatusWrite = Date.distantPast
+
+    /// Когда последний раз смотрели, не сменилась ли сеть.
+    private var lastNetworkCheck: TimeInterval = 0
 
     init(log: Logger) {
         self.log = log
@@ -105,6 +115,34 @@ final class TunnelManager {
         publishStatus(config: config)
     }
 
+    /// Ждёт, пока система вернёт настоящий маршрут по умолчанию.
+    ///
+    /// При переподключении туннель опускается и тут же поднимается заново.
+    /// Система убирает его маршруты не мгновенно, и в этот короткий
+    /// промежуток «маршрут по умолчанию» ещё ведёт в наш же, уже мёртвый,
+    /// туннель. Запомнив такой, служба прокладывала через него весь обход —
+    /// и связь пропадала совсем, до перезапуска службы.
+    ///
+    /// Поэтому ждём: не больше десяти секунд, обычно хватает первой попытки.
+    private func waitForPhysicalDefaultRoute() -> DefaultRoute? {
+        for attempt in 0..<20 {
+            if let route = NetworkTool.defaultRoute(),
+               RouteGuard.isUsable(gateway: route.gateway, interface: route.interfaceName) {
+                if attempt > 0 {
+                    let seconds = String(format: "%.1f", Double(attempt) * 0.5)
+                    log.info("Маршрут по умолчанию вернулся через \(seconds) с: \(route.interfaceName).")
+                }
+                return route
+            }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+
+        // Десяти секунд не хватило. Поднимать туннель вслепую нельзя:
+        // обход уйдёт в никуда, и человек останется вообще без сети.
+        log.error("Маршрут по умолчанию всё ещё ведёт в туннель — жду следующей попытки.")
+        return nil
+    }
+
     // MARK: - Подъём туннеля
 
     private func bringUp(_ config: TunnelConfig) {
@@ -126,7 +164,7 @@ final class TunnelManager {
         }
 
         // Снимаем маршрут по умолчанию до того, как его перебьёт туннель.
-        savedDefaultRoute = NetworkTool.defaultRoute()
+        savedDefaultRoute = waitForPhysicalDefaultRoute()
         savedDefaultRouteV6 = NetworkTool.defaultRoute(ipv6: true)
         if savedDefaultRoute == nil {
             state = .error
@@ -603,10 +641,11 @@ final class TunnelManager {
         let started = Date()
         let outcome = RouteSocket.add(nets, gateway: via.gateway)
 
-        // Запоминаем то, что действительно проложено. Раньше сюда попадал
-        // весь список независимо от исхода: состояние врало, а снять потом
-        // пытались маршруты, которых не было.
+        // Запоминаем то, что действительно проложено, и чем именно. Раньше
+        // сюда попадал весь список независимо от исхода: состояние врало,
+        // а снять потом пытались маршруты, которых не было.
         bulkBypass = outcome.handled > 0 ? Set(nets) : []
+        bulkGateway = outcome.handled > 0 ? via.gateway : ""
 
         let seconds = String(format: "%.1f", Date().timeIntervalSince(started))
         log.info("Обход российской зоны: маршрутов \(outcome.handled) из \(nets.count) за \(seconds) с (ошибок \(outcome.failed)).")
@@ -618,13 +657,23 @@ final class TunnelManager {
     }
 
     private func removeBulkBypass() {
-        guard !bulkBypass.isEmpty, let via = savedDefaultRoute, !via.gateway.isEmpty else {
+        // Снимаем тем же шлюзом, которым ставили. Текущий мог смениться —
+        // например, человек перешёл с кабеля на Wi-Fi, — и тогда система
+        // не нашла бы эти маршруты, а они остались бы висеть.
+        let gateway = bulkGateway.isEmpty ? (savedDefaultRoute?.gateway ?? "") : bulkGateway
+        guard !bulkBypass.isEmpty, !gateway.isEmpty else {
             bulkBypass = []
+            bulkGateway = ""
             return
         }
-        let outcome = RouteSocket.delete(Array(bulkBypass), gateway: via.gateway)
+
+        let outcome = RouteSocket.delete(Array(bulkBypass), gateway: gateway)
         log.info("Обход снят: маршрутов \(outcome.handled), ошибок \(outcome.failed).")
+        if outcome.failed > 0 && outcome.handled == 0 {
+            log.error("Маршруты обхода снять не вышло — они останутся до перезагрузки.")
+        }
         bulkBypass = []
+        bulkGateway = ""
     }
 
     private func installBypassRoutes(_ cidrs: Set<String>) {
@@ -654,6 +703,24 @@ final class TunnelManager {
         }
 
         let now = Date().timeIntervalSince1970
+
+        // Сеть могла смениться: ноутбук переехал с кабеля на Wi-Fi, вышел
+        // из сна, переключился на телефон. Весь обход проложен через старый
+        // шлюз, которого в новой сети нет, — связь не вернётся сама, сколько
+        // ни жди. Поднимаем туннель заново, уже по новой дороге.
+        if now - lastNetworkCheck >= 5 {
+            lastNetworkCheck = now
+            if let current = NetworkTool.defaultRoute(),
+               RouteGuard.isUsable(gateway: current.gateway, interface: current.interfaceName),
+               let saved = savedDefaultRoute,
+               current.gateway != saved.gateway || current.interfaceName != saved.interfaceName {
+                log.info("Сеть сменилась: \(saved.interfaceName) \(saved.gateway) → "
+                    + "\(current.interfaceName) \(current.gateway). Переподключаюсь.")
+                message = "Сеть сменилась, переподключаюсь…"
+                bringDown()
+                return
+            }
+        }
 
         // Туннель считается поднятым, как только сервер ответил хоть раз.
         // Раньше через три минуты простоя состояние съезжало в «Подключение…»,
