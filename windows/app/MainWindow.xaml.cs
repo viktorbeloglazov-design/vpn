@@ -44,6 +44,19 @@ public partial class MainWindow : Window
             _loading = false;
             Render();
             await RefreshAsync();
+
+            // Правило разрешения имён должно соответствовать тому, что есть
+            // на самом деле: если программу в прошлый раз закрыли молча или
+            // она упала, правило могло остаться от прежнего подключения.
+            if (_tunnel.Status.State == ConnectionState.Connected)
+            {
+                SplitDns.Apply(_store.Config.ServicesThroughVpn);
+            }
+            else
+            {
+                SplitDns.Remove();
+            }
+
             _timer.Tick += async (_, _) => await RefreshAsync();
             _timer.Start();
             await CheckForUpdateAsync(force: false);
@@ -122,9 +135,11 @@ public partial class MainWindow : Window
             ? "Идут через VPN"
             : "Выключено — весь трафик идёт мимо VPN";
         ServicesList.Text = string.Join(" · ", VpnServices.Titles);
-        ServicesNote.Text = status.RouteCount > 0
-            ? $"В туннель уходит {status.RouteCount} подсетей. Всё остальное — мимо VPN."
-            : "Всё, чего нет в этих двух списках, идёт мимо VPN напрямую.";
+        ServicesNote.Text = on
+            ? "Российские сайты, банки, маркетплейсы, МАХ, госуслуги и почта идут "
+              + "напрямую, мимо VPN — даже при включённом переключателе."
+              + (status.RouteCount > 0 ? $" В туннель уходит {status.RouteCount} адресов." : "")
+            : "Сейчас через VPN идёт только рабочая зона для 1С.";
 
         ProfileText.Text = _store.HasProfile ? ProfileSummary() : "Ключа нет. Вставьте ссылку vpn:// или откройте файл.";
         ClearProfileButton.Visibility = _store.HasProfile ? Visibility.Visible : Visibility.Collapsed;

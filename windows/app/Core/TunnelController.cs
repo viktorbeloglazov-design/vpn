@@ -109,11 +109,25 @@ public sealed class TunnelController
             ServerName: profile.EndpointHost);
 
         await VerifyAndTuneAsync(profile, routes, endpoints, progress).ConfigureAwait(false);
+
+        // Имена сервисов разрешаем через туннель только при живой связи:
+        // правило, оставшееся при мёртвом туннеле, лишило бы эти сайты
+        // адресов вовсе.
+        if (Status.State == ConnectionState.Connected)
+        {
+            SplitDns.Apply(_store.Config.ServicesThroughVpn);
+        }
+        else
+        {
+            SplitDns.Remove();
+        }
+
         return Status;
     }
 
     public async Task<TunnelStatus> DisconnectAsync()
     {
+        SplitDns.Remove();
         await RunToolAsync("/uninstalltunnelservice", TunnelName).ConfigureAwait(false);
         return Status = new TunnelStatus();
     }
@@ -130,9 +144,12 @@ public sealed class TunnelController
 
             if (!report.Running)
             {
-                return Status.State == ConnectionState.Connected
-                    ? Status = new TunnelStatus(ConnectionState.Disconnected)
-                    : Status;
+                if (Status.State != ConnectionState.Connected) return Status;
+
+                // Туннель пропал — снимаем правило разрешения имён, иначе
+                // ChatGPT и YouTube перестанут открываться вообще.
+                SplitDns.Remove();
+                return Status = new TunnelStatus(ConnectionState.Disconnected);
             }
 
             // Запущенная служба — это ещё не связь. Пока сервер не ответил,
@@ -158,13 +175,13 @@ public sealed class TunnelController
 
     // MARK: - Маршруты
 
-    /// <summary>Считает список подсетей, которые должны уходить в туннель.</summary>
     /// <summary>
     /// Что уходит в туннель.
     ///
-    /// Маршрутизация зашита: через VPN идёт всё, кроме российской зоны.
-    /// Так заблокированный сервис открывается, даже если его адрес программе
-    /// незнаком, а МАХ, госуслуги, банки и маркетплейсы работают напрямую.
+    /// Через VPN идёт только перечисленное: рабочая зона для 1С и, если
+    /// включён переключатель, четыре сервиса. Всё остальное — российские
+    /// сайты, банки, маркетплейсы, МАХ, госуслуги, почта — идёт напрямую,
+    /// мимо туннеля.
     /// </summary>
     public static async Task<List<string>> RoutesForAsync(AppConfig config, WgProfile profile)
     {
@@ -179,7 +196,13 @@ public sealed class TunnelController
         if (config.ServicesThroughVpn)
         {
             nets.AddRange(VpnServices.Nets());
-            nets.AddRange(await ResolveAsync(VpnServices.Domains()).ConfigureAwait(false));
+
+            // Серверы имён, у которых спрашиваем адреса сервисов: вопрос
+            // тоже должен уйти через туннель, иначе вернётся ответ
+            // провайдера, ради обхода которого всё и затевалось.
+            nets.AddRange(SplitDnsRules.ServerNets());
+
+            nets.AddRange(await ServiceAddressesAsync().ConfigureAwait(false));
         }
 
         if (nets.Count == 0)
@@ -192,6 +215,40 @@ public sealed class TunnelController
         }
 
         return Cidr.Merge(nets).Select(net => net.ToString()).ToList();
+    }
+
+    /// <summary>
+    /// Точные адреса сервисов: свежий ответ DNS плюс память прошлых.
+    ///
+    /// У ChatGPT собственных сетей нет — он стоит на Cloudflare рядом
+    /// с чужими сайтами, и взять сети Cloudflare целиком нельзя: вместе
+    /// с ним в туннель уехали бы российские сайты, которые там тоже живут.
+    /// Поэтому берутся ровно те адреса, которые назвал DNS.
+    ///
+    /// Адреса эти со временем меняются, а узнаём мы о смене только при
+    /// подключении. Чтобы вчерашний адрес не пропадал, увиденное
+    /// запоминается на месяц: помнить лишний адрес сервиса безвредно,
+    /// а потерять нужный — значит остаться без ChatGPT до переподключения.
+    /// </summary>
+    private static async Task<List<Ipv4Net>> ServiceAddressesAsync()
+    {
+        var fresh = await ResolveAsync(VpnServices.Domains()).ConfigureAwait(false);
+
+        // В память идут только адреса из сетей владельцев сервисов.
+        // На заблокированное имя провайдер нередко отвечает адресом своей
+        // заглушки: адрес живой и публичный, но сервису не принадлежит —
+        // проложить к нему маршрут значит увести в туннель чужое.
+        var honest = fresh.Where(VpnServices.IsServiceAddress).ToList();
+
+        var remembered = KnownAddresses.Merge(
+            KnownAddresses.Load(),
+            honest.Select(net => net.ToString().Split('/')[0]),
+            DateTimeOffset.UtcNow);
+        KnownAddresses.Save(remembered);
+
+        var result = new List<Ipv4Net>(honest);
+        result.AddRange(KnownAddresses.Nets(remembered));
+        return result;
     }
 
     /// <summary>

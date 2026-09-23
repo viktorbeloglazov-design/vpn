@@ -22,6 +22,9 @@
     <Compile Include="../app/Core/TuningPlan.cs" />
     <Compile Include="../app/Core/OneCZone.cs" />
     <Compile Include="../app/Core/VpnServices.cs" />
+    <Compile Include="../app/Core/SplitDnsRules.cs" />
+    <Compile Include="../app/Core/KnownAddresses.cs" />
+    <Compile Include="../app/Core/AppConfig.cs" />
     <Compile Include="../app/Core/TunnelReadiness.cs" />
     <Compile Include="../app/Core/Cidr.cs" />
     <Compile Include="../app/Core/WgProfile.cs" />
