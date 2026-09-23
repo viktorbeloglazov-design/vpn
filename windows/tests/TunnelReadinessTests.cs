@@ -94,3 +94,34 @@ public class TunnelReadinessTests
         Assert.True(report.IsReady);
     }
 }
+
+/// <summary>
+/// Что показывается человеку, пока связи ещё нет.
+///
+/// Программа писала «Подключён», едва служба запускалась, — и не меняла
+/// этого, сколько бы ни было нулей в приёме. Человек видел зелёную
+/// надпись и гадал, почему ничего не открывается.
+/// </summary>
+public class ConnectedStateTests
+{
+    [Fact]
+    public void ЗапущеннаяСлужбаБезПриветствияЭтоНеПодключение()
+    {
+        var report = TunnelReadiness.Parse(
+            """{"running":true,"rxBytes":0,"txBytes":15561,"lastHandshake":0}""");
+
+        // Ровно то, что было на экране: отправлено 15 КБ, принято 0.
+        Assert.False(report.IsReady);
+        Assert.Equal(0, report.RxBytes);
+        Assert.Equal(15561, report.TxBytes);
+    }
+
+    [Fact]
+    public void ПоявилосьПриветствиеЗначитСвязьЕсть()
+    {
+        var report = TunnelReadiness.Parse(
+            """{"running":true,"rxBytes":4096,"txBytes":15561,"lastHandshake":1758600000}""");
+
+        Assert.True(report.IsReady);
+    }
+}

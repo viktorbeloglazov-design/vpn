@@ -124,25 +124,28 @@ public sealed class TunnelController
 
         try
         {
-            using var json = JsonDocument.Parse(stdout);
-            var root = json.RootElement;
-            var running = root.GetProperty("running").GetBoolean();
-            var rx = root.TryGetProperty("rxBytes", out var rxValue) ? rxValue.GetInt64() : 0;
-            var tx = root.TryGetProperty("txBytes", out var txValue) ? txValue.GetInt64() : 0;
+            var report = TunnelReadiness.Parse(stdout);
 
-            if (!running && Status.State == ConnectionState.Connected)
+            if (!report.Running)
             {
-                return Status = new TunnelStatus(ConnectionState.Disconnected);
+                return Status.State == ConnectionState.Connected
+                    ? Status = new TunnelStatus(ConnectionState.Disconnected)
+                    : Status;
             }
-            if (running)
+
+            // Запущенная служба — это ещё не связь. Пока сервер не ответил,
+            // писать «Подключён» нельзя: раньше так и было, и человек видел
+            // зелёную надпись при нулевом приёме, гадая, почему ничего
+            // не открывается.
+            return Status = Status with
             {
-                return Status = Status with
-                {
-                    State = ConnectionState.Connected,
-                    RxBytes = rx,
-                    TxBytes = tx,
-                };
-            }
+                State = report.IsReady ? ConnectionState.Connected : ConnectionState.Connecting,
+                RxBytes = report.RxBytes,
+                TxBytes = report.TxBytes,
+                Message = report.IsReady
+                    ? (Status.State == ConnectionState.Connected ? Status.Message : "")
+                    : "Сервер не отвечает — идёт подключение…",
+            };
         }
         catch (JsonException)
         {

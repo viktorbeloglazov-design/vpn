@@ -279,18 +279,38 @@ public partial class MainWindow : Window
 
         var archive = await UpdateCheck.DownloadAsync(progress);
 
-        UpdateButton.IsEnabled = true;
-        UpdateButton.Content = "Обновить";
-
         if (archive is null)
         {
-            UpdateHint.Text = "Скачать не удалось. Попробуйте ещё раз или скачайте вручную.";
+            UpdateButton.IsEnabled = true;
+            UpdateButton.Content = "Обновить";
+            UpdateHint.Text = "Скачать не удалось. Проверьте связь и попробуйте ещё раз — "
+                + "закачка продолжится с того места, где оборвалась.";
             return;
         }
 
-        UpdateHint.Text = $"Архив версии {_updateVersion} скачан. Закройте программу, распакуйте "
-            + "его поверх текущей папки с заменой и запустите снова.";
-        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{archive}\"") { UseShellExecute = true });
+        UpdateButton.Content = "Устанавливаю…";
+        UpdateHint.Text = $"Ставлю версию {_updateVersion}. Программа закроется и откроется заново.";
+
+        var installDirectory = AppContext.BaseDirectory.TrimEnd('\\');
+        var outcome = Updater.Install(archive, installDirectory);
+
+        switch (outcome)
+        {
+            case Updater.Outcome.Restarting:
+                // Дальше работает помощник: дождётся закрытия, переложит
+                // файлы и откроет новую версию.
+                await Task.Delay(400);
+                Application.Current.Shutdown();
+                return;
+
+            case Updater.Outcome.Failed failed:
+                UpdateButton.IsEnabled = true;
+                UpdateButton.Content = "Обновить";
+                UpdateHint.Text = failed.Reason + " Архив скачан — можно распаковать вручную.";
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{archive}\"")
+                    { UseShellExecute = true });
+                return;
+        }
     }
 
     private string _updateVersion = "";
