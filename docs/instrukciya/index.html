@@ -517,20 +517,25 @@ tr:nth-child(even) td { background: #F7FAFC; }
       <div class="brand">KUPIBAS</div>
       <div class="pwr on" style="margin:2.5mm auto 1.6mm"><svg viewBox="0 0 24 24" width="6mm" height="6mm" style="vertical-align:-0.5mm"><path fill="#FFFFFF" d="M11 3h2v9h-2V3zm-4 3.3 1.4 1.4a6 6 0 1 0 7.2 0L17 6.3a8 8 0 1 1-10 0z"/></svg></div>
       <div class="state ok">Подключён</div>
-      <div class="state-sub">Сервер 91.201.xx.xx · маршрутов: 2617 · пакет 1420</div>
+      <div class="state-sub">Сервер 91.201.xx.xx · пакет 1420</div>
       <div class="stats" style="margin-top:2.5mm">
         <div><div class="k">ПРИНЯТО</div><div class="v">412 МБ</div></div>
         <div><div class="k">ОТПРАВЛЕНО</div><div class="v">38 МБ</div></div>
       </div>
     </div>
     <div class="card" style="margin-top:2.5mm">
-      <div class="t" style="font-size:7pt">Как идёт трафик</div>
-      <div class="d" style="margin-bottom:1.4mm">Российские сайты — МАХ, госуслуги,
-        банки, маркетплейсы — напрямую</div>
-      <div class="row" style="align-items:center;border-top:.2mm solid #22303B;padding-top:1.8mm">
-        <div style="flex:1"><div class="t">Рабочие ресурсы</div></div>
+      <div class="t" style="font-size:7pt">Рабочая зона для 1С</div>
+      <div class="d">2 адреса · через VPN всегда</div>
+    </div>
+    <div class="card">
+      <div class="row" style="align-items:center">
+        <div style="flex:1"><div class="t" style="font-size:7pt">Сервисы через VPN</div>
+          <div class="d">Идут через VPN</div></div>
         <div class="sw"></div>
       </div>
+      <div class="d" style="margin-top:1.4mm">ChatGPT · Claude · YouTube · WhatsApp</div>
+      <div class="d" style="margin-top:1mm">Российские сайты — МАХ, госуслуги, банки,
+        маркетплейсы — идут напрямую, мимо VPN</div>
     </div>
     <div class="card">
       <div class="t" style="font-size:7pt">Скорость</div>
@@ -678,17 +683,18 @@ tr:nth-child(even) td { background: #F7FAFC; }
   <div class="head"><span class="who">QP VPN · инструкция</span><span class="num">9 / 10</span></div>
   
   <h1>Что можно настроить под себя</h1>
-  <p class="sub" style="margin-bottom:4.5mm">Настроек намеренно мало: маршруты
+  <p class="sub" style="margin-bottom:3mm">Настроек намеренно мало: маршруты
     зашиты в приложение. Вот всё, что имеет смысл трогать.</p>
 
   <table>
     <tr><th style="width:44mm">Что это</th><th style="width:26mm">Где</th><th>Зачем трогать</th></tr>
 
-    <tr><td><b>Рабочие ресурсы</b><br><span style="color:#5B6C78">единственный
-        переключатель</span></td>
+    <tr><td><b>Единственный переключатель</b><br><span style="color:#5B6C78">«Рабочие
+        ресурсы», на Windows — «Сервисы через VPN»</span></td>
       <td>Главный экран</td>
-      <td>Пускает через VPN несколько рабочих адресов, заложенных в приложение.
-        Включайте, если нужны именно они. На остальное не влияет.</td></tr>
+      <td>Android и Mac: пускает через VPN рабочие адреса, заложенные
+        в приложение. Windows: включает ChatGPT, Claude, YouTube и WhatsApp;
+        остальное — напрямую, 1С — через VPN всегда.</td></tr>
 
     <tr><td><b>Размер пакета (MTU)</b></td>
       <td>Android: «Ещё»<br>Mac: «Ещё»<br>Windows: «Скорость»</td>
@@ -698,12 +704,12 @@ tr:nth-child(even) td { background: #F7FAFC; }
     <tr><td><b>Запасной вход</b></td>
       <td>Android: «Ещё»<br>Mac: «Ещё»<br>Windows: главное окно</td>
       <td>Адрес вида <span class="mono">95.213.0.1:31984</span>. Если до сервера
-        не достучаться напрямую, приложение само пойдёт через этот узел. Ключ менять
-        не нужно. Пустое поле — не используется.</td></tr>
+        не достучаться напрямую, приложение пойдёт через этот узел. Ключ менять
+        не нужно.</td></tr>
 
     <tr><td><b>Замер скорости</b></td>
       <td>Везде</td>
-      <td>Качает и отдаёт один и тот же файл через VPN и мимо него. Четыре числа,
+      <td>Качает и отдаёт один файл через VPN и мимо него. Четыре числа,
         по которым видно, тормозит канал или сам VPN.</td></tr>
 
     <tr><td><b>Проверить мой IP</b></td>
@@ -713,33 +719,32 @@ tr:nth-child(even) td { background: #F7FAFC; }
 
     <tr><td><b>Обновление</b></td>
       <td>Android: «Ещё»<br>Mac: «Ещё»<br>Windows: «Проверка»</td>
-      <td>Смотрит раз в сутки само и показывает карточку «Вышла версия…».
-        Нажали «Обновить» — программа скачает новую версию, поставит её
-        вместо старой и перезапустится сама. Ключ и настройки остаются.</td></tr>
+      <td>Смотрит раз в сутки само. Нажали «Обновить» — программа поставит
+        новую версию вместо старой и перезапустится. Ключ и настройки
+        остаются.</td></tr>
 
     <tr><td><b>Диагностика</b></td>
       <td>Android и Mac: «Ещё»</td>
-      <td>«Скопировать отчёт» — справка о том, как сейчас поднят туннель.
-        Пригодится, если что-то не работает.</td></tr>
+      <td>«Скопировать отчёт» — справка о том, как поднят туннель. Пригодится,
+        если что-то не работает.</td></tr>
   </table>
 
-  <h2 style="margin-top:5.5mm">А что настраивать не нужно</h2>
+  <h2 style="margin-top:2.4mm">А что настраивать не нужно</h2>
   <table>
     <tr><td style="width:48mm"><b>Маршруты</b></td>
-      <td>Заблокированные сервисы всегда через VPN, российская зона — всегда
-        напрямую. Режимов и правил нет.</td></tr>
+      <td>Android и Mac: заблокированное — через VPN, российская зона —
+        напрямую. Windows: только 1С и четыре сервиса. Режимов и правил нет.</td></tr>
     <tr><td><b>Исключения приложений</b><br><span style="color:#5B6C78">только
         Android</span></td>
       <td>МАХ, Сбербанк, ВТБ, Госуслуги, Ozon, Wildberries и ещё два десятка
-        российских программ идут мимо туннеля целиком — для них VPN как будто
-        выключен.</td></tr>
+        российских программ идут мимо туннеля — для них VPN как будто выключен.</td></tr>
     <tr><td><b>DNS и IPv6</b></td>
       <td>Настраиваются сами и возвращаются как было при выключении.</td></tr>
   </table>
 
   <div class="note"><b>Значок включённого VPN.</b> На Android — ключик в строке
-    состояния рядом с Wi-Fi и 4G, на Mac — щит в строке меню. Нет значка —
-    защита выключена, как бы ни выглядело окно.</div>
+    состояния рядом с Wi-Fi, на Mac — щит в строке меню. Нет значка — защита
+    выключена, как бы ни выглядело окно.</div>
   <div class="foot"><span>Обзор возможностей</span><span>Ссылки на сборки не меняются — стр. 1</span></div>
 </section>
 <section class="page">
