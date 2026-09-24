@@ -30,6 +30,14 @@ public partial class MainWindow : Window
     /// </summary>
     private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(6) };
 
+    /// <summary>
+    /// Как часто переписывается отчёт за сегодня.
+    ///
+    /// Раз в час: к концу дня в файле будет последнее состояние, а если
+    /// компьютер выключат посреди дня — останется хотя бы то, что было.
+    /// </summary>
+    private readonly DispatcherTimer _reportTimer = new() { Interval = TimeSpan.FromHours(1) };
+
     private bool _loading = true;
     private bool _busy;
 
@@ -62,6 +70,10 @@ public partial class MainWindow : Window
             await CheckForUpdateAsync(force: false);
             _updateTimer.Tick += async (_, _) => await CheckForUpdateAsync(force: false);
             _updateTimer.Start();
+
+            SaveDailyReport();
+            _reportTimer.Tick += (_, _) => SaveDailyReport();
+            _reportTimer.Start();
         };
     }
 
@@ -145,6 +157,21 @@ public partial class MainWindow : Window
         ClearProfileButton.Visibility = _store.HasProfile ? Visibility.Visible : Visibility.Collapsed;
 
         VersionText.Text = $"QP VPN {AppVersion} · AmneziaWG и WireGuard";
+    }
+
+    /// <summary>Складывает отчёт за сегодня в «Документы\\QP VPN\\отчёты».</summary>
+    private void SaveDailyReport()
+    {
+        var text = DailyReport.Compose(
+            version: AppVersion,
+            status: _tunnel.Status,
+            config: _store.Config,
+            profileSummary: _store.HasProfile ? ProfileSummary() : "не загружен",
+            activeMtu: _tunnel.ActiveMtu,
+            usedBackupEntry: _tunnel.UsedBackupEntry,
+            now: DateTimeOffset.Now);
+
+        DailyReport.Save(text, DateTimeOffset.Now);
     }
 
     private string ProfileSummary()
@@ -274,12 +301,18 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Дальше программа обновляется сама. Кнопку ради этого нажимать
+        // не нужно: человек за компьютером — не тот, кто должен следить
+        // за версиями, и пока он этого не сделает, он сидит на старой.
         _updateVersion = latest;
-        UpdateTitle.Text = $"Вышла версия {latest}";
-        UpdateHint.Text = $"Установлена {AppVersion}. Скачается архив — распакуйте его поверх "
-            + "текущей папки с заменой. Ключ и настройки останутся на месте.";
+        UpdateTitle.Text = $"Обновляюсь до версии {latest}";
+        UpdateHint.Text = $"Установлена {AppVersion}. Программа скачает новую версию, "
+            + "поставит её и откроется заново. Ничего нажимать не нужно, "
+            + "ключ и настройки останутся на месте.";
         UpdateCard.Visibility = Visibility.Visible;
-        UpdateStateText.Text = $"Есть версия {latest} — кнопка «Обновить» наверху.";
+        UpdateStateText.Text = $"Ставлю версию {latest}…";
+
+        await InstallUpdateAsync();
     }
 
     /// <summary>Спросить о новой версии прямо сейчас, не дожидаясь суточной проверки.</summary>
@@ -291,11 +324,22 @@ public partial class MainWindow : Window
         CheckUpdateButton.IsEnabled = true;
     }
 
-    /// <summary>Скачивает архив и показывает его в проводнике.</summary>
+    /// <summary>Кнопка на случай, если самостоятельное обновление не прошло.</summary>
     private async void OnInstallUpdate(object sender, RoutedEventArgs e)
     {
         if (!UpdateButton.IsEnabled) return;
+        await InstallUpdateAsync();
+    }
 
+    /// <summary>
+    /// Скачивает новую версию и ставит её вместо текущей.
+    ///
+    /// Запускается само, как только нашлась новая версия. Кнопка остаётся
+    /// на случай, когда обновиться не вышло: тогда человек может
+    /// попробовать ещё раз, не дожидаясь завтрашней проверки.
+    /// </summary>
+    private async Task InstallUpdateAsync()
+    {
         UpdateButton.IsEnabled = false;
         UpdateButton.Content = "Скачиваю…";
         var progress = new Progress<int>(percent => UpdateButton.Content = $"Скачиваю… {percent}%");
@@ -306,8 +350,10 @@ public partial class MainWindow : Window
         {
             UpdateButton.IsEnabled = true;
             UpdateButton.Content = "Обновить";
-            UpdateHint.Text = "Скачать не удалось. Проверьте связь и попробуйте ещё раз — "
-                + "закачка продолжится с того места, где оборвалась.";
+            UpdateButton.Visibility = Visibility.Visible;
+            UpdateHint.Text = "Скачать не удалось. Программа попробует сама позже — "
+                + "закачка продолжится с того места, где оборвалась. Можно и нажать «Обновить».";
+            UpdateStateText.Text = "Скачать обновление не вышло — попробую позже.";
             return;
         }
 
@@ -327,9 +373,13 @@ public partial class MainWindow : Window
                 return;
 
             case Updater.Outcome.Failed failed:
+                // Само не вышло — остаётся кнопка и папка с архивом.
                 UpdateButton.IsEnabled = true;
                 UpdateButton.Content = "Обновить";
-                UpdateHint.Text = failed.Reason + " Архив скачан — можно распаковать вручную.";
+                UpdateButton.Visibility = Visibility.Visible;
+                UpdateHint.Text = failed.Reason + " Архив скачан — можно распаковать вручную "
+                    + "или нажать «Обновить» ещё раз.";
+                UpdateStateText.Text = "Обновиться само не вышло — нажмите «Обновить».";
                 Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{archive}\"")
                     { UseShellExecute = true });
                 return;

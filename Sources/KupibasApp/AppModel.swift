@@ -390,6 +390,10 @@ final class AppModel: ObservableObject {
                 if UpdateCheck.isNewer(latest, than: self.appVersion) {
                     self.updateVersion = latest
                     self.updateNote = ""
+                    // Дальше — само. Человек за компьютером не должен
+                    // следить за версиями: пока он не нажмёт кнопку, он
+                    // сидит на старой, а мы об этом не узнаем.
+                    self.installUpdate()
                 } else {
                     self.updateVersion = ""
                     self.updateNote = force ? "Установлена свежая версия \(self.appVersion)." : ""
@@ -400,9 +404,10 @@ final class AppModel: ObservableObject {
 
     /// Скачивает новую версию, ставит её вместо текущей и перезапускается.
     ///
-    /// Человек нажал «Обновить» — значит всё остальное должно произойти само:
-    /// старая программа закрывается, новая открывается уже обновлённой.
-    /// Перетаскивать что-то в «Программы» он не должен.
+    /// Запускается само, как только нашлась новая версия: старая программа
+    /// закрывается, новая открывается уже обновлённой. Ни нажимать кнопку,
+    /// ни перетаскивать что-то в «Программы» человек не должен. Кнопка
+    /// остаётся на случай, когда само не вышло.
     func installUpdate() {
         guard !updateBusy else { return }
         updateBusy = true
@@ -413,7 +418,7 @@ final class AppModel: ObservableObject {
             guard let image else {
                 DispatchQueue.main.async {
                     self?.updateBusy = false
-                    self?.updateNote = "Скачать не удалось. Попробуйте ещё раз."
+                    self?.updateNote = "Скачать не удалось — попробую позже. Можно и нажать «Обновить»."
                 }
                 return
             }
@@ -438,6 +443,17 @@ final class AppModel: ObservableObject {
                 }
             }
         }
+    }
+
+    // MARK: - Ежедневный отчёт
+
+    /// Складывает отчёт за сегодня в «Документы/QP VPN/отчёты».
+    ///
+    /// Тот же текст, что и в «Скопировать отчёт», только сам и каждый день:
+    /// когда человек говорит «вчера отвалилось», есть на что посмотреть.
+    func saveDailyReport() {
+        let text = DailyReport.header(version: appVersion) + diagnosticsReport()
+        DailyReport.save(text)
     }
 
     // MARK: - Диагностика

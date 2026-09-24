@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Повторная проверка обновления у приложения, которое не закрывают.
     private var updateTimer: Timer?
+    private var reportTimer: Timer?
     private var statusItem: NSStatusItem?
     private var cancellables = Set<AnyCancellable>()
 
@@ -47,6 +48,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // а суточный промежуток выдерживается внутри самой проверки.
         updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak model] _ in
             model?.checkForUpdate(force: false)
+        }
+
+        // Отчёт за сегодня переписывается раз в час: к концу дня в нём
+        // последнее состояние, а если Mac выключат посреди дня — останется
+        // хотя бы то, что было.
+        model?.saveDailyReport()
+        reportTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak model] _ in
+            model?.saveDailyReport()
         }
     }
 

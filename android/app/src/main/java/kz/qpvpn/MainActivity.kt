@@ -105,6 +105,7 @@ class MainActivity : ComponentActivity() {
         // Приложение ставится файлом, мимо магазина: напомнить о новой
         // версии некому, поэтому смотрим сами — раз в сутки.
         lifecycleScope.launch { checkForUpdate(force = false) }
+        saveDailyReport()
 
         // Туннель мог остаться поднятым с прошлого запуска: сверяем, что
         // показано на экране, с тем, что на самом деле держит система.
@@ -507,6 +508,41 @@ class MainActivity : ComponentActivity() {
      * Ссылка постоянная и не зависит от номера версии, поэтому ничего
      * настраивать не нужно: рядом со сборкой лежит файл с номером.
      */
+    /**
+     * Складывает отчёт за сегодня файлом.
+     *
+     * Папка приложения на внешнем хранилище — её видно в файловом
+     * менеджере и не нужно спрашивать разрешений. Файл на каждый день,
+     * переписывается по ходу дня; старше месяца удаляются сами.
+     *
+     * Ключей в отчёте нет: только адрес сервера, счётчики и состояние.
+     */
+    private fun saveDailyReport() {
+        val folder = getExternalFilesDir(android.os.Environment.DIRECTORY_DOCUMENTS)
+            ?.resolve("отчёты") ?: return
+        val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date())
+        val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US)
+            .format(java.util.Date())
+
+        runCatching {
+            folder.mkdirs()
+            val head = "QP VPN для Android ${BuildConfig.VERSION_NAME}\n" +
+                "Отчёт за $day, записан в $time\n\n"
+            folder.resolve("$day.txt").writeText(head + diagnostics(app.tunnel.status.value))
+
+            // Старое убираем, чтобы папка не росла без конца.
+            val edge = java.util.Calendar.getInstance()
+                .apply { add(java.util.Calendar.DAY_OF_YEAR, -30) }
+            val edgeName = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                .format(edge.time)
+            folder.listFiles()?.forEach { file ->
+                val name = file.name.removeSuffix(".txt")
+                if (name.length == edgeName.length && name < edgeName) file.delete()
+            }
+        }
+    }
+
     private suspend fun checkForUpdate(force: Boolean) {
         val config = app.store.config.value
         val now = System.currentTimeMillis()
@@ -523,13 +559,25 @@ class MainActivity : ComponentActivity() {
         if (UpdateCheck.isNewer(latest, BuildConfig.VERSION_NAME)) {
             updateVersion = latest
             updateNote = ""
+            // Скачиваем сами, не дожидаясь нажатия: человек с телефоном
+            // не должен следить за версиями. Последний шаг — «Установить»
+            // в окне системы — Android за нас нажать не даёт никому, кроме
+            // хозяина телефона, поэтому на нём и останавливаемся.
+            installUpdate()
         } else {
             updateVersion = ""
             updateNote = if (force) "Установлена свежая версия ${BuildConfig.VERSION_NAME}." else ""
         }
     }
 
-    /** Скачивает сборку и отдаёт её системному установщику. */
+    /**
+     * Скачивает сборку и отдаёт её системному установщику.
+     *
+     * Запускается само, как только нашлась новая версия. Дальше Android
+     * показывает своё окно «Установить» — обойти его нельзя ни одному
+     * приложению, кроме системного, так что одно нажатие всё же остаётся.
+     * Зато скачивание, ожидание и поиск файла с человека сняты.
+     */
     private fun installUpdate() {
         if (updateBusy) return
         updateBusy = true
@@ -542,9 +590,11 @@ class MainActivity : ComponentActivity() {
             updateBusy = false
 
             if (file == null) {
-                updateNote = "Скачать не удалось. Попробуйте ещё раз или скачайте вручную."
+                updateNote = "Скачать не удалось — попробую позже. Можно и нажать «Обновить»."
                 return@launch
             }
+
+            updateNote = "Скачано. Система спросит разрешение — нажмите «Установить»."
 
             val uri = androidx.core.content.FileProvider.getUriForFile(
                 this@MainActivity,
