@@ -53,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Отчёт за сегодня переписывается раз в час: к концу дня в нём
         // последнее состояние, а если Mac выключат посреди дня — останется
         // хотя бы то, что было.
-        model?.saveDailyReport()
+        model.saveDailyReport()
         reportTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak model] _ in
             model?.saveDailyReport()
         }
