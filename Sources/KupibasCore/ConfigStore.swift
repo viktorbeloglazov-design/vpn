@@ -35,12 +35,40 @@ public enum ConfigStore {
     /// Маршрутизация зашита: что бы ни лежало в файле от прошлых версий,
     /// в работу уходит одно и то же поведение. Иначе включённый когда-то
     /// переключатель остался бы навсегда — выключить его больше негде.
-    public static func loadConfig() -> TunnelConfig {
-        guard let data = FileManager.default.contents(atPath: Paths.configFile),
-              let config = try? JSONDecoder().decode(TunnelConfig.self, from: data) else {
-            return TunnelConfig().pinned()
+    /// Чем кончилось чтение настроек.
+    ///
+    /// Разница между «файла нет» и «файл не прочитался» — не придирка.
+    /// Раньше служба в обоих случаях получала пустые настройки, а в них
+    /// VPN выключен, — и молча опускала рабочий туннель. Один неудачный
+    /// доступ к диску оборачивался потерей связи, которая сама уже
+    /// не возвращалась.
+    public enum ConfigRead {
+        /// Настройки прочитаны.
+        case ok(TunnelConfig)
+        /// Файла нет: VPN ещё не настраивали.
+        case missing
+        /// Файл есть, но прочитать не удалось.
+        case unreadable(String)
+    }
+
+    public static func readConfig() -> ConfigRead { readConfig(at: Paths.configFile) }
+
+    public static func readConfig(at path: String) -> ConfigRead {
+        guard FileManager.default.fileExists(atPath: path) else { return .missing }
+
+        guard let data = FileManager.default.contents(atPath: path) else {
+            return .unreadable("файл не открылся")
         }
-        return config.pinned()
+        do {
+            return .ok(try JSONDecoder().decode(TunnelConfig.self, from: data).pinned())
+        } catch {
+            return .unreadable(error.localizedDescription)
+        }
+    }
+
+    public static func loadConfig() -> TunnelConfig {
+        if case .ok(let config) = readConfig() { return config }
+        return TunnelConfig().pinned()
     }
 
     public static func saveConfig(_ config: TunnelConfig) throws {
@@ -67,6 +95,14 @@ public enum ConfigStore {
         let fm = FileManager.default
         let directory = (path as NSString).deletingLastPathComponent
         var isDir: ObjCBool = false
+        if !fm.fileExists(atPath: directory, isDirectory: &isDir) {
+            // Каталог мог пропасть: его сносит программа удаления, чистилки
+            // дисков, иногда сам человек. Восстановить его дешевле, чем
+            // остаться без состояния.
+            try? fm.createDirectory(atPath: directory,
+                                    withIntermediateDirectories: true,
+                                    attributes: [.posixPermissions: NSNumber(value: Int16(0o770))])
+        }
         guard fm.fileExists(atPath: directory, isDirectory: &isDir), isDir.boolValue else {
             throw ConfigStoreError.directoryMissing
         }

@@ -57,6 +57,15 @@ final class TunnelManager {
     /// Когда последний раз смотрели, не сменилась ли сеть.
     private var lastNetworkCheck: TimeInterval = 0
 
+    /// Последние настройки, которые удалось прочитать.
+    private var lastGoodConfig: TunnelConfig?
+
+    /// С какого момента настройки не читаются. 0 — читаются.
+    private var unreadableSince: TimeInterval = 0
+
+    /// Сколько раз подряд не нашёлся живой маршрут по умолчанию.
+    private var noRouteAttempts = 0
+
     init(log: Logger) {
         self.log = log
     }
@@ -87,7 +96,7 @@ final class TunnelManager {
     // MARK: - Основной цикл
 
     func tick() {
-        let config = ConfigStore.loadConfig()
+        guard let config = currentConfig() else { return }
 
         if config.enabled {
             if let error = config.server.validationError {
@@ -107,12 +116,52 @@ final class TunnelManager {
                 monitorHealth(config)
             }
         } else {
-            if isUp { bringDown() }
+            if isUp {
+                log.info("VPN выключен в приложении — опускаю туннель.")
+                bringDown()
+            }
             state = .disconnected
             message = ""
         }
 
         publishStatus(config: config)
+    }
+
+    /// Настройки, по которым работаем в этот заход.
+    ///
+    /// Раньше здесь стояло простое чтение файла, а оно при любой осечке
+    /// возвращало пустые настройки — с выключенным VPN. Служба честно
+    /// исполняла: молча опускала рабочий туннель. В журнале не оставалось
+    /// ни строчки, а связь после этого сама уже не поднималась.
+    ///
+    /// Теперь неудачное чтение — не команда, а помеха: работаем по прежним
+    /// настройкам и ждём, пока файл прочитается. Выключаем туннель только
+    /// тогда, когда человек действительно выключил VPN.
+    private func currentConfig() -> TunnelConfig? {
+        switch ConfigStore.readConfig() {
+        case .ok(let config):
+            if unreadableSince > 0 {
+                let seconds = Int(Date().timeIntervalSince1970 - unreadableSince)
+                log.info("Настройки снова читаются (не читались \(seconds) с).")
+                unreadableSince = 0
+            }
+            lastGoodConfig = config
+            return config
+
+        case .missing:
+            // Файла нет — VPN ещё не настраивали. Это законное «выключено».
+            unreadableSince = 0
+            let empty = TunnelConfig().pinned()
+            lastGoodConfig = empty
+            return empty
+
+        case .unreadable(let reason):
+            if unreadableSince == 0 {
+                unreadableSince = Date().timeIntervalSince1970
+                log.error("Настройки не прочитались (\(reason)) — работаю по прежним, туннель не трогаю.")
+            }
+            return lastGoodConfig
+        }
     }
 
     /// Ждёт, пока система вернёт настоящий маршрут по умолчанию.
@@ -139,8 +188,77 @@ final class TunnelManager {
 
         // Десяти секунд не хватило. Поднимать туннель вслепую нельзя:
         // обход уйдёт в никуда, и человек останется вообще без сети.
-        log.error("Маршрут по умолчанию всё ещё ведёт в туннель — жду следующей попытки.")
+        guard let route = NetworkTool.defaultRoute() else {
+            log.error("Маршрута по умолчанию нет вовсе — жду следующей попытки.")
+            return nil
+        }
+
+        // Чужой VPN — это рабочая дорога, а не помеха. Раньше служба
+        // отказывалась подниматься при любом туннеле на маршруте, включая
+        // не свой. Своим остаткам веры нет, а по чужому туннелю связь есть,
+        // и обход через него дойдёт куда надо.
+        if !ourInterfaces().contains(route.interfaceName) && noRouteAttempts >= 2 {
+            log.info("Маршрут по умолчанию ведёт в чужой туннель \(route.interfaceName) — работаю через него.")
+            return route
+        }
+
+        log.error("Маршрут по умолчанию всё ещё ведёт в туннель (\(route.interfaceName)) — жду следующей попытки.")
         return nil
+    }
+
+    /// Туннельные интерфейсы, которые служба считает своими.
+    private func ourInterfaces() -> Set<String> {
+        var names: Set<String> = []
+        if !realInterfaceName.isEmpty { names.insert(realInterfaceName) }
+        if let existing = WireGuardInterface.existingInterface(logicalName: Paths.interfaceName) {
+            names.insert(existing)
+        }
+        return names
+    }
+
+    /// Возвращает связь, когда маршрут по умолчанию застрял в туннеле.
+    ///
+    /// Так выглядит поломка, из-за которой человек шёл переустанавливать
+    /// службу: туннель опустили, а маршрут по умолчанию остался ведущим
+    /// в него. Нового туннеля не поднять — дороги наружу нет, — и связь
+    /// не возвращается сама, сколько ни жди.
+    ///
+    /// Лечим тем же, чем лечил человек, только сами и по порядку: сначала
+    /// убираем остатки прошлого туннеля, а если и это не помогло —
+    /// перезапускаем службу. Launchd поднимет её через пять секунд, и она
+    /// начнёт с чистого листа.
+    private func healStuckDefaultRoute() {
+        guard let route = NetworkTool.defaultRoute(),
+              RouteGuard.isTunnel(interface: route.interfaceName) else { return }
+
+        if noRouteAttempts == 2 {
+            log.info("Маршрут по умолчанию застрял в \(route.interfaceName) — убираю остатки прошлого туннеля.")
+
+            // Имя могло стереться при опускании — берём то, что осталось
+            // на диске, иначе снимать будет нечего.
+            if realInterfaceName.isEmpty,
+               let existing = WireGuardInterface.existingInterface(logicalName: Paths.interfaceName) {
+                realInterfaceName = existing
+            }
+            tearDownInterface()
+            realInterfaceName = ""
+            WireGuardInterface.cleanUpOrphans(logicalName: Paths.interfaceName)
+
+            // И сам залипший маршрут: он ведёт в интерфейс, которого уже нет.
+            if ourInterfaces().isEmpty {
+                _ = Shell.runTool("route", ["-n", "delete", "-inet", "default",
+                                            "-interface", route.interfaceName], timeout: 10)
+            }
+            return
+        }
+
+        if noRouteAttempts >= 6 {
+            log.error("Маршрут по умолчанию не возвращается — перезапускаю службу.")
+            state = .error
+            message = "Восстанавливаю связь…"
+            publishStatus(config: lastGoodConfig ?? ConfigStore.loadConfig())
+            exit(0)
+        }
     }
 
     // MARK: - Подъём туннеля
@@ -170,8 +288,11 @@ final class TunnelManager {
             state = .error
             message = "Нет подключения к интернету: маршрут по умолчанию не найден."
             log.error(message)
+            noRouteAttempts += 1
+            healStuckDefaultRoute()
             return
         }
+        noRouteAttempts = 0
 
         let resolved = resolveRules(config)
         let allowedIPs = allowedIPsFor(config: config, resolved: resolved)
