@@ -685,18 +685,63 @@ class TunnelController(
                 if (!awaitHandshake(10_000)) continue
             }
 
-            if (BulkCheck.works()) {
-                activeMtu = mtu
-                if (mtu != remembered) {
-                    store.update { it.copy(options = it.options.copy(probedMtu = mtu)) }
+            when (BulkCheck.check()) {
+                BulkCheck.Verdict.PASSES -> {
+                    activeMtu = mtu
+                    if (mtu != remembered) {
+                        store.update { it.copy(options = it.options.copy(probedMtu = mtu)) }
+                    }
+                    return
                 }
-                return
+
+                // Соединение есть, данные не идут — пробуем ступень ниже.
+                BulkCheck.Verdict.STALLS -> Unit
+
+                // Проверить не удалось: ни один источник не отозвался.
+                // Раньше это считалось успехом, и телефон оставался с
+                // размером из ключа — а потом человек не мог скачать ни
+                // фото, ни видео. Непроверенному размеру верить нельзя:
+                // садимся на нижнюю ступень, она проходит везде.
+                BulkCheck.Verdict.UNKNOWN -> {
+                    settleOnSafeMtu(profile, config, routes, withIpv6, applied)
+                    return
+                }
             }
         }
 
         // Ни один размер не помог — значит, дело не в нём. Остаёмся на
         // нижней ступени: она хотя бы заведомо проходит.
         activeMtu = ladder.last()
+    }
+
+    /**
+     * Садится на размер пакета, который проходит в любой сети.
+     *
+     * Нижняя ступень — это минимум, заданный самим протоколом IPv6: такие
+     * пакеты обязана пропускать любая сеть на пути. Скорость от этого
+     * теряется на считаные проценты, а фото и видео начинают скачиваться.
+     *
+     * Запоминать этот размер не станем: он выбран не потому, что подошёл,
+     * а потому, что проверить не вышло. В следующий раз попробуем заново.
+     */
+    private suspend fun settleOnSafeMtu(
+        profile: WgProfile,
+        config: AppConfig,
+        routes: List<String>,
+        withIpv6: Boolean,
+        applied: Int,
+    ) {
+        val safe = MTU_LADDER.last()
+        activeMtu = safe
+        if (applied == safe) return
+
+        publish(_status.value.copy(message = "Ставлю надёжный размер пакета: $safe…"))
+        try {
+            applyConfig(profile.copy(mtu = safe), config, routes, withIpv6 = withIpv6)
+            awaitHandshake(10_000)
+        } catch (error: Exception) {
+            activeMtu = applied
+        }
     }
 
     /** С каким размером пакета туннель сейчас работает. */

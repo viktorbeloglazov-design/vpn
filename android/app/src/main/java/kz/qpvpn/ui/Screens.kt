@@ -505,24 +505,46 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                     }
                 }
 
-                // Размер пакета — единственное, чем скорость лечится со
-                // стороны телефона, поэтому он здесь же, а не в настройках.
+                // Размер пакета — единственное, чем скорость и незагрузка
+                // файлов лечатся со стороны телефона, поэтому он здесь же.
+                // Названо по симптому, а не по термину: человек приходит
+                // сюда не «менять MTU», а потому что не качается фото.
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    "Размер пакета (MTU). В гостевых и мобильных сетях большие пакеты часто " +
-                        "не проходят целиком: сообщения уходят, а видео крутится и не качается. " +
+                    "Фото и видео не скачиваются",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    "Бывает так: сообщения уходят и приходят, а фото и видео крутятся " +
+                        "и не скачиваются. Значит, сеть не пропускает пакеты целиком — " +
+                        "мелкое пролезает, крупное нет. Чаще всего это гостевой Wi-Fi " +
+                        "и мобильный интернет.\n\n" +
+                        "Нажмите «Мелкие пакеты»: такие проходят в любой сети. Скорость " +
+                        "теряется на считаные проценты, а файлы начинают скачиваться. " +
                         "На «Авто» приложение подбирает размер само при подключении.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(0 to "Авто", 1420 to "1420", 1380 to "1380", 1280 to "1280")
-                        .forEach { (value, title) ->
-                            FilterChip(
-                                selected = state.config.options.mtu == value,
-                                onClick = { actions.onOptionsChange(state.config.options.copy(mtu = value)) },
-                                label = { Text(title) },
-                            )
-                        }
+                    listOf(
+                        0 to "Авто",
+                        1280 to "Мелкие пакеты",
+                        1420 to "Обычные",
+                    ).forEach { (value, title) ->
+                        FilterChip(
+                            selected = state.config.options.mtu == value,
+                            onClick = { actions.onOptionsChange(state.config.options.copy(mtu = value)) },
+                            label = { Text(title) },
+                        )
+                    }
+                }
+                if (state.config.options.mtu != 0) {
+                    Text(
+                        "Размер выбран вручную — приложение его не меняет. " +
+                            "Верните «Авто», чтобы оно снова подбирало само.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
@@ -816,11 +838,13 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
         SectionHeader("Настройки")
 
         InfoCard {
-            Text("Размер пакета (MTU)", style = MaterialTheme.typography.titleMedium)
+            Text("Размер пакета", style = MaterialTheme.typography.titleMedium)
             Text(
-                "От него зависит скорость. Чем больше — тем быстрее, но если сеть " +
-                    "не пропускает такие пакеты, видео и потоковые ответы встают. " +
-                    "На «Авто» приложение подбирает размер само при подключении.",
+                "От него зависит скорость и то, скачиваются ли файлы. Чем больше " +
+                    "пакет — тем быстрее, но если сеть не пропускает такие целиком, " +
+                    "сообщения ходят, а фото и видео крутятся и не скачиваются.\n\n" +
+                    "«Мелкие пакеты» проходят в любой сети — с них и начните, если " +
+                    "что-то не качается. На «Авто» приложение подбирает размер само.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -828,7 +852,7 @@ private fun SettingsSection(state: ScreenState, actions: ScreenActions) {
                 modifier = Modifier.padding(top = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf(0 to "Авто", 1420 to "1420", 1380 to "1380", 1280 to "1280").forEach { (value, title) ->
+                listOf(0 to "Авто", 1280 to "Мелкие пакеты", 1420 to "Обычные").forEach { (value, title) ->
                     FilterChip(
                         selected = options.mtu == value,
                         onClick = { actions.onOptionsChange(options.copy(mtu = value)) },

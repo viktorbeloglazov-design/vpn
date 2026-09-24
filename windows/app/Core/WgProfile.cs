@@ -58,7 +58,7 @@ public sealed record WgProfile
 
     /// <summary>Имена параметров маскировки, как их читают из ключа.</summary>
     public static IReadOnlyList<string> AmneziaKeys =>
-        AmneziaFields.Select(field => field.Key).ToList();
+        AmneziaFields.Select(item => item.Key).ToList();
 
     public string PrivateKey { get; init; } = "";
     public List<string> Addresses { get; init; } = new();

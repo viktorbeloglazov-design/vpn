@@ -29,20 +29,40 @@ object BulkCheck {
         "https://speed.cloudflare.com/__down?bytes=1000000",
         "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png",
         "https://raw.githubusercontent.com/viktorbeloglazov-design/vpn/main/README.md",
+        // Тот же путь, которым идут фото и видео в мессенджере: если
+        // крупные порции не проходят именно там, остальное не показательно.
+        "https://static.whatsapp.net/rsrc.php/yb/r/Rq2c0nGrPYC.js",
     )
 
-    /** Проходят ли большие порции. false — размер пакета стоит уменьшить. */
-    suspend fun works(): Boolean = withContext(Dispatchers.IO) {
+    /** Чем кончилась проверка. */
+    enum class Verdict {
+        /** Большие порции проходят — размер пакета подходит. */
+        PASSES,
+
+        /** Соединение есть, данные не идут — размер пакета великоват. */
+        STALLS,
+
+        /**
+         * Проверить не вышло: ни один источник не отозвался.
+         *
+         * Раньше этот случай считался успехом — «раз не проверили, значит
+         * всё хорошо». Из-за этого телефон оставался с размером пакета из
+         * ключа, а человек потом не мог скачать ни фото, ни видео. Теперь
+         * неизвестность — это неизвестность, и размер берётся заведомо
+         * проходимый.
+         */
+        UNKNOWN,
+    }
+
+    suspend fun check(): Verdict = withContext(Dispatchers.IO) {
         for (source in sources) {
             when (download(source)) {
-                Result.OK -> return@withContext true
-                Result.STALLED -> return@withContext false
+                Result.OK -> return@withContext Verdict.PASSES
+                Result.STALLED -> return@withContext Verdict.STALLS
                 Result.UNREACHABLE -> Unit  // источник недоступен — пробуем следующий
             }
         }
-        // Ни один источник не отозвался: проблема не в размере пакета,
-        // и уменьшать его вслепую незачем.
-        true
+        Verdict.UNKNOWN
     }
 
     private enum class Result { OK, STALLED, UNREACHABLE }
