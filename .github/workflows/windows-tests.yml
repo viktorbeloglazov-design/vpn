@@ -20,6 +20,18 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: windows/tunnel/go.sum
+
+      # Приложение читает из ключа только те параметры маскировки, которые
+      # у него перечислены. Потеряется хоть один — сервер не узнает наши
+      # пакеты, и туннель будет вечно «подключаться». Поэтому список
+      # сверяется с тем, что на самом деле понимает служба.
+      - name: Параметры маскировки
+        run: bash scripts/ci/check-masking.sh
+
       - name: Прогнать трижды
         working-directory: windows/tests
         run: |

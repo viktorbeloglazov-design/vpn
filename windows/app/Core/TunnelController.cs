@@ -232,7 +232,8 @@ public sealed class TunnelController
     /// </summary>
     private static async Task<List<Ipv4Net>> ServiceAddressesAsync()
     {
-        var fresh = await ResolveAsync(VpnServices.Domains()).ConfigureAwait(false);
+        var fresh = await WithinBudgetAsync(ResolveAsync(VpnServices.Domains()),
+                                            ResolveBudget).ConfigureAwait(false);
 
         // В память идут только адреса из сетей владельцев сервисов.
         // На заблокированное имя провайдер нередко отвечает адресом своей
@@ -249,6 +250,35 @@ public sealed class TunnelController
         var result = new List<Ipv4Net>(honest);
         result.AddRange(KnownAddresses.Nets(remembered));
         return result;
+    }
+
+    /// <summary>
+    /// Сколько всего можно потратить на выяснение адресов.
+    ///
+    /// Имена спрашиваются у публичных серверов по защищённому каналу, и в
+    /// сетях, где такой канал прикрыт, каждый вопрос упирается в ожидание.
+    /// Тридцать с лишним имён — и человек сидит перед надписью «Считаю
+    /// маршруты…» дольше минуты, решая, что программа повисла.
+    ///
+    /// Подключение важнее полноты списка: чего не успели спросить, то
+    /// возьмётся из памяти адресов и из сетей самих сервисов.
+    /// </summary>
+    private static readonly TimeSpan ResolveBudget = TimeSpan.FromSeconds(12);
+
+    /// <summary>Ждёт результат, но не дольше отведённого времени.</summary>
+    private static async Task<List<Ipv4Net>> WithinBudgetAsync(Task<List<Ipv4Net>> work, TimeSpan budget)
+    {
+        var finished = await Task.WhenAny(work, Task.Delay(budget)).ConfigureAwait(false);
+        if (!ReferenceEquals(finished, work)) return new List<Ipv4Net>();
+
+        try
+        {
+            return await work.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            return new List<Ipv4Net>();
+        }
     }
 
     /// <summary>

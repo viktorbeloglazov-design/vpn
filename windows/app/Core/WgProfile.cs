@@ -14,13 +14,51 @@ namespace QPVPN.Core;
 public sealed record WgProfile
 {
     /// <summary>Имена параметров маскировки так, как их ждёт библиотека AmneziaWG.</summary>
+    /// <summary>
+    /// Параметры маскировки AmneziaWG, которые надо донести до службы.
+    ///
+    /// Здесь должно быть ровно то, что понимает служба туннеля. Чего в этом
+    /// списке нет, то при чтении ключа молча выбрасывается и до службы не
+    /// доезжает, — а маскировка работает только целиком. Стоит потерять
+    /// хотя бы HeaderProtectionKey, и сервер перестаёт узнавать наши
+    /// пакеты: приложение показывает «подключение», отправка идёт,
+    /// в ответ не приходит ничего. Именно так туннель и висел на Windows,
+    /// пока здесь лежали одни только Jc, S, H и I.
+    ///
+    /// Список сверяется с исходниками службы при каждой проверке (шаг
+    /// «Параметры маскировки»): если Amnezia добавит новый параметр или
+    /// перестанет понимать старый, об этом скажет сборка, а не человек,
+    /// у которого перестал работать VPN.
+    /// </summary>
     private static readonly (string Key, string Name)[] AmneziaFields =
     {
+        // Мусорные пакеты перед рукопожатием.
         ("jc", "Jc"), ("jmin", "Jmin"), ("jmax", "Jmax"),
+
+        // Подмена размеров и заголовков служебных пакетов.
         ("s1", "S1"), ("s2", "S2"), ("s3", "S3"), ("s4", "S4"),
         ("h1", "H1"), ("h2", "H2"), ("h3", "H3"), ("h4", "H4"),
+
+        // Особые пакеты рукопожатия.
         ("i1", "I1"), ("i2", "I2"), ("i3", "I3"), ("i4", "I4"), ("i5", "I5"),
+
+        // Защита заголовков и набивка — без них сервер не узнаёт пакеты.
+        ("headerprotectionkey", "HeaderProtectionKey"),
+        ("contentpaddingaddition", "ContentPaddingAddition"),
+
+        // Сроки жизни сессии: сервер и клиент должны считать их одинаково.
+        ("rekeyaftertime", "RekeyAfterTime"),
+        ("rekeytimeout", "RekeyTimeout"),
+        ("rejectaftertime", "RejectAfterTime"),
+        ("keepalivetimeout", "KeepaliveTimeout"),
+        ("maxhandshakeattempts", "MaxHandshakeAttempts"),
+        ("randomtrailers", "RandomTrailers"),
+        ("disablecookies", "DisableCookies"),
     };
+
+    /// <summary>Имена параметров маскировки, как их читают из ключа.</summary>
+    public static IReadOnlyList<string> AmneziaKeys =>
+        AmneziaFields.Select(field => field.Key).ToList();
 
     public string PrivateKey { get; init; } = "";
     public List<string> Addresses { get; init; } = new();
