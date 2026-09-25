@@ -810,7 +810,7 @@ private fun BackupEntryCard(state: ScreenState, actions: ScreenActions) {
                 actions.onBackupEndpointChange(it)
             },
             singleLine = true,
-            placeholder = { Text("95.213.0.1:31984") },
+            placeholder = { Text("адрес:порт") },
             modifier = Modifier.fillMaxWidth(),
         )
         if (state.config.backupEndpoint.isNotEmpty()) {

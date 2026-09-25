@@ -137,7 +137,7 @@ struct SettingsView: View {
                     }
 
                     Section("Запасной вход") {
-                        TextField("95.213.0.1:31984", text: Binding(
+                        TextField("адрес:порт", text: Binding(
                             get: { model.config.backupEndpoint },
                             set: { model.setBackupEndpoint($0) }
                         ))
