@@ -42,14 +42,18 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        ForEach(model.routeCheck, id: \.address) { result in
+                        // Имя, а не адрес: адрес теперь спрашивается у DNS
+                        // и может не ответить — тогда он пустой у всех сразу.
+                        ForEach(model.routeCheck, id: \.name) { result in
                             LabeledContent(result.name) {
-                                Text(result.interface.isEmpty
-                                     ? "маршрут не найден"
-                                     : (result.bypassesTunnel
+                                Text(result.known
+                                     ? (result.bypassesTunnel
                                         ? "напрямую (\(result.interface))"
-                                        : "через VPN (\(result.interface))"))
-                                    .foregroundColor(result.bypassesTunnel ? .green : .orange)
+                                        : "через VPN (\(result.interface))")
+                                     : "адрес не отвечает")
+                                    .foregroundColor(result.known
+                                                     ? (result.bypassesTunnel ? .green : .orange)
+                                                     : .secondary)
                             }
                         }
 

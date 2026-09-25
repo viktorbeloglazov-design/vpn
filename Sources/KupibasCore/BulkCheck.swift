@@ -24,18 +24,42 @@ public enum BulkCheck {
 
     private enum Outcome { case ok, stalled, unreachable }
 
-    /// Проходят ли большие порции. false — размер пакета стоит уменьшить.
-    public static func works() -> Bool {
+    /// Чем кончилась проверка.
+    public enum Verdict: Sendable {
+        /// Большие порции проходят — размер пакета подходит.
+        case passes
+
+        /// Соединение есть, данные не идут — размер пакета великоват.
+        case stalls
+
+        /// Проверить не вышло: ни один источник не отозвался.
+        ///
+        /// Раньше этот случай считался успехом — «раз не проверили, значит
+        /// всё хорошо». Из-за этого оставался размер из ключа, а человек
+        /// потом не мог скачать ни фото, ни видео. Неизвестность — это
+        /// неизвестность, и размер берётся заведомо проходимый.
+        case unknown
+    }
+
+    public static func check() -> Verdict {
         for source in sources {
             switch download(source) {
-            case .ok: return true
-            case .stalled: return false
+            case .ok: return .passes
+            case .stalled: return .stalls
             case .unreachable: continue
             }
         }
-        // Ни один источник не отозвался: проблема не в размере пакета,
-        // и уменьшать его вслепую незачем.
-        return true
+        return .unknown
+    }
+
+    /// Проходят ли большие порции. false — размер пакета стоит уменьшить.
+    ///
+    /// Оставлено для тех мест, где важен только ответ «да или нет».
+    /// Непроверенное считается непроходящим: лучше пакет поменьше,
+    /// чем связь, которой нельзя пользоваться.
+    public static func works() -> Bool {
+        if case .passes = check() { return true }
+        return false
     }
 
     private static func download(_ text: String) -> Outcome {

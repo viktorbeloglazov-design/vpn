@@ -498,11 +498,14 @@ final class AppModel: ObservableObject {
         // Куда на самом деле уходят пакеты: по этому видно, работает ли
         // обход, — без него разговор упирается в догадки.
         for result in RouteProbe.check() {
-            let path = result.interface.isEmpty
-                ? "маршрут не найден"
-                : (result.bypassesTunnel ? "напрямую (\(result.interface))"
+            let path = result.known
+                ? (result.bypassesTunnel ? "напрямую (\(result.interface))"
                                          : "через VPN (\(result.interface))")
-            lines.append("  \(result.name): \(path)")
+                : "адрес не отвечает"
+            // Адрес в отчёте не для красоты: по нему видно, тот ли узел
+            // проверен, если сервис вдруг переехал.
+            let address = result.address.isEmpty ? "" : " [\(result.address)]"
+            lines.append("  \(result.name)\(address): \(path)")
         }
         lines.append("Handshake: \(Formatting.relative(status.lastHandshake))")
         lines.append("Принято/отправлено: \(Formatting.bytes(status.rxBytes)) / \(Formatting.bytes(status.txBytes))")

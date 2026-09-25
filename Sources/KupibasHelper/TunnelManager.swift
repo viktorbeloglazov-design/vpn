@@ -493,7 +493,8 @@ final class TunnelManager {
                 NetworkTool.setMTU(interface: interfaceName, mtu: mtu)
                 applied = mtu
             }
-            if BulkCheck.works() {
+            switch BulkCheck.check() {
+            case .passes:
                 activeMtu = mtu
                 if mtu != remembered {
                     var updated = ConfigStore.loadConfig()
@@ -501,6 +502,22 @@ final class TunnelManager {
                     try? ConfigStore.saveConfig(updated)
                 }
                 log.info("Размер пакета \(mtu) — большие порции проходят.")
+                return
+
+            // Соединение есть, данные не идут — пробуем ступень ниже.
+            case .stalls:
+                continue
+
+            // Проверить не удалось: ни один источник не отозвался. Раньше
+            // это считалось успехом, и оставался размер из ключа — а потом
+            // человек не мог скачать ни фото, ни видео. Непроверенному
+            // размеру верить нельзя: садимся на нижнюю ступень, она
+            // проходит везде.
+            case .unknown:
+                let safe = Self.mtuLadder.last ?? mtu
+                if safe != applied { NetworkTool.setMTU(interface: interfaceName, mtu: safe) }
+                activeMtu = safe
+                log.error("Проверить размер пакета не вышло — ставлю надёжный \(safe).")
                 return
             }
         }
