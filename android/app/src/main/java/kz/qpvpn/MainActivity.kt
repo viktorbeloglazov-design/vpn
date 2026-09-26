@@ -28,6 +28,7 @@ import kotlinx.coroutines.withContext
 import kz.qpvpn.model.MasterFilter
 import kz.qpvpn.model.ConnectionState
 import kz.qpvpn.model.TunnelOptions
+import kz.qpvpn.net.Cidr
 import kz.qpvpn.net.IpCheck
 import kz.qpvpn.net.SpeedTest
 import kz.qpvpn.net.UpdateCheck
@@ -461,10 +462,54 @@ class MainActivity : ComponentActivity() {
 
     private fun copyDiagnostics() {
         val manager = getSystemService(ClipboardManager::class.java) ?: return
-        manager.setPrimaryClip(
-            ClipData.newPlainText("QP VPN", diagnostics(app.tunnel.status.value))
+        lifecycleScope.launch {
+            val text = diagnostics(app.tunnel.status.value) + routeSummary()
+            manager.setPrimaryClip(ClipData.newPlainText("QP VPN", text))
+            Toast.makeText(this@MainActivity, "Отчёт скопирован", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Куда на самом деле уходит трафик знакомых сервисов.
+     *
+     * Разговоры «работает / не работает» упираются в один вопрос: идёт этот
+     * сервис мимо VPN или через него. Российские должны идти напрямую,
+     * заблокированные — через туннель. Картинки и файлы проверяются
+     * отдельно от самих сайтов: у сервисов они лежат на других адресах,
+     * и жалоба «сообщения ходят, а фото не грузятся» ровно об этом.
+     */
+    private suspend fun routeSummary(): String = withContext(Dispatchers.IO) {
+        val zone = runCatching { RuZone.networks(this@MainActivity) }.getOrDefault(emptyList())
+
+        val landmarks = listOf(
+            "МАХ" to "max.ru",
+            "МАХ, картинки" to "i.max.ru",
+            "Сбербанк" to "online.sberbank.ru",
+            "Госуслуги" to "gosuslugi.ru",
+            "Wildberries" to "www.wildberries.ru",
+            "WhatsApp" to "web.whatsapp.com",
+            "WhatsApp, файлы" to "mmg.whatsapp.net",
+            "WhatsApp, картинки" to "media-arn2-1.cdn.whatsapp.net",
         )
-        Toast.makeText(this, "Отчёт скопирован", Toast.LENGTH_SHORT).show()
+
+        buildString {
+            appendLine()
+            appendLine("Куда идёт трафик:")
+            for ((name, host) in landmarks) {
+                val address = runCatching {
+                    java.net.InetAddress.getAllByName(host)
+                        .firstOrNull { it is java.net.Inet4Address }?.hostAddress
+                }.getOrNull()
+
+                if (address == null) {
+                    appendLine("  $name: адрес не отвечает")
+                    continue
+                }
+                val value = Cidr.parseAddress(address)
+                val direct = value != null && zone.any { value >= it.start && value <= it.endInclusive }
+                appendLine("  $name [$address]: ${if (direct) "напрямую" else "через VPN"}")
+            }
+        }
     }
 
     private fun profileProtocol(): String {

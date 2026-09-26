@@ -666,7 +666,21 @@ class TunnelController(
         withIpv6: Boolean,
     ) {
         val remembered = config.options.probedMtu
-        val start = if (remembered > 0) remembered else profile.mtu.coerceAtMost(MTU_LADDER.first())
+
+        // В мобильной сети большой пакет почти никогда не проходит целиком.
+        // Оператор ведёт трафик через свои туннели, и до телефона доезжает
+        // не полторы тысячи байт, а меньше. Наш пакет при размере 1420
+        // уходит наружу как 1480 — и не влезает. Дома по Wi-Fi те же
+        // настройки работают, а в дороге фото и видео встают.
+        //
+        // Поэтому в мобильной сети начинаем с заведомо проходимого размера,
+        // а не выясняем это на человеке. Разница в скорости — считаные
+        // проценты, разница между «качается» и «не качается» — вся.
+        val start = when {
+            remembered > 0 -> remembered
+            onMobileNetwork() -> MTU_LADDER.last()
+            else -> profile.mtu.coerceAtMost(MTU_LADDER.first())
+        }
         val ladder = (listOf(start) + MTU_LADDER.filter { it < start }).distinct()
 
         // Туннель уже поднят с размером из ключа: если начинаем с другого,
@@ -742,6 +756,14 @@ class TunnelController(
         } catch (error: Exception) {
             activeMtu = applied
         }
+    }
+
+    /** Мобильный ли интернет сейчас: в нём пакеты режут чаще всего. */
+    private fun onMobileNetwork(): Boolean {
+        val manager = context.getSystemService(android.net.ConnectivityManager::class.java)
+            ?: return false
+        val capabilities = manager.getNetworkCapabilities(manager.activeNetwork) ?: return false
+        return capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
     }
 
     /** С каким размером пакета туннель сейчас работает. */
