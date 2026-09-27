@@ -112,21 +112,31 @@ check_manual() {
         return
     }
 
+    local page="$root/docs/instrukciya/index.html"
+    local before="/tmp/otchet-manual-before.html"
+    cp "$page" "$before" 2>/dev/null || {
+        say "- Инструкция: пропущена (нет файла)"
+        return
+    }
+
     python3 "$root/scripts/manual/build_manual.py" > /tmp/otchet-manual.log 2>&1 || {
+        cp "$before" "$page"
         say "- Инструкция: **не собирается**"
         trouble=$((trouble + 1))
         return
     }
 
-    if git -C "$root" diff --quiet -- docs/instrukciya/index.html; then
+    # Сравниваем с тем, что лежало до пересборки. Иначе проверка слепа:
+    # сборка сама затирает ручную правку, и сравнивать было бы не с чем.
+    if cmp -s "$before" "$page"; then
         say "- Инструкция: собирается из скрипта, расхождений нет"
     else
+        cp "$before" "$page"
         say "- Инструкция: **правки не дойдут до PDF**"
         say ""
         say "  Файл docs/instrukciya/index.html правили руками. Он собирается"
         say "  скриптом scripts/manual/build_manual.py и перезаписывается —"
         say "  правки нужно перенести в скрипт, иначе они пропадут."
-        git -C "$root" checkout -- docs/instrukciya/index.html
         trouble=$((trouble + 1))
     fi
 }
