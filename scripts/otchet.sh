@@ -101,6 +101,38 @@ else
     say "- Проверки ядра Mac: пропущена (нет swift)"
 fi
 
+# Инструкция собирается скриптом, а docs/instrukciya/index.html — его
+# результат. Правка, внесённая прямо в index.html, живёт до следующей
+# сборки и молча пропадает: PDF выкладывается заново и не меняется ни
+# на байт. Поэтому пересобираем и смотрим, совпадает ли результат
+# с тем, что лежит в репозитории.
+check_manual() {
+    command -v python3 >/dev/null 2>&1 || {
+        say "- Инструкция: пропущена (нет python3)"
+        return
+    }
+
+    python3 "$root/scripts/manual/build_manual.py" > /tmp/otchet-manual.log 2>&1 || {
+        say "- Инструкция: **не собирается**"
+        trouble=$((trouble + 1))
+        return
+    }
+
+    if git -C "$root" diff --quiet -- docs/instrukciya/index.html; then
+        say "- Инструкция: собирается из скрипта, расхождений нет"
+    else
+        say "- Инструкция: **правки не дойдут до PDF**"
+        say ""
+        say "  Файл docs/instrukciya/index.html правили руками. Он собирается"
+        say "  скриптом scripts/manual/build_manual.py и перезаписывается —"
+        say "  правки нужно перенести в скрипт, иначе они пропадут."
+        git -C "$root" checkout -- docs/instrukciya/index.html
+        trouble=$((trouble + 1))
+    fi
+}
+
+check_manual
+
 say ""
 say "## Итог"
 say ""

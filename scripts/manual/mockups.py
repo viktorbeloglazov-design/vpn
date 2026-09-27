@@ -198,20 +198,26 @@ def win_home():
       <div class="brand">KUPIBAS</div>
       <div class="pwr on" style="margin:2.5mm auto 1.6mm">{icon("power", "#FFFFFF", "6mm")}</div>
       <div class="state ok">Подключён</div>
-      <div class="state-sub">Сервер 91.201.xx.xx · маршрутов: 2617 · пакет 1420</div>
+      <div class="state-sub">Сервер 91.201.xx.xx · пакет 1420</div>
       <div class="stats" style="margin-top:2.5mm">
         <div><div class="k">ПРИНЯТО</div><div class="v">412 МБ</div></div>
         <div><div class="k">ОТПРАВЛЕНО</div><div class="v">38 МБ</div></div>
       </div>
     </div>
     <div class="card" style="margin-top:2.5mm">
-      <div class="t" style="font-size:7pt">Как идёт трафик</div>
-      <div class="d" style="margin-bottom:1.4mm">Российские сайты — МАХ, госуслуги,
-        банки, маркетплейсы — напрямую</div>
-      <div class="row" style="align-items:center;border-top:.2mm solid #22303B;padding-top:1.8mm">
-        <div style="flex:1"><div class="t">Рабочие ресурсы</div></div>
+      <div class="t" style="font-size:7pt">Рабочая зона для 1С</div>
+      <div class="d">2 адреса · через VPN всегда</div>
+    </div>
+    <div class="card">
+      <div class="row" style="align-items:center">
+        <div style="flex:1">
+          <div class="t" style="font-size:7pt">Сервисы через VPN</div>
+          <div class="d">Идут через VPN</div>
+        </div>
         <div class="sw"></div>
       </div>
+      <div class="d" style="margin-top:1.4mm">ChatGPT · Claude · YouTube · WhatsApp</div>
+      <div class="d" style="margin-top:1mm">Всё остальное — напрямую, мимо VPN</div>
     </div>
     <div class="card">
       <div class="t" style="font-size:7pt">Скорость</div>
@@ -242,7 +248,7 @@ def win_profile():
       <div class="d">Необязательно. Адрес узла-пересыльщика в виде адрес:порт.
         Программа пробует сервер напрямую, а если он не ответит — этот узел.</div>
       <div style="background:#1E2932;border-radius:1.4mm;padding:1.6mm;margin-top:1.4mm;
-                  color:#7D93A2;font-size:5.8pt">95.213.0.1:31984</div>
+                  color:#7D93A2;font-size:5.8pt">адрес:порт</div>
     </div>
   </div>
 </div>"""
