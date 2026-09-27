@@ -143,6 +143,19 @@ check_manual() {
 
 check_manual
 
+# Сверка генератора говорит только про репозиторий. Выложенная
+# инструкция может отстать от него: так и случилось — PDF обновлялся
+# вовремя, а правок в нём не было. Сверяем текст скачанного файла
+# с текстом, который собирается из кода сейчас.
+if [ -x "${CHROME:-/opt/pw-browsers/chromium}" ]; then
+    run_check "Выложенная инструкция" \
+        env CHROME="${CHROME:-/opt/pw-browsers/chromium}" \
+        python3 "$root/scripts/manual/check_published.py"
+    git -C "$root" checkout -- docs/instrukciya 2>/dev/null || true
+else
+    say "- Выложенная инструкция: пропущена (нет браузера)"
+fi
+
 say ""
 say "## Итог"
 say ""
