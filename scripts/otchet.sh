@@ -89,6 +89,8 @@ else
     say "- Параметры маскировки Windows: пропущена (нет go)"
 fi
 
+run_check "Описание выпуска" bash "$root/scripts/ci/check-opisanie.sh"
+
 if command -v dotnet >/dev/null 2>&1; then
     run_check "Проверки логики Windows" dotnet test "$root/windows/tests" --nologo -v q
 else
