@@ -31,17 +31,4 @@ jobs:
         run: gh release edit latest --notes-file .github/latest-notes.md
 
       - name: Убедиться, что доехало
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view latest --json body --jq .body > /tmp/vylozheno.md
-          # Перевод строки в конце и \r\n от API — не расхождение.
-          if diff -q <(tr -d '\r' < .github/latest-notes.md) \
-                     <(tr -d '\r' < /tmp/vylozheno.md) > /dev/null; then
-            echo "Описание выпуска совпадает с файлом"
-          else
-            echo "Описание не совпало с файлом:" >&2
-            diff <(tr -d '\r' < .github/latest-notes.md) \
-                 <(tr -d '\r' < /tmp/vylozheno.md) >&2 || true
-            exit 1
-          fi
+        run: bash scripts/ci/check-opisanie.sh
