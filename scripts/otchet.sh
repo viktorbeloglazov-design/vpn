@@ -91,16 +91,21 @@ fi
 
 run_check "Описание выпуска" bash "$root/scripts/ci/check-opisanie.sh"
 
+# Проверки платформ идут в CI: здесь нет ни dotnet, ни Xcode, ни
+# Android SDK. Раньше на этом месте стояло честное «пропущена», после
+# которого итог всё равно писал «проверки проходят». Теперь спрашиваем
+# у CI, прогонялись ли они на нынешнем коде.
+run_check "Проверки платформ прогонялись на этом коде" \
+    bash "$root/scripts/ci/check-progony.sh"
+
+# Если инструменты всё-таки есть — гоняем и здесь: это быстрее, чем
+# ждать CI, и находит поломку до того, как она уйдёт в ветку.
 if command -v dotnet >/dev/null 2>&1; then
     run_check "Проверки логики Windows" dotnet test "$root/windows/tests" --nologo -v q
-else
-    say "- Проверки логики Windows: пропущена (нет dotnet)"
 fi
 
 if command -v swift >/dev/null 2>&1; then
     run_check "Проверки ядра Mac" swift test --package-path "$root"
-else
-    say "- Проверки ядра Mac: пропущена (нет swift)"
 fi
 
 # Инструкция собирается скриптом, а docs/instrukciya/index.html — его
@@ -161,8 +166,15 @@ fi
 say ""
 say "## Итог"
 say ""
-if [ "$trouble" -eq 0 ]; then
+skipped="$(grep -c 'пропущена' "$out" || true)"
+if [ "$trouble" -eq 0 ] && [ "${skipped:-0}" -eq 0 ]; then
     say "Всё на месте: ссылки отвечают, версии выложены, проверки проходят."
+elif [ "$trouble" -eq 0 ]; then
+    # Не «всё в порядке»: часть проверок не выполнялась, и молчать
+    # об этом нельзя — итог должен говорить только о проверенном.
+    say "Ссылки отвечают, версии выложены, выполненные проверки проходят."
+    say ""
+    say "Пропущено проверок: $skipped — смотрите список выше."
 else
     say "**Неполадок: $trouble.** Разобраться и выпустить исправление."
 fi
