@@ -80,8 +80,7 @@ final class Logger {
               size > maxSize else { return }
 
         let keep = maxSize / 2
-        guard let tail = try? handle.seek(toOffset: UInt64(size - keep)),
-              tail == UInt64(size - keep),
+        guard (try? handle.seek(toOffset: UInt64(size - keep))) != nil,
               let data = try? handle.readToEnd()
         else {
             try? handle.truncate(atOffset: 0)
