@@ -34,6 +34,20 @@ public enum RestartLog {
             .write(toFile: path, atomically: true, encoding: .utf8)
     }
 
+    /// Когда служба перезапускала себя в последний раз.
+    ///
+    /// Нужно, чтобы пауза между перезапусками пережила сам перезапуск:
+    /// после него процесс новый и всё, что он помнил, потеряно. Без
+    /// этого служба, оставшаяся без интернета по-настоящему, ходила бы
+    /// по кругу — перезапуск, две минуты, снова перезапуск.
+    public static func lastAt() -> Date? {
+        guard let line = read().last else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.date(from: String(line.prefix(19)))
+    }
+
     /// Записи, от старых к новым.
     public static func read() -> [String] {
         guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }

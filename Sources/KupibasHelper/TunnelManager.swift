@@ -226,6 +226,16 @@ final class TunnelManager {
             return nil
         }
 
+        // Маршрут мог появиться в последний момент — ровно между
+        // последней проверкой цикла и этой строкой. Раньше такой маршрут
+        // отбрасывался, да ещё и с записью «всё ещё ведёт в туннель
+        // (en0)», хотя en0 — это обычный Wi-Fi. В журнале с Mac такая
+        // строка есть, и она сбивала с толку при разборе.
+        if RouteGuard.isUsable(gateway: route.gateway, interface: route.interfaceName) {
+            log.info("Маршрут по умолчанию появился под конец ожидания: \(route.interfaceName).")
+            return route
+        }
+
         // Чужой VPN — это рабочая дорога, а не помеха. Раньше служба
         // отказывалась подниматься при любом туннеле на маршруте, включая
         // не свой. Своим остаткам веры нет, а по чужому туннелю связь есть,
@@ -235,7 +245,7 @@ final class TunnelManager {
             return route
         }
 
-        log.error("Маршрут по умолчанию всё ещё ведёт в туннель (\(route.interfaceName)) — жду следующей попытки.")
+        log.error("Маршрут по умолчанию ведёт в наш туннель (\(route.interfaceName)) — жду следующей попытки.")
         return nil
     }
 
@@ -249,23 +259,40 @@ final class TunnelManager {
         return names
     }
 
-    /// Возвращает связь, когда маршрут по умолчанию застрял в туннеле.
+    /// Возвращает связь, когда маршрута по умолчанию нет или он застрял.
     ///
-    /// Так выглядит поломка, из-за которой человек шёл переустанавливать
-    /// службу: туннель опустили, а маршрут по умолчанию остался ведущим
-    /// в него. Нового туннеля не поднять — дороги наружу нет, — и связь
-    /// не возвращается сама, сколько ни жди.
+    /// Так выглядела поломка, из-за которой человек шёл переустанавливать
+    /// службу. По журналу с Mac за трое суток: туннель опускается, и сразу
+    /// после этого служба часами пишет «Маршрута по умолчанию нет вовсе» —
+    /// 30 сентября с 08:15 до 11:38. Интернета нет ни через VPN, ни мимо
+    /// него. После перезапуска службы маршрут находится за секунды.
     ///
-    /// Лечим тем же, чем лечил человек, только сами и по порядку: сначала
-    /// убираем остатки прошлого туннеля, а если и это не помогло —
-    /// перезапускаем службу. Launchd поднимет её через пять секунд, и она
-    /// начнёт с чистого листа.
+    /// Причина была здесь же. Лечение начиналось с проверки «маршрут есть
+    /// и ведёт в туннель» и при отсутствии маршрута выходило на первой
+    /// строке, ничего не сделав. Лечился только залипший маршрут, а самый
+    /// частый случай — когда маршрута нет вовсе — не лечился никак.
+    /// За трое суток в журнале нет ни одной записи о самоперезапуске,
+    /// хотя повод был часами.
     private func healStuckDefaultRoute() {
-        guard let route = NetworkTool.defaultRoute(),
-              RouteGuard.isTunnel(interface: route.interfaceName) else { return }
+        let seen = NetworkTool.defaultRoute().map {
+            LostRoute.Route(gateway: $0.gateway, interfaceName: $0.interfaceName)
+        }
+        let known = savedDefaultRoute.map {
+            LostRoute.Route(gateway: $0.gateway, interfaceName: $0.interfaceName)
+        }
+        let since = RestartLog.lastAt().map { Date().timeIntervalSince($0) } ?? .greatestFiniteMagnitude
 
-        if noRouteAttempts == 2 {
-            log.info("Маршрут по умолчанию застрял в \(route.interfaceName) — убираю остатки прошлого туннеля.")
+        switch LostRoute.decide(attempts: noRouteAttempts,
+                                route: seen,
+                                ourInterfaces: ourInterfaces(),
+                                lastGoodRoute: known,
+                                sinceLastRestart: since) {
+        case .wait:
+            return
+
+        case .clearTunnelLeftovers:
+            let name = seen?.interfaceName ?? Paths.interfaceName
+            log.info("Маршрут по умолчанию застрял в \(name) — убираю остатки прошлого туннеля.")
 
             // Имя могло стереться при опускании — берём то, что осталось
             // на диске, иначе снимать будет нечего.
@@ -280,13 +307,28 @@ final class TunnelManager {
             // И сам залипший маршрут: он ведёт в интерфейс, которого уже нет.
             if ourInterfaces().isEmpty {
                 _ = Shell.runTool("route", ["-n", "delete", "-inet", "default",
-                                            "-interface", route.interfaceName], timeout: 10)
+                                            "-interface", name], timeout: 10)
             }
-            return
-        }
 
-        if noRouteAttempts >= 6 {
-            log.error("Маршрут по умолчанию не возвращается — перезапускаю службу.")
+        case .restoreVia(let route):
+            // Система почему-то не вернула маршрут сама. Прокладываем его
+            // тем же путём, каким он шёл до подъёма туннеля.
+            let via = route.gateway.isEmpty ? route.interfaceName : route.gateway
+            let result = NetworkTool.addDefaultRoute(gateway: route.gateway,
+                                                     interfaceName: route.interfaceName)
+            if result.succeeded {
+                log.info("Маршрута по умолчанию не было — проложил его сам через \(via).")
+            } else if !result.failureText.contains("File exists") {
+                log.error("Не вышло проложить маршрут по умолчанию через \(via): \(result.failureText)")
+            }
+
+        case .restartService:
+            let reason = seen == nil
+                ? "маршрута по умолчанию нет \(noRouteAttempts) попыток подряд"
+                : "маршрут по умолчанию не уходит из туннеля"
+            log.critical("Связь не возвращается (\(reason)) — перезапускаюсь. "
+                + "Launchd поднимет через пять секунд. \(OpenFiles.text()).")
+            RestartLog.add(stage: reason, seconds: noRouteAttempts * 17)
             state = .error
             message = "Восстанавливаю связь…"
             publishStatus(config: lastGoodConfig ?? ConfigStore.loadConfig())
@@ -1011,7 +1053,11 @@ final class TunnelManager {
         } catch {
             if Date().timeIntervalSince(lastStatusWrite) > 60 {
                 lastStatusWrite = Date()
-                log.error("Не удалось записать статус: \(error.localizedDescription)")
+                // Считаем дескрипторы: папка и права на месте, а файл
+                // не создаётся — так выглядит процесс, у которого они
+                // кончились. Цифра в журнале отвечает на это точно.
+                log.error("Не удалось записать статус: \(error.localizedDescription) "
+                    + "(\(OpenFiles.text()))")
             }
         }
     }

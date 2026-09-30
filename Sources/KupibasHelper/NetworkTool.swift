@@ -5,6 +5,45 @@ struct DefaultRoute {
     let interfaceName: String
 }
 
+/// Сколько файлов и сокетов открыто у самой службы.
+///
+/// Нужно затем, чтобы не гадать. По журналу с Mac видно: сначала служба
+/// перестаёт видеть маршрут по умолчанию, потом не может создать
+/// собственный временный файл — «Не удалось записать .status.json.tmp».
+/// Папка на месте, права на месте, а запись не удаётся. Так выглядит
+/// процесс, у которого кончились дескрипторы: запустить программу он
+/// больше не может, открыть файл тоже, и лечится это только запуском
+/// заново.
+///
+/// Проверить догадку можно только цифрой, и взять её надо тем способом,
+/// который сам дескрипторов не требует, — иначе в нужный момент он
+/// откажет первым. Поэтому никаких запусков программ: просто спрашиваем
+/// у ядра про каждый номер по очереди.
+enum OpenFiles {
+
+    /// Сколько дескрипторов занято и каков потолок.
+    static func count() -> (used: Int, limit: Int) {
+        var limits = rlimit()
+        let limit = getrlimit(RLIMIT_NOFILE, &limits) == 0
+            ? Int(limits.rlim_cur)
+            : Int(getdtablesize())
+
+        // Потолок бывает «без ограничений» — перебирать столько незачем.
+        let ceiling = min(limit, 65_536)
+        var used = 0
+        for descriptor in 0..<Int32(ceiling) where fcntl(descriptor, F_GETFD) != -1 {
+            used += 1
+        }
+        return (used, limit)
+    }
+
+    /// Строка для журнала.
+    static func text() -> String {
+        let (used, limit) = count()
+        return "открыто файлов и сокетов: \(used) из \(limit)"
+    }
+}
+
 /// Тонкая обёртка над route/ifconfig/networksetup.
 enum NetworkTool {
 
@@ -35,6 +74,24 @@ enum NetworkTool {
             gateway = String(gateway[gateway.startIndex..<percent])
         }
         return DefaultRoute(gateway: gateway, interfaceName: interfaceName)
+    }
+
+    /// Прокладывает маршрут по умолчанию заново.
+    ///
+    /// Обычно его ставит сама система, и трогать это не нужно. Но после
+    /// опускания туннеля маршрут иногда не возвращается — и тогда
+    /// интернета нет ни через VPN, ни мимо него, пока службу
+    /// не перезапустят. В таком случае прокладываем его сами, тем же
+    /// путём, каким он шёл до подъёма туннеля.
+    @discardableResult
+    static func addDefaultRoute(gateway: String, interfaceName: String) -> CommandResult {
+        var arguments = ["-n", "add", "-inet", "default"]
+        if !gateway.isEmpty {
+            arguments.append(gateway)
+        } else {
+            arguments.append(contentsOf: ["-interface", interfaceName])
+        }
+        return Shell.runTool("route", arguments, timeout: 10)
     }
 
     // MARK: - Маршруты
