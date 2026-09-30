@@ -1,0 +1,96 @@
+import XCTest
+@testable import KupibasCore
+
+/// Сторож живости: когда службу надо перезапускать, а когда не трогать.
+final class WatchdogTests: XCTestCase {
+
+    func testПокаКругиИдутСлужбуНеТрогаем() {
+        let сторож = Watchdog(limit: 90, now: 0)
+
+        for секунда in stride(from: 1.0, through: 600.0, by: 1.0) {
+            сторож.progress(now: секунда)
+            XCTAssertFalse(сторож.check(now: секунда).stuck,
+                           "На \(секунда)-й секунде живая служба названа зависшей")
+        }
+    }
+
+    func testДолгийПодъёмТуннеляНеСчитаетсяЗависанием() {
+        // Главное в стороже. Подъём туннеля в плохой сети честно занимает
+        // минуты: подобрать размер пакета, переставить DNS у каждой сетевой
+        // службы, проложить тысячи маршрутов. Если считать по кругу, сторож
+        // убьёт службу посреди работы, она начнёт заново и снова не успеет —
+        // выйдет ровно та поломка, от которой он поставлен.
+        let сторож = Watchdog(limit: 90, now: 0)
+
+        var время = 0.0
+        for шаг in 1...40 {
+            сторож.begin("networksetup -setdnsservers служба \(шаг)", now: время)
+            время += 15                       // каждое дело идёт по 15 секунд
+            XCTAssertFalse(сторож.check(now: время).stuck,
+                           "Дело \(шаг) честно шло 15 с — это не зависание")
+            сторож.end(now: время)
+        }
+
+        XCTAssertGreaterThan(время, 90 * 6, "Проверили работу длиною в десять минут")
+    }
+
+    func testЗастрявшееДелоЗамечается() {
+        let сторож = Watchdog(limit: 90, now: 0)
+        сторож.progress(now: 10)
+        сторож.begin("networksetup -setdnsservers Wi-Fi", now: 10)
+
+        XCTAssertFalse(сторож.check(now: 99).stuck, "89 секунд — ещё терпим")
+
+        let приговор = сторож.check(now: 100)
+        XCTAssertTrue(приговор.stuck)
+        XCTAssertEqual(приговор.stage, "networksetup -setdnsservers Wi-Fi",
+                       "В журнале должно быть видно, кто именно не отвечает")
+        XCTAssertEqual(приговор.seconds, 90)
+    }
+
+    func testДелоНачатоеСразуПослеПризнакаЖизниНеПолучаетФору() {
+        // Иначе зависшее дело ждали бы вдвое дольше: сначала лимит
+        // от признака жизни, потом ещё лимит от начала дела.
+        let сторож = Watchdog(limit: 90, now: 0)
+        сторож.progress(now: 100)
+        сторож.begin("wg show", now: 100)
+
+        XCTAssertTrue(сторож.check(now: 190).stuck)
+        XCTAssertEqual(сторож.check(now: 190).seconds, 90)
+    }
+
+    func testОстановкаСамогоЦиклаТожеЗамечается() {
+        // Дела нет, а признаков жизни нет — значит встал сам цикл.
+        let сторож = Watchdog(limit: 90, now: 0)
+
+        let приговор = сторож.check(now: 120)
+
+        XCTAssertTrue(приговор.stuck)
+        XCTAssertEqual(приговор.stage, "цикл службы")
+        XCTAssertEqual(приговор.seconds, 120)
+    }
+
+    func testЗакончившеесяДелоБольшеНеВинят() {
+        let сторож = Watchdog(limit: 90, now: 0)
+        сторож.begin("wg show", now: 1)
+        сторож.end(now: 2)
+
+        XCTAssertFalse(сторож.check(now: 50).stuck)
+
+        // А вот если признаков жизни после этого не было — виноват цикл.
+        XCTAssertEqual(сторож.check(now: 200).stage, "цикл службы")
+    }
+
+    func testКонецДелаСамПоСебеПризнакЖизни() {
+        // Цикл может подолгу не доходить до конца круга, но пока дела
+        // заканчиваются одно за другим — служба работает.
+        let сторож = Watchdog(limit: 90, now: 0)
+
+        сторож.begin("route -n get default", now: 80)
+        сторож.end(now: 85)
+
+        XCTAssertFalse(сторож.check(now: 170).stuck,
+                       "Отсчёт идёт от конца последнего дела, а не от начала круга")
+        XCTAssertTrue(сторож.check(now: 176).stuck)
+    }
+}

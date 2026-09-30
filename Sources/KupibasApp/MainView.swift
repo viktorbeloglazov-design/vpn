@@ -17,7 +17,10 @@ struct MainView: View {
                         + "иначе VPN будет работать по-старому."
                 )
             } else if !model.isDaemonRunning {
-                InstallBanner(text: "Служба не отвечает. Переустановите её или проверьте журнал.")
+                InstallBanner(
+                    text: "Служба не отвечает — она перезапускается сама. "
+                        + "Подождите полминуты."
+                )
             }
 
             BrandHeader()

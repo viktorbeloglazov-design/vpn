@@ -17,6 +17,16 @@ struct CommandResult {
 }
 
 enum Shell {
+
+    /// Кому рассказывать, какая команда сейчас выполняется.
+    ///
+    /// Команда может не вернуться: система занята, сеть переключается,
+    /// утилита ждёт ответа, которого не будет. Тогда весь цикл службы
+    /// стоит на ней. Сторож живости за этим следит, а по имени команды
+    /// в журнале видно, кто именно не отвечает, — иначе о зависании
+    /// осталась бы одна строчка «служба встала».
+    static var watchdog: Watchdog?
+
     /// Сначала — утилиты, поставленные вместе со службой (их кладёт установщик
     /// из бандла приложения), затем Homebrew, затем системные каталоги.
     static let searchPaths = [
@@ -37,7 +47,12 @@ enum Shell {
     }
 
     @discardableResult
-    static func run(_ executable: String, _ arguments: [String], timeout: TimeInterval = 90) -> CommandResult {
+    static func run(_ executable: String, _ arguments: [String], timeout: TimeInterval = 60) -> CommandResult {
+        let name = (executable as NSString).lastPathComponent
+        watchdog?.begin(([name] + arguments).joined(separator: " "),
+                        now: Date().timeIntervalSince1970)
+        defer { watchdog?.end(now: Date().timeIntervalSince1970) }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
@@ -88,7 +103,7 @@ enum Shell {
 
     /// Запуск утилиты по имени с поиском в PATH.
     @discardableResult
-    static func runTool(_ name: String, _ arguments: [String], timeout: TimeInterval = 90) -> CommandResult {
+    static func runTool(_ name: String, _ arguments: [String], timeout: TimeInterval = 60) -> CommandResult {
         guard let path = which(name) else {
             return CommandResult(status: -1, stdout: "", stderr: "утилита \(name) не найдена")
         }

@@ -29,7 +29,41 @@ if !fileManager.fileExists(atPath: Paths.stateDir) {
                                      attributes: [.posixPermissions: NSNumber(value: Int16(0o770))])
 }
 
-let manager = TunnelManager(log: log)
+// Сторож живости. Служба раз в секунду спрашивает систему о состоянии
+// сети, и любой такой вопрос может остаться без ответа: система занята,
+// сеть переключается, DNS молчит. Тогда цикл встаёт — туннель не
+// поддерживается, связь пропадает, — но процесс жив, и launchd не видит
+// повода вмешаться. Человеку оставалось только переустановить службу
+// руками, по нескольку раз за час.
+let watchdog = Watchdog(now: Date().timeIntervalSince1970)
+Shell.watchdog = watchdog
+Resolver.watchdog = watchdog
+
+// За сторожем смотрит отдельный поток. Он ничего не чинит: замечает,
+// что служба слишком долго не подавала признаков жизни, называет в
+// журнале виновника и завершает её. Launchd поднимет службу через пять
+// секунд, и она начнёт с чистого листа — без человека и без пароля.
+let guardThread = Thread {
+    while true {
+        Thread.sleep(forTimeInterval: 5)
+        let verdict = watchdog.check(now: Date().timeIntervalSince1970)
+        guard verdict.stuck else { continue }
+
+        log.critical("Служба встала на «\(verdict.stage)» \(verdict.seconds) с назад "
+            + "и не отвечает — перезапускаюсь. Launchd поднимет через пять секунд.")
+        // Коротко — туда, откуда это попадёт в отчёт диагностики:
+        // системный журнал человек читать не станет, а отчёт пришлёт.
+        RestartLog.add(stage: verdict.stage, seconds: verdict.seconds)
+        // Обычный exit() ждал бы завершения того, что уже зависло.
+        // Здесь нужно уйти сразу: журнал записан, остальное доделает
+        // новая копия службы, начав с чистого листа.
+        _exit(70)
+    }
+}
+guardThread.name = "kupibas.watchdog"
+guardThread.start()
+
+let manager = TunnelManager(log: log, watchdog: watchdog)
 manager.recoverOnStartup()
 
 let signalQueue = DispatchQueue(label: "kupibas.signals")
@@ -48,7 +82,9 @@ for number in [SIGTERM, SIGINT] {
 
 log.info("kupibasvpnd запущен.")
 
+
 while true {
     manager.tick()
+    watchdog.progress(now: Date().timeIntervalSince1970)
     Thread.sleep(forTimeInterval: 1.0)
 }

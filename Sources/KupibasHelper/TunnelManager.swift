@@ -66,8 +66,40 @@ final class TunnelManager {
     /// Сколько раз подряд не нашёлся живой маршрут по умолчанию.
     private var noRouteAttempts = 0
 
-    init(log: Logger) {
+    /// Осечки подряд при опросе туннеля.
+    ///
+    /// Одна неудачная попытка узнать состояние — ещё не поломка: система
+    /// бывает занята, и утилита не успевает ответить. Раньше служба на
+    /// первой же осечке пересоздавала туннель целиком: снимала тысячи
+    /// маршрутов, возвращала DNS, поднимала всё заново и заново подбирала
+    /// размер пакета. Минута без связи из-за одного пропущенного ответа.
+    private var healthFaults = FaultStreak(limit: 3)
+
+    /// Состояние туннеля, спрошенное в этом круге.
+    ///
+    /// Спрашивали дважды за круг — в проверке и при публикации, — то есть
+    /// запускали `wg` два раза в секунду вместо одного. Лишний запуск
+    /// программы каждую секунду службе не нужен.
+    private var statsThisTick: NetworkTool.PeerStats?
+
+    /// Кому рассказывать о делах, которые могут не вернуться.
+    private let watchdog: Watchdog?
+
+    /// Выполняет дело, отмечаясь у сторожа живости.
+    ///
+    /// Сторож судит по последнему законченному делу. Всё, что идёт мимо
+    /// запуска программ, — прокладка тысяч маршрутов, проверка связи —
+    /// должно отмечаться само, иначе он примет работу за молчание.
+    @discardableResult
+    private func tracked<T>(_ what: String, _ body: () -> T) -> T {
+        watchdog?.begin(what, now: Date().timeIntervalSince1970)
+        defer { watchdog?.end(now: Date().timeIntervalSince1970) }
+        return body()
+    }
+
+    init(log: Logger, watchdog: Watchdog? = nil) {
         self.log = log
+        self.watchdog = watchdog
     }
 
     // MARK: - Жизненный цикл
@@ -96,6 +128,7 @@ final class TunnelManager {
     // MARK: - Основной цикл
 
     func tick() {
+        statsThisTick = nil
         guard let config = currentConfig() else { return }
 
         if config.enabled {
@@ -493,7 +526,11 @@ final class TunnelManager {
                 NetworkTool.setMTU(interface: interfaceName, mtu: mtu)
                 applied = mtu
             }
-            switch BulkCheck.check() {
+            let verdict = tracked("проверяю, проходят ли большие порции (\(mtu))") {
+                BulkCheck.check()
+            }
+
+            switch verdict {
             case .passes:
                 activeMtu = mtu
                 if mtu != remembered {
@@ -692,10 +729,14 @@ final class TunnelManager {
 
             if let via = savedDefaultRoute, !via.gateway.isEmpty {
                 if !netsToRemove.isEmpty {
-                    _ = RouteSocket.delete(Array(netsToRemove), gateway: via.gateway)
+                    tracked("снимаю \(netsToRemove.count) маршрутов обхода") {
+                        RouteSocket.delete(Array(netsToRemove), gateway: via.gateway)
+                    }
                 }
                 if !netsToAdd.isEmpty {
-                    _ = RouteSocket.add(Array(netsToAdd), gateway: via.gateway)
+                    tracked("прокладываю \(netsToAdd.count) маршрутов обхода") {
+                        RouteSocket.add(Array(netsToAdd), gateway: via.gateway)
+                    }
                 }
                 bulkBypass = wanted
             }
@@ -777,7 +818,9 @@ final class TunnelManager {
         }
 
         let started = Date()
-        let outcome = RouteSocket.add(nets, gateway: via.gateway)
+        let outcome = tracked("прокладываю \(nets.count) маршрутов обхода") {
+            RouteSocket.add(nets, gateway: via.gateway)
+        }
 
         // Запоминаем то, что действительно проложено, и чем именно. Раньше
         // сюда попадал весь список независимо от исхода: состояние врало,
@@ -805,7 +848,9 @@ final class TunnelManager {
             return
         }
 
-        let outcome = RouteSocket.delete(Array(bulkBypass), gateway: gateway)
+        let outcome = tracked("снимаю \(bulkBypass.count) маршрутов обхода") {
+            RouteSocket.delete(Array(bulkBypass), gateway: gateway)
+        }
         log.info("Обход снят: маршрутов \(outcome.handled), ошибок \(outcome.failed).")
         if outcome.failed > 0 && outcome.handled == 0 {
             log.error("Маршруты обхода снять не вышло — они останутся до перезагрузки.")
@@ -829,16 +874,32 @@ final class TunnelManager {
 
     // MARK: - Контроль соединения
 
+    /// Состояние туннеля: один опрос на круг.
+    private func peerStats() -> NetworkTool.PeerStats? {
+        if let ready = statsThisTick { return ready }
+        guard !realInterfaceName.isEmpty,
+              let fresh = NetworkTool.peerStats(interface: realInterfaceName) else { return nil }
+        statsThisTick = fresh
+        return fresh
+    }
+
     private func monitorHealth(_ config: TunnelConfig) {
         // Утилита управления знает туннель по настоящему имени (utunN),
         // а не по нашему «kb0»: по «kb0» она ничего не найдёт.
-        guard !realInterfaceName.isEmpty,
-              let stats = NetworkTool.peerStats(interface: realInterfaceName) else {
-            // Интерфейс исчез (например, его снесли вручную) — поднимаем заново.
-            log.error("Туннель недоступен — переподключение.")
+        guard let stats = peerStats() else {
+            // Ответа нет. Настоящая поломка — например, интерфейс снесли
+            // руками — сама не пройдёт, и её видно по следующим попыткам.
+            // Случайная осечка проходит, и трогать из-за неё рабочий
+            // туннель незачем.
+            guard healthFaults.miss() else {
+                log.info("Туннель не ответил — жду следующей попытки.")
+                return
+            }
+            log.error("Туннель не отвечает третью попытку подряд — переподключение.")
             bringDown()
             return
         }
+        healthFaults.hit()
 
         let now = Date().timeIntervalSince1970
 
@@ -927,8 +988,7 @@ final class TunnelManager {
         status.message = message
         status.updatedAt = Date().timeIntervalSince1970
 
-        if isUp, !realInterfaceName.isEmpty,
-           let stats = NetworkTool.peerStats(interface: realInterfaceName) {
+        if isUp, let stats = peerStats() {
             status.lastHandshake = stats.lastHandshake
             status.rxBytes = stats.rxBytes
             status.txBytes = stats.txBytes

@@ -1,9 +1,63 @@
 import Foundation
+import KupibasCore
 
 enum Resolver {
 
+    /// Сколько ждём ответа от DNS.
+    ///
+    /// Системный запрос имени сам по себе не торопится: когда DNS
+    /// не отвечает, он перебирает серверы и попытки и возвращается
+    /// через полминуты, а то и позже. Служба спрашивает имена из
+    /// своего единственного цикла, и всё это время цикл стоит:
+    /// туннель не поддерживается, состояние не публикуется.
+    ///
+    /// Поэтому ждём столько, сколько не жалко, и идём дальше.
+    /// Незавершённый запрос остаётся в своём потоке и никому
+    /// не мешает — его ответ просто никому не нужен.
+    static let timeout: TimeInterval = 5
+
+    /// Кому рассказывать, что сейчас спрашиваем имя.
+    static var watchdog: Watchdog?
+
     /// Резолвит домен в список IP-адресов (A и AAAA).
+    ///
+    /// Не ждёт дольше `timeout`: молчащий DNS не должен останавливать
+    /// службу.
     static func resolve(_ host: String) -> [String] {
+        watchdog?.begin("узнаю адрес \(host)", now: Date().timeIntervalSince1970)
+        defer { watchdog?.end(now: Date().timeIntervalSince1970) }
+
+        let done = DispatchSemaphore(value: 0)
+        let box = Answer()
+
+        Thread {
+            let addresses = lookup(host)
+            box.put(addresses)
+            done.signal()
+        }.start()
+
+        guard done.wait(timeout: .now() + timeout) == .success else { return [] }
+        return box.take()
+    }
+
+    /// Ответ, который пишет один поток, а забирает другой.
+    private final class Answer {
+        private let lock = NSLock()
+        private var addresses: [String] = []
+
+        func put(_ value: [String]) {
+            lock.lock(); defer { lock.unlock() }
+            addresses = value
+        }
+
+        func take() -> [String] {
+            lock.lock(); defer { lock.unlock() }
+            return addresses
+        }
+    }
+
+    /// Сам запрос к системе. Возвращается когда вернётся.
+    private static func lookup(_ host: String) -> [String] {
         var hints = addrinfo()
         hints.ai_family = AF_UNSPEC
         hints.ai_socktype = SOCK_STREAM

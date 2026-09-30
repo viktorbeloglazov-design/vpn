@@ -509,6 +509,13 @@ final class AppModel: ObservableObject {
         }
         lines.append("Handshake: \(Formatting.relative(status.lastHandshake))")
         lines.append("Принято/отправлено: \(Formatting.bytes(status.rxBytes)) / \(Formatting.bytes(status.txBytes))")
+
+        // Служба умеет перезапускать себя, когда встаёт. Без этих строк
+        // жалоба «отваливается» неотличима от десятка разных поломок,
+        // а по ним видно, что именно не отвечало и как часто.
+        lines.append("")
+        lines.append(contentsOf: RestartLog.report())
+
         return lines.joined(separator: "\n")
     }
 
