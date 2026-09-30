@@ -44,7 +44,7 @@ try:
         runs = json.load(answer)["workflow_runs"]
 except Exception as beda:
     print(f"пропущена: не удалось прочитать прогоны ({beda})")
-    raise SystemExit(0)
+    raise SystemExit(2)
 
 bed = 0
 for imya, chto, puti in PROVERKI:

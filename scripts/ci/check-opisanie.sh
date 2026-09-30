@@ -29,7 +29,7 @@ try:
         published = json.load(answer).get("body", "")
 except Exception as beda:
     print(f"пропущена: не удалось прочитать описание выпуска ({beda})")
-    raise SystemExit(0)
+    raise SystemExit(2)
 
 
 def lines(text):

@@ -35,7 +35,7 @@ def main():
         import pypdfium2  # noqa: F401
     except ImportError:
         print("пропущена: нет pypdfium2")
-        return 0
+        return 2
 
     tmp = pathlib.Path(tempfile.mkdtemp())
     published = tmp / "vylozhennaya.pdf"
@@ -44,7 +44,7 @@ def main():
             published.write_bytes(answer.read())
     except Exception as beda:
         print(f"пропущена: не скачалась выложенная инструкция ({beda})")
-        return 0
+        return 2
 
     # Собираем заново из кода — то, что получили бы люди при выпуске сейчас.
     built = subprocess.run(["bash", str(HERE / "build.sh")],
