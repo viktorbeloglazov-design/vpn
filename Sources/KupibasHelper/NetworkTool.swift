@@ -1,4 +1,5 @@
 import Foundation
+import KupibasCore
 
 struct DefaultRoute {
     let gateway: String
@@ -74,6 +75,47 @@ enum NetworkTool {
             gateway = String(gateway[gateway.startIndex..<percent])
         }
         return DefaultRoute(gateway: gateway, interfaceName: interfaceName)
+    }
+
+    /// Сеть, в которой сейчас находится интерфейс.
+    ///
+    /// Нужна, чтобы не проложить маршрут через шлюз, которого в нынешней
+    /// сети нет: человек с ноутбуком переезжает, и запомненный шлюз
+    /// остаётся от прошлой сети. Адрес и маску спрашиваем у интерфейса
+    /// в тот же момент, а не берём из памяти.
+    static func network(ofInterface name: String) -> Ipv4Net? {
+        guard !name.isEmpty else { return nil }
+        let result = Shell.runTool("ifconfig", [name], timeout: 10)
+        guard result.succeeded else { return nil }
+
+        for line in result.stdout.split(separator: "\n") {
+            // Строки ifconfig начинаются с табуляции, а поля разделены
+            // и пробелами, и табами — делим по любому пробельному знаку.
+            let parts = line
+                .split(whereSeparator: { $0 == " " || $0 == "\t" })
+                .map(String.init)
+
+            guard let inetAt = parts.firstIndex(of: "inet"),
+                  parts.count > inetAt + 1,
+                  let address = Cidr.parseAddress(parts[inetAt + 1])
+            else { continue }
+
+            // Маска идёт шестнадцатеричной: netmask 0xffffff00.
+            guard let maskAt = parts.firstIndex(of: "netmask"),
+                  parts.count > maskAt + 1,
+                  let mask = UInt32(parts[maskAt + 1].replacingOccurrences(of: "0x", with: ""),
+                                    radix: 16)
+            else { continue }
+
+            // Длина префикса — число единиц в маске. Заодно убеждаемся,
+            // что единицы идут подряд слева: иначе это не маска сети.
+            let prefix = mask.nonzeroBitCount
+            let rebuilt: UInt32 = prefix == 0 ? 0 : ~((UInt32(1) << (32 - UInt32(prefix))) - 1)
+            guard rebuilt == mask else { continue }
+
+            return Ipv4Net(start: address & mask, prefix: prefix)
+        }
+        return nil
     }
 
     /// Прокладывает маршрут по умолчанию заново.

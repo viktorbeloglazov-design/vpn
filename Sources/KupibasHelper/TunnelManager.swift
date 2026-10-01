@@ -282,10 +282,19 @@ final class TunnelManager {
         }
         let since = RestartLog.lastAt().map { Date().timeIntervalSince($0) } ?? .greatestFiniteMagnitude
 
+        // Шлюз запомнен при подъёме туннеля, а человек с ноутбуком
+        // переезжает. Проложить маршрут через шлюз из прошлой сети —
+        // значит сделать хуже: система не поставит свой, пока висит наш.
+        let fits = known.map {
+            LostRoute.gatewayFits(gateway: $0.gateway,
+                                  networkOfInterface: NetworkTool.network(ofInterface: $0.interfaceName))
+        } ?? false
+
         switch LostRoute.decide(attempts: noRouteAttempts,
                                 route: seen,
                                 ourInterfaces: ourInterfaces(),
                                 lastGoodRoute: known,
+                                gatewayStillFits: fits,
                                 sinceLastRestart: since) {
         case .wait:
             return

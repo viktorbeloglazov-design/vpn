@@ -59,17 +59,43 @@ public enum LostRoute {
         case restartService
     }
 
+    /// Годится ли запомненный шлюз для нынешней сети.
+    ///
+    /// Шлюз запоминается при подъёме туннеля, а человек с ноутбуком
+    /// переезжает: из дома в офис, с кабеля на телефон. В журнале это
+    /// видно прямо — «Сеть сменилась: en0 192.168.0.1 → en0 192.168.2.1».
+    /// Проложить маршрут через шлюз, которого в нынешней сети нет, —
+    /// значит сделать хуже, чем было: система не поставит свой, пока
+    /// висит наш, и связи не будет вовсе.
+    ///
+    /// Поэтому шлюз принимается только если он лежит в той же сети,
+    /// что и сам интерфейс. Адрес и маску берём у интерфейса сейчас,
+    /// а не из памяти.
+    public static func gatewayFits(gateway: String, networkOfInterface: Ipv4Net?) -> Bool {
+        let clean = gateway.trimmingCharacters(in: .whitespaces)
+        // Маршрут без шлюза, прямо в интерфейс, проверять не на что:
+        // такой годится, пока сам интерфейс на месте.
+        guard !clean.isEmpty else { return true }
+
+        guard let network = networkOfInterface,
+              let address = Cidr.parseAddress(clean) else { return false }
+
+        return Int64(address) >= Int64(network.start) && Int64(address) <= network.endInclusive
+    }
+
     /// Решение по одной неудачной попытке.
     ///
     /// - attempts: сколько попыток подряд уже не удалось.
     /// - route: что показывает система сейчас; nil — маршрута нет вовсе.
     /// - ourInterfaces: туннельные интерфейсы, которые служба считает своими.
     /// - lastGoodRoute: физический маршрут, запомненный при подъёме туннеля.
+    /// - gatewayStillFits: лежит ли запомненный шлюз в нынешней сети.
     /// - sinceLastRestart: сколько секунд прошло с прошлого самоперезапуска.
     public static func decide(attempts: Int,
                               route: Route?,
                               ourInterfaces: Set<String>,
                               lastGoodRoute: Route?,
+                              gatewayStillFits: Bool = true,
                               sinceLastRestart: TimeInterval) -> Action {
         let mayRestart = attempts >= restartAfter && sinceLastRestart >= restartPause
 
@@ -78,7 +104,7 @@ public enum LostRoute {
             // не лечился. Сначала пробуем проложить его сами — это
             // быстрее и незаметнее перезапуска.
             if mayRestart { return .restartService }
-            if attempts >= 2, let good = lastGoodRoute, !good.isPhantom {
+            if attempts >= 2, let good = lastGoodRoute, !good.isPhantom, gatewayStillFits {
                 return .restoreVia(good)
             }
             return .wait

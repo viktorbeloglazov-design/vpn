@@ -15,11 +15,13 @@ final class LostRouteTests: XCTestCase {
                          маршрут: LostRoute.Route? = nil,
                          наши: Set<String> = ["utun5"],
                          прежний: LostRoute.Route? = nil,
+                         шлюзПодходит: Bool = true,
                          сПрошлогоПерезапуска: TimeInterval = 100_000) -> LostRoute.Action {
         LostRoute.decide(attempts: попыток,
                          route: маршрут,
                          ourInterfaces: наши,
                          lastGoodRoute: прежний,
+                         gatewayStillFits: шлюзПодходит,
                          sinceLastRestart: сПрошлогоПерезапуска)
     }
 
@@ -55,6 +57,42 @@ final class LostRouteTests: XCTestCase {
         // Ни шлюза, ни интерфейса — прокладывать не через что.
         let пустой = LostRoute.Route(gateway: "", interfaceName: "")
         XCTAssertEqual(решение(попыток: 3, прежний: пустой), .wait)
+    }
+
+    // MARK: - Шлюз из прошлой сети
+
+    func testШлюзИзПрошлойСетиНеИспользуется() {
+        // Человек переехал: «Сеть сменилась: en0 192.168.0.1 → en0
+        // 192.168.2.1» — такая строка есть в журнале. Прокладывать
+        // маршрут через старый шлюз нельзя: станет хуже, чем было,
+        // потому что система не поставит свой, пока висит наш.
+        XCTAssertEqual(решение(попыток: 3, прежний: wifi, шлюзПодходит: false), .wait)
+    }
+
+    func testНеподходящийШлюзНеМешаетПерезапуску() {
+        XCTAssertEqual(решение(попыток: LostRoute.restartAfter,
+                               прежний: wifi,
+                               шлюзПодходит: false), .restartService)
+    }
+
+    func testШлюзСвоейСетиПринимается() {
+        let сеть = Cidr.parse("192.168.0.0/24")
+        XCTAssertTrue(LostRoute.gatewayFits(gateway: "192.168.0.1", networkOfInterface: сеть))
+    }
+
+    func testШлюзЧужойСетиОтвергается() {
+        let сеть = Cidr.parse("192.168.2.0/24")
+        XCTAssertFalse(LostRoute.gatewayFits(gateway: "192.168.0.1", networkOfInterface: сеть))
+    }
+
+    func testБезСетиИнтерфейсаШлюзуВерыНет() {
+        // Адрес у интерфейса спросить не вышло — значит и проверить нечем.
+        XCTAssertFalse(LostRoute.gatewayFits(gateway: "192.168.0.1", networkOfInterface: nil))
+    }
+
+    func testМаршрутПрямоВИнтерфейсПроверятьНеНаЧто() {
+        // На мобильном интернете шлюза может не быть вовсе.
+        XCTAssertTrue(LostRoute.gatewayFits(gateway: "", networkOfInterface: nil))
     }
 
     // MARK: - Перезапуски не идут чередой
