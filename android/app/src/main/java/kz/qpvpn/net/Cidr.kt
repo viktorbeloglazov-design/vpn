@@ -55,6 +55,19 @@ object Cidr {
         return Ipv4Net(address and mask, prefix)
     }
 
+    /**
+     * Приводит адрес к виду «сеть/префикс».
+     *
+     * Человек впишет и «203.0.113.0/24», и одиночный «198.51.100.7» —
+     * второе означает один узел, то есть /32.
+     */
+    fun normalizeCidr(value: String): String? {
+        val text = value.trim()
+        if (text.isEmpty()) return null
+        if (text.contains('/')) return if (parse(text) != null) text else null
+        return if (parseAddress(text) != null) "$text/32" else null
+    }
+
     fun isDomain(value: String): Boolean {
         val text = value.trim().lowercase()
         if (text.isEmpty() || text.length > 253 || !text.contains('.')) return false

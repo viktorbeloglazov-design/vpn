@@ -25,7 +25,8 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kz.qpvpn.model.MasterFilter
+import kz.qpvpn.model.OwnRules
+import kz.qpvpn.model.VpnServices
 import kz.qpvpn.model.ConnectionState
 import kz.qpvpn.model.TunnelOptions
 import kz.qpvpn.net.Cidr
@@ -51,6 +52,16 @@ class MainActivity : ComponentActivity() {
     private var ipIsKazakhstan by mutableStateOf(false)
     private var checkingIp by mutableStateOf(false)
     private var ruZoneCount by mutableStateOf(0)
+
+    /**
+     * Что человек вписал в поле «Свои сайты через VPN».
+     *
+     * Держим отдельной строкой, а не собираем из правил: иначе текст
+     * прыгал бы под руками при каждом нажатии клавиши — настройки успели
+     * бы привести его к своему виду, пока человек ещё печатает.
+     */
+    private var ownRulesText by mutableStateOf("")
+    private var ownRulesError by mutableStateOf<String?>(null)
     private var directApps by mutableStateOf<List<String>>(emptyList())
     private var updateVersion by mutableStateOf("")
     private var updateBusy by mutableStateOf(false)
@@ -101,6 +112,9 @@ class MainActivity : ComponentActivity() {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
+        // Поле «Свои сайты через VPN» показывает то, что в настройках.
+        ownRulesText = OwnRules.text(app.store.config.value.ownRules)
+
         handleSharedIntent(intent)
 
         // Приложение ставится файлом, мимо магазина: напомнить о новой
@@ -146,8 +160,13 @@ class MainActivity : ComponentActivity() {
                         profileProtocol = profileProtocol,
                         ruZoneCount = ruZoneCount,
                         directApps = directApps,
-                        masterCount = MasterFilter.count,
-                        masterSections = MasterFilter.sections.map { it.title to it.domains.size },
+                        masterCount = VpnServices.services.size,
+                        masterSections = VpnServices.services.map {
+                            it.title to it.domains.size + it.networks.size
+                        },
+                        aiTitles = aiTitles,
+                        ownRulesText = ownRulesText,
+                        ownRulesError = ownRulesError,
                         currentVersion = BuildConfig.VERSION_NAME,
                         notificationsAllowed = notificationsAllowed,
                         diagnostics = { diagnostics(status) },
@@ -164,6 +183,7 @@ class MainActivity : ComponentActivity() {
                     actions = ScreenActions(
                         onToggle = ::toggleTunnel,
                         onWorkFilterChange = ::changeWorkFilter,
+                        onOwnRulesChange = ::changeOwnRules,
                         onBackupEndpointChange = ::changeBackupEndpoint,
                         onOpenNotificationSettings = ::openNotificationSettings,
                         onPickProfile = { pickProfile.launch(arrayOf("*/*")) },
@@ -265,6 +285,25 @@ class MainActivity : ComponentActivity() {
      */
     private fun changeWorkFilter(enabled: Boolean) {
         app.store.update { it.copy(workFilter = enabled) }
+        lifecycleScope.launch { app.tunnel.refreshRoutes() }
+    }
+
+    /** Названия ИИ-сервисов из зашитого списка — чтобы не расходились. */
+    private val aiTitles: String
+        get() {
+            val мессенджерыИВидео = setOf("WhatsApp", "Instagram", "Telegram", "YouTube")
+            return VpnServices.titles.filterNot { it in мессенджерыИВидео }.joinToString(", ")
+        }
+
+    private fun changeOwnRules(text: String) {
+        ownRulesText = text
+
+        val unreadable = OwnRules.unreadable(text)
+        ownRulesError = if (unreadable.isEmpty()) null
+            else "Не понял: ${unreadable.joinToString(", ")}. Нужно имя сайта или адрес сети."
+
+        // Зашитый список складывает pinned(), нам довольно своих.
+        app.store.update { it.copy(rules = OwnRules.parse(text)) }
         lifecycleScope.launch { app.tunnel.refreshRoutes() }
     }
 
@@ -413,7 +452,7 @@ class MainActivity : ComponentActivity() {
             "не было"
         }
 
-        val mode = "обход блокировок (всё, кроме ${RuZone.count(this)} подсетей РФ)"
+        val mode = "через VPN только список — ${VpnServices.titles.joinToString(", ")}"
 
         return buildString {
             appendLine("QP VPN ${BuildConfig.VERSION_NAME}, Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}")

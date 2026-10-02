@@ -121,17 +121,14 @@ data class AppConfig(
     val fullTunnel: Boolean = false,
 
     /**
-     * Главный фильтр: через VPN идёт всё, кроме российских адресов.
+     * Остаток прежней модели: «всё через VPN, кроме российской зоны».
      *
-     * Так заблокированные сервисы работают наверняка: их адреса приложение
-     * не угадывает по имени, а просто не оставляет снаружи туннеля. Банки,
-     * госуслуги и любые российские сайты при этом идут напрямую — их
-     * подсети вычитаются из туннеля целиком.
-     *
-     * Включён по умолчанию и перекрывает режим маршрутизации — всё остальное
-     * настраивается в расширенных настройках.
+     * Теперь всё наоборот — через VPN идёт только список сервисов,
+     * а остальное напрямую. Поле осталось, чтобы настройки, записанные
+     * прежней версией, читались без ошибки; работа по нему не идёт,
+     * и `pinned()` всегда ставит его в false.
      */
-    val mainFilter: Boolean = true,
+    val mainFilter: Boolean = false,
 
     /**
      * Рабочие ресурсы: заложенные в приложение адреса идут через VPN.
@@ -154,7 +151,7 @@ data class AppConfig(
     /** Когда в последний раз смотрели, нет ли обновления. */
     val lastUpdateCheck: Long = 0,
 
-    val mode: TunnelMode = TunnelMode.EXCLUDE,
+    val mode: TunnelMode = TunnelMode.INCLUDE,
     val rules: List<RoutingRule> = emptyList(),
     val appsMode: AppsMode = AppsMode.OFF,
     val selectedApps: List<String> = emptyList(),
@@ -166,9 +163,26 @@ data class AppConfig(
     /** Режим, который действительно применяется с учётом переключателей. */
     val effectiveMode: TunnelMode
         get() = when {
+            // Поле прежней модели здесь больше не участвует: иначе
+            // настройки, записанные прошлой версией, вернули бы старое
+            // поведение — там mainFilter лежит включённым.
             fullTunnel -> TunnelMode.FULL
-            mainFilter -> TunnelMode.EXCLUDE
             else -> mode
+        }
+
+    /**
+     * Адреса и сайты, добавленные человеком вручную.
+     *
+     * Зашитый список закрывает обычные нужды, но не все: кому-то нужен
+     * свой сайт, редкий сервис, рабочий адрес за границей. Эти правила
+     * человек вписывает сам, и они идут через VPN наравне с зашитыми.
+     *
+     * Отличаются от зашитых по признаку id: у зашитых он собран из самого
+     * значения и начинается с «сеть:», «имя:» или «работа:».
+     */
+    val ownRules: List<RoutingRule>
+        get() = rules.filter { rule ->
+            listOf("сеть:", "имя:", "работа:").none { rule.id.startsWith(it) }
         }
 
     /**
@@ -194,15 +208,25 @@ data class AppConfig(
 
     fun pinned(): AppConfig = copy(
         fullTunnel = false,
-        mainFilter = true,
-        mode = TunnelMode.EXCLUDE,
-        rules = emptyList(),
+        mainFilter = false,
+        mode = TunnelMode.INCLUDE,
+
+        // Через VPN идёт только нужное: мессенджеры, видео и ИИ. Всё
+        // остальное — напрямую. Раньше было наоборот: в туннель уходило
+        // всё, кроме российской зоны, — и приходилось держать список
+        // на восемь с половиной тысяч подсетей, который всё равно
+        // не поспевал за жизнью.
+        //
+        // Рабочие ресурсы добавляет сам туннель, когда переключатель
+        // включён: в этом режиме вычитать их не из чего.
+        rules = VpnServices.rules() + ownRules,
+
         appsMode = AppsMode.OFF,
         selectedApps = emptyList(),
         options = options.copy(
             useTunnelDns = true,
             blockIpv6 = true,
-            bypassRuZone = true,
+            bypassRuZone = false,
         ),
     )
 }

@@ -15,6 +15,18 @@ final class VpnServicesTests: XCTestCase {
         }
     }
 
+    func testСписокСовпадаетСВерсиейДляТелефона() {
+        // Сверка с Android: если один список правят, а другой нет, сервис
+        // работает на одном устройстве и не работает на другом. Тот же
+        // порядок проверяется в RealServicesRoutingTest на телефоне.
+        let ожидается = ["WhatsApp", "Instagram", "Telegram", "YouTube",
+                         "ChatGPT", "Claude", "Gemini", "Perplexity", "Grok", "Copilot",
+                         "DeepSeek", "Mistral", "Midjourney", "Suno", "Hugging Face"]
+
+        XCTAssertEqual(VpnServices.titles, ожидается,
+                       "список расходится с версией для телефона")
+    }
+
     func testСетиПосредниковВТуннельНеУходят() {
         // Главное правило списка. За Cloudflare стоят десятки тысяч чужих
         // сайтов, включая российские: заверни их в туннель — и они поедут
