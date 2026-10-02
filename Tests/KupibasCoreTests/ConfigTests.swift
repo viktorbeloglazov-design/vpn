@@ -55,13 +55,16 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(baseline, config.restartSignature, "правила не требуют перезапуска туннеля")
 
         // Подпись считается по тому, что применяется на самом деле.
-        // При включённом главном фильтре режим в расширенных настройках
-        // ничего не меняет — значит, и перезапускать нечего.
+        // Рабочий режим — «через VPN только список», и он же заводской:
+        // пересчитывать подпись не на что.
         config.mode = .include
-        XCTAssertEqual(baseline, config.restartSignature, "главный фильтр перекрывает режим")
+        XCTAssertEqual(baseline, config.restartSignature, "режим тот же — перезапускать нечего")
 
-        config.mainFilter = false
-        XCTAssertNotEqual(baseline, config.restartSignature, "без главного фильтра режим снова решает")
+        // А остаток прежней модели больше ничего не решает.
+        config.mainFilter = true
+        config.mode = .include
+        XCTAssertEqual(baseline, config.restartSignature,
+                       "поле прежней модели на работу не влияет")
 
         var all = TunnelConfig(server: makeServer())
         all.fullTunnel = true

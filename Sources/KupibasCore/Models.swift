@@ -308,8 +308,10 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
 
     /// Режим, который действительно применяется с учётом переключателей.
     public var effectiveMode: TunnelMode {
+        // Поле прежней модели здесь больше не участвует. Иначе настройки,
+        // записанные прошлой версией, вернули бы старое поведение: там
+        // mainFilter лежит включённым, и он перекрывал режим.
         if fullTunnel { return .full }
-        if mainFilter { return .exclude }
         return mode
     }
 
