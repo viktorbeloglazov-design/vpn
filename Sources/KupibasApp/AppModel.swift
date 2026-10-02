@@ -41,6 +41,7 @@ final class AppModel: ObservableObject {
         // на самом старте способно уронить приложение, подписанное своим
         // сертификатом. Состояние подтянется, когда откроют «Настройки».
         self.launchAtLogin = false
+        self.ownRulesText = OwnRules.text(from: self.config.ownRules)
         startTimer()
         Diagnostics.log("модель: готова")
     }
@@ -85,6 +86,38 @@ final class AppModel: ObservableObject {
     /// российские адреса — напрямую, менять это негде и не нужно.
     func setWorkFilter(_ enabled: Bool) {
         config.workFilter = enabled
+        scheduleSave()
+    }
+
+    // MARK: - Свои сайты через VPN
+
+    /// Что человек вписал в поле — построчно, как он это и видит.
+    ///
+    /// Храним отдельной строкой, а не собираем из правил: иначе текст
+    /// прыгал бы под руками при каждом нажатии клавиши — служба успела
+    /// бы привести его к своему виду, пока человек ещё печатает.
+    @Published var ownRulesText = ""
+
+    /// Строки, которые не удалось понять. nil — всё разобрано.
+    @Published var ownRulesError: String?
+
+    /// Подхватывает поле из настроек. Вызывается при чтении настроек.
+    func loadOwnRulesText() {
+        ownRulesText = OwnRules.text(from: config.ownRules)
+        ownRulesError = nil
+    }
+
+    func setOwnRulesText(_ text: String) {
+        ownRulesText = text
+
+        let unreadable = OwnRules.unreadable(text)
+        ownRulesError = unreadable.isEmpty
+            ? nil
+            : "Не понял: \(unreadable.joined(separator: ", ")). "
+              + "Нужно имя сайта или адрес сети."
+
+        // Зашитый список складывает pinned(), нам довольно своих.
+        config.rules = OwnRules.parse(text)
         scheduleSave()
     }
 
@@ -478,7 +511,11 @@ final class AppModel: ObservableObject {
         lines.append("QP VPN \(version) для Mac, macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
         lines.append("Состояние: \(stateText)")
         lines.append("Служба: \(isHelperInstalled ? (isDaemonRunning ? "работает" : "не отвечает") : "не установлена")")
-        lines.append("Режим: обход блокировок (всё, кроме \(ruZoneCount) подсетей РФ)")
+        lines.append("Режим: через VPN только список — \(VpnServices.titles.joined(separator: ", "))")
+        if !config.ownRules.isEmpty {
+            lines.append("Своё через VPN: \(config.ownRules.map(\.value).joined(separator: ", "))")
+        }
+        lines.append("Всё остальное идёт напрямую, мимо VPN.")
         lines.append("Рабочие ресурсы: \(config.workFilter ? "через VPN" : "напрямую")")
         if server.endpoint.isEmpty {
             lines.append("Ключ: не загружен")

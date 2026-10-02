@@ -238,11 +238,12 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
     /// Весь трафик через VPN, включая российские сайты. Перекрывает остальное.
     public var fullTunnel: Bool
 
-    /// Главный фильтр: через VPN идёт всё, кроме российских адресов.
+    /// Остаток от прежней модели: «всё через VPN, кроме российской зоны».
     ///
-    /// Заблокированный сервис открывается, даже если его адрес программе
-    /// незнаком: снаружи туннеля остаётся только российская зона. Банки,
-    /// госуслуги и маркетплейсы при этом работают напрямую.
+    /// Теперь всё наоборот — через VPN идёт только список сервисов,
+    /// а остальное напрямую. Поле осталось, чтобы настройки, записанные
+    /// прежней версией, читались без ошибки; работа по нему не идёт,
+    /// и `pinned()` всегда ставит его в false.
     public var mainFilter: Bool
 
     /// Рабочие ресурсы компании идут через VPN.
@@ -265,11 +266,11 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
     public init(version: Int = 1,
                 enabled: Bool = false,
                 fullTunnel: Bool = false,
-                mainFilter: Bool = true,
+                mainFilter: Bool = false,
                 workFilter: Bool = true,
                 backupEndpoint: String = "",
                 lastUpdateCheck: Double = 0,
-                mode: TunnelMode = .exclude,
+                mode: TunnelMode = .include,
                 server: ServerConfig = ServerConfig(),
                 rules: [RoutingRule] = [],
                 options: TunnelOptions = TunnelOptions()) {
@@ -291,11 +292,11 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
         self.version = (try? c.decode(Int.self, forKey: .version)) ?? 1
         self.enabled = (try? c.decode(Bool.self, forKey: .enabled)) ?? false
         self.fullTunnel = (try? c.decode(Bool.self, forKey: .fullTunnel)) ?? false
-        self.mainFilter = (try? c.decode(Bool.self, forKey: .mainFilter)) ?? true
+        self.mainFilter = (try? c.decode(Bool.self, forKey: .mainFilter)) ?? false
         self.workFilter = (try? c.decode(Bool.self, forKey: .workFilter)) ?? true
         self.backupEndpoint = (try? c.decode(String.self, forKey: .backupEndpoint)) ?? ""
         self.lastUpdateCheck = (try? c.decode(Double.self, forKey: .lastUpdateCheck)) ?? 0
-        self.mode = (try? c.decode(TunnelMode.self, forKey: .mode)) ?? .exclude
+        self.mode = (try? c.decode(TunnelMode.self, forKey: .mode)) ?? .include
         self.server = (try? c.decode(ServerConfig.self, forKey: .server)) ?? ServerConfig()
         self.rules = (try? c.decode([RoutingRule].self, forKey: .rules)) ?? []
         self.options = (try? c.decode(TunnelOptions.self, forKey: .options)) ?? TunnelOptions()
@@ -330,13 +331,47 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
     public func pinned() -> TunnelConfig {
         var copy = self
         copy.fullTunnel = false
-        copy.mainFilter = true
-        copy.mode = .exclude
-        copy.rules = []
+        copy.mainFilter = false
+        copy.mode = .include
+
+        // Через VPN идёт только нужное: мессенджеры, видео и ИИ. Всё
+        // остальное — напрямую. Раньше было наоборот: в туннель уходило
+        // всё, кроме российской зоны, — и приходилось держать список
+        // на восемь с половиной тысяч подсетей, который всё равно
+        // не поспевал за жизнью. Теперь список короткий и ровно про то,
+        // ради чего VPN и включают.
+        // Рабочие ресурсы 1С: прежняя модель уводила их в туннель тем,
+        // что вычитала из российской зоны. В новой модели вычитать
+        // не из чего — их надо просто добавить в список, иначе
+        // переключатель перестал бы что-либо значить.
+        let work = copy.workFilter
+            ? WorkFilter.hosts.map {
+                  RoutingRule(id: "работа:\($0)", kind: .cidr, value: $0, note: "1С")
+              }
+            : []
+
+        let own = copy.ownRules
+        copy.rules = VpnServices.rules() + work + own
+
         copy.options.useTunnelDNS = true
         copy.options.disableIPv6 = true
         copy.options.autoReconnect = true
         return copy
+    }
+
+    /// Адреса и сайты, добавленные человеком вручную.
+    ///
+    /// Зашитый список закрывает обычные нужды, но не все: кому-то нужен
+    /// свой сайт, редкий сервис, рабочий адрес за границей. Эти правила
+    /// человек вписывает сам, и они идут через VPN наравне с зашитыми.
+    ///
+    /// Отличаются от зашитых по признаку id: у зашитых он начинается
+    /// с «сеть:» или «имя:», потому что собран из самого значения.
+    public var ownRules: [RoutingRule] {
+        let зашитые = ["сеть:", "имя:", "работа:"]
+        return rules.filter { rule in
+            !зашитые.contains { rule.id.hasPrefix($0) }
+        }
     }
 
     /// Всё, что требует полного пересоздания туннеля при изменении.

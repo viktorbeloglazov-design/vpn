@@ -1,18 +1,20 @@
 import SwiftUI
 import KupibasCore
 
-/// Вкладка «Главная»: как идёт трафик и единственный переключатель.
+/// Вкладка «Главная»: что идёт через VPN и что добавить своего.
 ///
-/// Настраивать маршрутизацию негде и не нужно — она зашита: заблокированные
-/// сервисы идут через VPN, российские адреса напрямую. Так же, как в версии
-/// для телефона.
+/// Через VPN идёт только список сервисов — мессенджеры, видео и ИИ.
+/// Всё остальное идёт напрямую: российские сайты, банки, маркетплейсы,
+/// госуслуги, рабочая почта. Так же, как в версии для телефона.
 struct RoutesView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                trafficSection
+                servicesSection
+                Divider()
+                ownRulesSection
                 Divider()
                 workFilterSection
             }
@@ -20,30 +22,41 @@ struct RoutesView: View {
         }
     }
 
-    // MARK: - Как идёт трафик
+    // MARK: - Что идёт через VPN
 
-    private var trafficSection: some View {
+    private var servicesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                Text("Как идёт трафик").font(.headline)
+                Text("Через VPN").font(.headline)
                 Text("настраивать ничего не нужно")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
 
-            row(icon: "shield.lefthalf.filled",
+            row(icon: "message",
                 color: .accentColor,
-                title: "Заблокированные сервисы",
-                detail: "Идут через VPN, казахстанский адрес")
+                title: "Мессенджеры",
+                detail: "WhatsApp, Instagram, Telegram — вместе с фото и видео")
+
+            row(icon: "play.rectangle",
+                color: .accentColor,
+                title: "Видео",
+                detail: "YouTube")
+
+            row(icon: "sparkles",
+                color: .accentColor,
+                title: "Искусственный интеллект",
+                detail: аиСервисы)
 
             row(icon: "house",
                 color: .green,
-                title: "Российские сайты",
-                detail: russianDetail)
+                title: "Всё остальное — напрямую",
+                detail: "Российские сайты, банки, маркетплейсы, МАХ, госуслуги, "
+                    + "почта. Через VPN они не идут, поэтому работают как обычно")
 
             if model.status.routeCount > 0 {
                 HStack {
-                    Text("Маршрутов мимо туннеля").foregroundColor(.secondary)
+                    Text("Адресов в туннеле").foregroundColor(.secondary)
                     Spacer()
                     Text("\(model.status.routeCount)").font(.body.monospacedDigit())
                 }
@@ -52,11 +65,44 @@ struct RoutesView: View {
         }
     }
 
-    private var russianDetail: String {
-        let count = model.ruZoneCount
-        return count > 0
-            ? "МАХ, госуслуги, банки, маркетплейсы — напрямую (\(count) подсетей России)"
-            : "МАХ, госуслуги, банки, маркетплейсы — напрямую"
+    /// Названия ИИ-сервисов из зашитого списка — чтобы не расходились.
+    private var аиСервисы: String {
+        let мессенджерыИВидео = ["WhatsApp", "Instagram", "Telegram", "YouTube"]
+        return VpnServices.titles
+            .filter { !мессенджерыИВидео.contains($0) }
+            .joined(separator: ", ")
+    }
+
+    // MARK: - Свои адреса
+
+    private var ownRulesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Свои сайты через VPN").font(.headline)
+            Text("Если нужного сервиса нет в списке выше — впишите его здесь, "
+                 + "по одному в строке. Можно имя сайта или адрес сети.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            TextEditor(text: Binding(
+                get: { model.ownRulesText },
+                set: { model.setOwnRulesText($0) }
+            ))
+            .font(.body.monospaced())
+            .frame(minHeight: 80)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
+
+            if let error = model.ownRulesError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Например: example.com или 203.0.113.0/24")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
     }
 
     private func row(icon: String, color: Color, title: String, detail: String) -> some View {
@@ -75,7 +121,7 @@ struct RoutesView: View {
         }
     }
 
-    // MARK: - Единственный переключатель
+    // MARK: - Рабочие ресурсы
 
     private var workFilterSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -93,7 +139,7 @@ struct RoutesView: View {
             .toggleStyle(.switch)
 
             Text(model.config.workFilter
-                 ? "Включён: эти ресурсы идут через VPN — даже если всё остальное идёт напрямую."
+                 ? "Включён: эти ресурсы идут через VPN."
                  : "Выключен: эти ресурсы идут напрямую, с домашнего адреса.")
                 .font(.callout)
                 .foregroundColor(.secondary)

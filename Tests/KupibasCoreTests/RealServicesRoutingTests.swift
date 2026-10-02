@@ -1,104 +1,123 @@
 import XCTest
 @testable import KupibasCore
 
-/// Живая проверка зашитой маршрутизации на настоящих адресах.
+/// Живая проверка маршрутизации на настоящих адресах.
 ///
-/// Переключателей больше нет, поэтому поведение обязано быть одним и тем же
-/// у всех: российские сервисы — напрямую, заблокированные — через VPN. Адреса
-/// записаны числами, а не именами: на сборке нет ни интернета, ни DNS, а имя
-/// всё равно разрешилось бы в адрес ближайшей сети, а не абонентской.
+/// Модель простая: через VPN идёт только список сервисов — мессенджеры,
+/// видео, ИИ. Всё остальное идёт напрямую: российские сайты, банки,
+/// маркетплейсы, госуслуги, 1С и вообще весь прочий интернет.
+///
+/// Адреса записаны числами, а не именами: на сборочной машине нет ни
+/// интернета, ни DNS, а имя всё равно разрешилось бы в адрес ближайшей
+/// сети, а не той, что отвечает человеку.
 ///
 /// Тот же список проверяется в версии для телефона — фильтры обязаны
 /// совпадать один в один.
 final class RealServicesRoutingTests: XCTestCase {
 
-    /// Подсети, которые остаются вне туннеля, — ровно как считает служба.
-    private var directZone: [Ipv4Net] {
-        let path = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()      // KupibasCoreTests
-            .deletingLastPathComponent()      // Tests
-            .deletingLastPathComponent()      // корень
-            .appendingPathComponent("Resources/ru_ipv4.txt")
-        guard let text = try? String(contentsOf: path, encoding: .utf8) else { return [] }
-
-        let zone = RuZone.parse(text)
-        // Рабочие ресурсы лежат в российской зоне, но мимо туннеля не уходят.
-        let work = WorkFilter.hosts.compactMap { Cidr.parse($0) }
-        return work.isEmpty ? Cidr.merge(zone) : Cidr.subtract(zone, work)
+    /// Сети, которые уходят в туннель, — ровно как считает служба.
+    private var tunnelNets: [Ipv4Net] {
+        VpnServices.services.flatMap(\.networks).compactMap { Cidr.parse($0) }
     }
 
-    private func goesDirect(_ address: String, in nets: [Ipv4Net]) -> Bool {
+    private func goesThroughVPN(_ address: String) -> Bool {
         guard let net = Cidr.parse(address) else { return false }
-        return nets.contains { net.start >= $0.start && Int64(net.start) <= $0.endInclusive }
+        return tunnelNets.contains { net.start >= $0.start && Int64(net.start) <= $0.endInclusive }
     }
 
-    func testRussianServicesGoDirect() {
-        let nets = directZone
-        XCTAssertGreaterThan(nets.count, 8_000, "список подсетей России не нашёлся")
+    // MARK: - Через VPN
 
+    func testСервисыИзСпискаИдутЧерезVPN() {
+        let services: [(String, [String])] = [
+            // Meta: WhatsApp и Instagram, включая раздачу фото и видео.
+            ("WhatsApp", ["157.240.1.1", "31.13.64.35", "179.60.192.1"]),
+            ("Instagram", ["157.240.253.174", "31.13.24.1"]),
+            ("Instagram, картинки", ["57.144.1.1"]),
+            // Telegram — свои сети.
+            ("Telegram", ["149.154.167.51", "91.108.56.130", "91.108.4.1"]),
+            // Google: YouTube и Gemini.
+            ("YouTube", ["142.250.74.14", "172.217.16.78", "216.58.192.1"]),
+            ("YouTube, видео", ["173.194.1.1", "74.125.1.1"]),
+            ("Gemini", ["142.251.1.1", "209.85.128.1"]),
+            // Своя сеть Anthropic.
+            ("Claude", ["160.79.104.10", "160.79.105.200"]),
+        ]
+
+        for (name, addresses) in services {
+            for address in addresses {
+                XCTAssertTrue(goesThroughVPN(address),
+                              "\(name) (\(address)) должен идти через VPN — иначе сервис останется заблокированным")
+            }
+        }
+    }
+
+    // MARK: - Напрямую
+
+    func testРоссийскиеСервисыИдутНапрямую() {
         let russian: [(String, [String])] = [
-            ("МАХ", ["155.212.204.5", "155.212.204.74", "155.212.204.78",
-                     "155.212.204.140", "155.212.204.143", "155.212.204.193"]),
-            ("Госуслуги", ["213.59.253.7", "213.59.254.7"]),
+            ("МАХ", ["155.212.204.5", "155.212.204.143"]),
+            ("Госуслуги", ["213.59.253.7", "212.42.65.4"]),
             ("Налоговая", ["195.208.66.236"]),
-            ("Мос.ру", ["212.11.155.134"]),
             ("Сбербанк", ["84.252.149.206"]),
             ("Т-Банк", ["178.130.128.27"]),
             ("Альфа-Банк", ["217.12.104.100"]),
-            ("ВТБ", ["195.242.82.13", "195.242.83.13"]),
-            ("ВКонтакте", ["87.240.129.133", "87.240.132.67", "93.186.225.194"]),
-            ("Почта Mail.ru", ["185.180.201.1", "89.221.239.1", "90.156.232.4"]),
-            ("Яндекс", ["5.255.255.77", "77.88.44.55", "77.88.55.88"]),
-            ("Озон", ["185.73.193.68", "185.73.194.82"]),
+            ("ВТБ", ["195.242.82.13"]),
+            ("ВКонтакте", ["87.240.129.133"]),
+            ("Почта Mail.ru", ["185.180.201.1"]),
+            ("Яндекс", ["5.255.255.77", "77.88.44.55"]),
+            ("Озон", ["185.73.193.68"]),
             ("Wildberries", ["185.62.202.2"]),
-            ("Авито", ["176.114.120.24", "176.114.124.24"]),
-            ("2ГИС", ["91.236.49.6"]),
-            ("РЖД", ["212.164.138.120", "212.164.138.131"]),
-            ("Почта России", ["212.164.140.129", "212.164.140.153"]),
+            ("Авито", ["176.114.120.24"]),
+            ("РЖД", ["212.164.138.120"]),
             ("Аэрофлот", ["195.209.66.33"]),
             ("Ростелеком", ["87.226.162.216"]),
         ]
 
         for (name, addresses) in russian {
             for address in addresses {
-                XCTAssertTrue(goesDirect(address, in: nets),
-                              "\(name) (\(address)) должен идти напрямую, иначе он не пустит из Казахстана")
+                XCTAssertFalse(goesThroughVPN(address),
+                               "\(name) (\(address)) должен идти напрямую — через VPN он может не пустить")
             }
         }
     }
 
-    func testBlockedServicesGoThroughTunnel() {
-        let nets = directZone
+    func testЧужиеСайтыНаCloudflareНеУходятВТуннельЦеликом() {
+        // Доказано на живом примере: за Cloudflare стоят и российские
+        // сайты. Если завернуть сети Cloudflare в туннель, они поедут
+        // через Казахстан вместо прямого пути.
+        for address in ["104.18.32.115", "172.64.155.141", "104.21.32.39", "172.67.182.196"] {
+            XCTAssertFalse(goesThroughVPN(address),
+                           "Сеть Cloudflare (\(address)) не должна уходить в туннель по адресу")
+        }
+    }
 
-        let blocked: [(String, [String])] = [
-            ("Instagram", ["157.240.253.174"]),
-            ("Facebook", ["157.240.253.35"]),
-            ("X (Twitter)", ["104.244.42.129", "104.244.42.65"]),
-            ("YouTube", ["142.250.74.14", "172.217.16.78"]),
-            ("ChatGPT", ["104.18.32.115", "172.64.155.141"]),
-            ("Claude", ["160.79.104.10"]),
-            ("Google AI Studio", ["142.250.74.14"]),
-            ("Discord", ["162.159.128.233", "162.159.136.232"]),
-            ("LinkedIn", ["13.107.42.14"]),
-            ("Spotify", ["35.186.224.25"]),
-            ("GitHub", ["140.82.121.4"]),
-            ("GitHub Pages", ["185.199.108.153"]),
-            ("Fastly (CDN многих сервисов)", ["151.101.1.140", "146.75.2.10", "199.232.5.100"]),
+    func testОстальнойИнтернетИдётНапрямую() {
+        // Модель именно такая: в туннель — только список, всё прочее мимо.
+        let others: [(String, String)] = [
+            ("LinkedIn", "13.107.42.14"),
+            ("Spotify", "35.186.224.25"),
+            ("GitHub Pages", "185.199.108.153"),
+            ("Fastly", "151.101.1.140"),
+            ("Amazon", "52.95.110.1"),
         ]
 
-        for (name, addresses) in blocked {
-            for address in addresses {
-                XCTAssertFalse(goesDirect(address, in: nets),
-                               "\(name) (\(address)) обязан уходить в туннель, иначе сервис останется заблокированным")
-            }
+        for (name, address) in others {
+            XCTAssertFalse(goesThroughVPN(address),
+                           "\(name) (\(address)) в списке не числится — должен идти напрямую")
         }
     }
 
-    func testWorkResourcesStayInTunnel() {
-        // Единственный переключатель: включён — рабочие адреса идут через VPN.
-        let nets = directZone
-        for host in WorkFilter.hosts {
-            XCTAssertFalse(goesDirect(host, in: nets), "\(host) должен уходить в туннель")
+    // MARK: - Сервисы, которых по адресу не поймать
+
+    func testСервисыНаCloudflareПопадаютВТуннельПоИмени() {
+        // У ChatGPT и прочих ИИ своих сетей нет: адрес узнаётся у DNS
+        // и прокладывается поштучно. Поэтому в списке обязаны быть имена.
+        let rules = VpnServices.rules()
+
+        for имя in ["chatgpt.com", "api.openai.com", "perplexity.ai",
+                    "grok.com", "chat.deepseek.com"] {
+            XCTAssertTrue(rules.contains { $0.kind == .domain && $0.value == имя },
+                          "Без имени \(имя) сервис через VPN не пойдёт")
         }
     }
 }

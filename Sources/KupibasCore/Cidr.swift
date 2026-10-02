@@ -60,6 +60,27 @@ public enum Cidr {
         return Ipv4Net(start: address & mask, prefix: prefix)
     }
 
+    /// Настоящий ли это публичный адрес одного узла.
+    ///
+    /// Нужно перед тем, как запомнить ответ DNS и проложить к нему
+    /// маршрут. На заблокированное имя провайдер нередко отвечает
+    /// адресом своей заглушки, а то и внутренним адресом сети —
+    /// прокладывать к такому маршрут нельзя.
+    public static func isPublicAddress(_ net: Ipv4Net) -> Bool {
+        guard net.prefix == 32 else { return false }
+        return !reserved.contains { range in
+            Int64(net.start) >= Int64(range.start) && Int64(net.start) <= range.endInclusive
+        }
+    }
+
+    /// Адреса, которые не принадлежат никому в интернете.
+    private static let reserved: [Ipv4Net] = [
+        "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
+        "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24",
+        "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24",
+        "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
+    ].compactMap(parse)
+
     public static func isDomain(_ value: String) -> Bool {
         let text = value.trimmingCharacters(in: .whitespaces).lowercased()
         guard !text.isEmpty, text.count <= 253, text.contains(".") else { return false }

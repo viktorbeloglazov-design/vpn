@@ -6,21 +6,27 @@ import XCTest
 /// значение, сохранённое прежней версией, останется навсегда.
 final class PinnedConfigTests: XCTestCase {
 
-    func testFreshConfigIsAlreadyPinned() {
-        let fresh = TunnelConfig()
-        XCTAssertEqual(fresh, fresh.pinned(), "заводские настройки не должны ничего менять")
-        XCTAssertTrue(fresh.mainFilter, "обход блокировок работает всегда")
+    func testЧерезVPNИдётТолькоСписокСервисов() {
+        let fresh = TunnelConfig().pinned()
+
+        XCTAssertEqual(fresh.effectiveMode, .include,
+                       "через VPN идёт только перечисленное, остальное напрямую")
         XCTAssertFalse(fresh.fullTunnel, "весь трафик в туннель не загоняем")
-        XCTAssertEqual(fresh.effectiveMode, .exclude)
+        XCTAssertFalse(fresh.mainFilter, "прежняя модель «всё, кроме РФ» больше не работает")
     }
 
-    func testOldSettingsAreBroughtBack() {
-        // Так мог выглядеть файл, сохранённый версией с переключателями.
+    func testЗаводскиеНастройкиУжеЗакреплены() {
+        let fresh = TunnelConfig()
+        XCTAssertEqual(fresh.pinned().effectiveMode, fresh.effectiveMode,
+                       "заводские настройки не должны ничего менять")
+    }
+
+    func testНастройкиПрошлойВерсииПереводятсяНаНовуюМодель() {
+        // Так выглядел файл, записанный версией с моделью «всё, кроме РФ».
         var stored = TunnelConfig()
         stored.fullTunnel = true
-        stored.mainFilter = false
-        stored.mode = .include
-        stored.rules = [RoutingRule(kind: .domain, value: "example.com")]
+        stored.mainFilter = true
+        stored.mode = .exclude
         stored.options.useTunnelDNS = false
         stored.options.disableIPv6 = false
         stored.options.autoReconnect = false
@@ -28,13 +34,90 @@ final class PinnedConfigTests: XCTestCase {
         let pinned = stored.pinned()
 
         XCTAssertFalse(pinned.fullTunnel)
-        XCTAssertTrue(pinned.mainFilter)
-        XCTAssertEqual(pinned.mode, .exclude)
-        XCTAssertEqual(pinned.effectiveMode, .exclude)
-        XCTAssertTrue(pinned.rules.isEmpty, "свои правила больше не задаются")
-        XCTAssertTrue(pinned.options.useTunnelDNS, "DNS из ключа используется всегда")
-        XCTAssertTrue(pinned.options.disableIPv6, "IPv6 наружу не выпускаем")
+        XCTAssertFalse(pinned.mainFilter)
+        XCTAssertEqual(pinned.effectiveMode, .include)
+        XCTAssertTrue(pinned.options.useTunnelDNS)
+        XCTAssertTrue(pinned.options.disableIPv6)
         XCTAssertTrue(pinned.options.autoReconnect, "оборванную связь чиним всегда")
+    }
+
+    func testЗашитыйСписокПопадаетВПравила() {
+        let rules = TunnelConfig().pinned().rules
+
+        XCTAssertTrue(rules.contains { $0.kind == .domain && $0.value == "chatgpt.com" })
+        XCTAssertTrue(rules.contains { $0.kind == .domain && $0.value == "web.whatsapp.com" })
+        XCTAssertTrue(rules.contains { $0.kind == .domain && $0.value == "instagram.com" })
+        XCTAssertTrue(rules.contains { $0.kind == .cidr && $0.value == "91.108.56.0/22" })
+    }
+
+    func testСвоиПравилаЧеловекаСохраняются() {
+        // Их человек вписывает сам, и обновление зашитого списка не должно
+        // их терять.
+        var config = TunnelConfig()
+        config.rules = [RoutingRule(kind: .domain, value: "my-site.example", note: "своё")]
+
+        let pinned = config.pinned()
+
+        XCTAssertTrue(pinned.rules.contains { $0.value == "my-site.example" },
+                      "добавленное вручную должно остаться")
+        XCTAssertEqual(pinned.ownRules.count, 1)
+        XCTAssertEqual(pinned.ownRules.first?.value, "my-site.example")
+    }
+
+    func testСвоиПравилаНеДублируютсяПриПовторномЗакреплении() {
+        // pinned() вызывается при каждом чтении настроек: список не должен
+        // расти с каждым разом.
+        var config = TunnelConfig()
+        config.rules = [RoutingRule(kind: .domain, value: "my-site.example")]
+
+        let один = config.pinned()
+        let два = один.pinned()
+        let три = два.pinned()
+
+        XCTAssertEqual(один.rules.count, три.rules.count, "список не должен расти")
+        XCTAssertEqual(три.ownRules.count, 1)
+    }
+
+    func testЗашитыеПравилаНеСчитаютсяСвоими() {
+        XCTAssertTrue(TunnelConfig().pinned().ownRules.isEmpty,
+                      "без добавлений человека своих правил быть не должно")
+    }
+
+    func testРабочиеРесурсыИдутЧерезVPNПриВключённомПереключателе() {
+        // В прежней модели они попадали в туннель тем, что вычитались
+        // из российской зоны. В новой вычитать не из чего — их нужно
+        // добавить в список, иначе переключатель ничего не значит.
+        var config = TunnelConfig()
+        config.workFilter = true
+
+        let rules = config.pinned().activeRules
+        for host in WorkFilter.hosts {
+            XCTAssertTrue(rules.contains { $0.value == host },
+                          "рабочий адрес \(host) должен идти через VPN")
+        }
+    }
+
+    func testПриВыключенномПереключателеРабочихПравилНет() {
+        var config = TunnelConfig()
+        config.workFilter = false
+
+        let rules = config.pinned().activeRules
+        for host in WorkFilter.hosts {
+            XCTAssertFalse(rules.contains { $0.value == host },
+                           "выключенный переключатель не должен ничего добавлять")
+        }
+    }
+
+    func testРабочиеПравилаНеСчитаютсяСвоими() {
+        // Иначе они дублировались бы при каждом закреплении настроек.
+        var config = TunnelConfig()
+        config.workFilter = true
+
+        let один = config.pinned()
+        let три = один.pinned().pinned()
+
+        XCTAssertTrue(один.ownRules.isEmpty)
+        XCTAssertEqual(один.rules.count, три.rules.count, "список не должен расти")
     }
 
     func testTheOnlySwitchSurvives() {
