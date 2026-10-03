@@ -89,12 +89,6 @@ data class ScreenState(
     val directApps: List<String>,
     val masterCount: Int,
     val masterSections: List<Pair<String, Int>>,
-    /** Названия ИИ-сервисов из зашитого списка — одной строкой. */
-    val aiTitles: String = "",
-    /** Что человек вписал в поле «Свои сайты через VPN». */
-    val ownRulesText: String = "",
-    /** Строки из этого поля, которые понять не вышло. */
-    val ownRulesError: String? = null,
 
     /** Какая версия установлена сейчас. */
     val currentVersion: String,
@@ -122,7 +116,6 @@ data class ScreenActions(
 
     /** Единственный переключатель программы: рабочие ресурсы. */
     val onWorkFilterChange: (Boolean) -> Unit,
-    val onOwnRulesChange: (String) -> Unit,
     val onBackupEndpointChange: (String) -> Unit,
     val onOpenNotificationSettings: () -> Unit,
     val onPickProfile: () -> Unit,
@@ -378,29 +371,7 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                 }
             }
 
-            SectionHeader("Свои сайты через VPN", "Если нужного сервиса нет в списке")
-            InfoCard {
-                Text(
-                    "Впишите сайт или адрес сети — по одному в строке. "
-                        + "Всё вписанное пойдёт через VPN наравне со списком ниже.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = state.ownRulesText,
-                    onValueChange = { actions.onOwnRulesChange(it) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    minLines = 3,
-                    maxLines = 8,
-                    isError = state.ownRulesError != null,
-                    placeholder = { Text("example.com") },
-                    supportingText = {
-                        Text(state.ownRulesError ?: "Например: example.com или 203.0.113.0/24")
-                    },
-                )
-            }
-
-            SectionHeader("Через VPN", "Настраивать ничего не нужно")
+            SectionHeader("Как идёт трафик", "Настраивать ничего не нужно")
             InfoCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -410,10 +381,9 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Мессенджеры, видео и ИИ", style = MaterialTheme.typography.titleMedium)
+                        Text("Заблокированные сервисы", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "WhatsApp, Instagram, Telegram, YouTube — вместе с фото и видео. " +
-                                "И все ИИ: " + state.aiTitles,
+                            "Идут через VPN, казахстанский адрес",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -427,17 +397,20 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Всё остальное — напрямую", style = MaterialTheme.typography.titleMedium)
+                        Text("Российские сайты", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Российские сайты, банки, маркетплейсы, МАХ, госуслуги, почта. " +
-                                "Через VPN они не идут, поэтому работают как обычно.",
+                            if (state.ruZoneCount > 0)
+                                "МАХ, госуслуги, банки, маркетплейсы — напрямую (${state.ruZoneCount} " +
+                                    plural(state.ruZoneCount, "подсеть", "подсети", "подсетей") + " России)"
+                            else
+                                "МАХ, госуслуги, банки, маркетплейсы — напрямую",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
                 if (status.routeCount > 0) {
-                    KeyValueRow("Адресов в туннеле", status.routeCount.toString())
+                    KeyValueRow("Маршрутов в туннеле", status.routeCount.toString())
                 }
 
                 if (state.directApps.isNotEmpty()) {
