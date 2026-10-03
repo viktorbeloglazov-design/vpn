@@ -50,8 +50,8 @@ enum Shell {
     static func run(_ executable: String, _ arguments: [String], timeout: TimeInterval = 60) -> CommandResult {
         let name = (executable as NSString).lastPathComponent
         watchdog?.begin(([name] + arguments).joined(separator: " "),
-                        now: Date().timeIntervalSince1970)
-        defer { watchdog?.end(now: Date().timeIntervalSince1970) }
+                        now: Uptime.seconds())
+        defer { watchdog?.end(now: Uptime.seconds()) }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)

@@ -92,8 +92,8 @@ final class TunnelManager {
     /// должно отмечаться само, иначе он примет работу за молчание.
     @discardableResult
     private func tracked<T>(_ what: String, _ body: () -> T) -> T {
-        watchdog?.begin(what, now: Date().timeIntervalSince1970)
-        defer { watchdog?.end(now: Date().timeIntervalSince1970) }
+        watchdog?.begin(what, now: Uptime.seconds())
+        defer { watchdog?.end(now: Uptime.seconds()) }
         return body()
     }
 

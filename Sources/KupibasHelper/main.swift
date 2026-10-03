@@ -35,7 +35,7 @@ if !fileManager.fileExists(atPath: Paths.stateDir) {
 // поддерживается, связь пропадает, — но процесс жив, и launchd не видит
 // повода вмешаться. Человеку оставалось только переустановить службу
 // руками, по нескольку раз за час.
-let watchdog = Watchdog(now: Date().timeIntervalSince1970)
+let watchdog = Watchdog(now: Uptime.seconds())
 Shell.watchdog = watchdog
 Resolver.watchdog = watchdog
 
@@ -46,7 +46,7 @@ Resolver.watchdog = watchdog
 let guardThread = Thread {
     while true {
         Thread.sleep(forTimeInterval: 5)
-        let verdict = watchdog.check(now: Date().timeIntervalSince1970)
+        let verdict = watchdog.check(now: Uptime.seconds())
         guard verdict.stuck else { continue }
 
         log.critical("Служба встала на «\(verdict.stage)» \(verdict.seconds) с назад "
@@ -85,6 +85,6 @@ log.info("kupibasvpnd запущен.")
 
 while true {
     manager.tick()
-    watchdog.progress(now: Date().timeIntervalSince1970)
+    watchdog.progress(now: Uptime.seconds())
     Thread.sleep(forTimeInterval: 1.0)
 }

@@ -24,8 +24,8 @@ enum Resolver {
     /// Не ждёт дольше `timeout`: молчащий DNS не должен останавливать
     /// службу.
     static func resolve(_ host: String) -> [String] {
-        watchdog?.begin("узнаю адрес \(host)", now: Date().timeIntervalSince1970)
-        defer { watchdog?.end(now: Date().timeIntervalSince1970) }
+        watchdog?.begin("узнаю адрес \(host)", now: Uptime.seconds())
+        defer { watchdog?.end(now: Uptime.seconds()) }
 
         let done = DispatchSemaphore(value: 0)
         let box = Answer()
