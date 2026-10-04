@@ -193,22 +193,7 @@ enum UpdateCheck {
     }
 
     /// Свежее ли «1.2.10», чем «1.2.9».
-    ///
-    /// Сравниваем числами по частям: по буквам «10» оказалось бы меньше «9».
     static func isNewer(_ candidate: String, than current: String) -> Bool {
-        let left = parts(candidate)
-        let right = parts(current)
-        for index in 0..<max(left.count, right.count) {
-            let a = index < left.count ? left[index] : 0
-            let b = index < right.count ? right[index] : 0
-            if a != b { return a > b }
-        }
-        return false
-    }
-
-    private static func parts(_ version: String) -> [Int] {
-        version.trimmingCharacters(in: .whitespaces)
-            .split(whereSeparator: { $0 == "." || $0 == "-" || $0 == "+" })
-            .compactMap { piece in Int(piece.prefix { $0.isNumber }) }
+        Versions.isNewer(candidate, than: current)
     }
 }

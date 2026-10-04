@@ -80,11 +80,31 @@ for number in [SIGTERM, SIGINT] {
     sources.append(source)
 }
 
-log.info("kupibasvpnd запущен.")
+log.info("kupibasvpnd запущен, версия \(Updater.installedVersion ?? "без отметки").")
 
+// Служба обновляет себя сама: раз в три часа смотрит, не вышла ли новая
+// версия, и ставит её без пароля. Раньше это ждало человека, а человек
+// закрывал окно с паролем — и на Mac оставалась старая служба.
+let updater = Updater(log: log)
+updater.start()
 
 while true {
     manager.tick()
     watchdog.progress(now: Uptime.seconds())
+
+    // Скачанное и проверенное ставится здесь, между кругами: туннель
+    // опускается по-честному, и launchd поднимает уже новую службу.
+    if let ready = updater.takeReady() {
+        watchdog.begin("установка обновления \(ready.version)", now: Uptime.seconds())
+        let applied = updater.apply(ready)
+        watchdog.end(now: Uptime.seconds())
+        if applied {
+            log.critical("Служба обновилась с \(ready.from) до \(ready.version) — "
+                + "перезапускаюсь новой версией.")
+            manager.shutdown()
+            exit(0)
+        }
+    }
+
     Thread.sleep(forTimeInterval: 1.0)
 }

@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Повторная проверка обновления у приложения, которое не закрывают.
     private var updateTimer: Timer?
+    /// Сверка версий приложения и службы.
+    private var syncTimer: Timer?
     private var reportTimer: Timer?
     private var statusItem: NSStatusItem?
     private var cancellables = Set<AnyCancellable>()
@@ -37,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Догоняем её сами: иначе в приложении новая логика, а работает
         // старая служба — и человек видит ошибку, которой уже нет в коде.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak model] in
-            model?.updateHelperIfNeeded()
+            model?.syncWithHelper()
             // Приложение ставится образом с сайта: напомнить о новой версии
             // некому, поэтому смотрим сами — раз в сутки.
             model?.checkForUpdate(force: false)
@@ -48,6 +50,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // а суточный промежуток выдерживается внутри самой проверки.
         updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak model] _ in
             model?.checkForUpdate(force: false)
+        }
+
+        // Служба обновляется сама и может уйти вперёд — приложение
+        // догоняет её, не дожидаясь своей суточной проверки.
+        syncTimer = Timer.scheduledTimer(withTimeInterval: 10 * 60, repeats: true) { [weak model] _ in
+            model?.syncWithHelper()
         }
 
         // Отчёт за сегодня переписывается раз в час: к концу дня в нём

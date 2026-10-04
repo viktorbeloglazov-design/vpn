@@ -27,6 +27,9 @@ final class AppModel: ObservableObject {
     @Published var updateNote = ""
 
     private var helperUpdateAttempted = false
+    private var catchUpAttempted = false
+    /// Когда последний раз просили службу проверить обновление.
+    private var helperRequestedAt: Date?
 
     private var ruZoneCountCache: Int?
 
@@ -264,7 +267,56 @@ final class AppModel: ObservableObject {
             helperNeedsUpdate = false
             return
         }
-        helperNeedsUpdate = installedHelperVersion != appVersion
+        guard let installed = installedHelperVersion else {
+            helperNeedsUpdate = true
+            return
+        }
+        // Служба, которая обновляется сама, догонит приложение без пароля,
+        // а если она свежее приложения — догонять должно приложение.
+        // Ставить её заново из приложения в обоих случаях незачем:
+        // из старого приложения это значило бы откатить службу назад.
+        if SelfUpdate.selfUpdates(helperVersion: installed) {
+            helperNeedsUpdate = false
+            return
+        }
+        helperNeedsUpdate = installed != appVersion
+    }
+
+    /// Приложение и служба должны быть одной версии.
+    ///
+    /// Служба обновляется сама, раз в три часа, приложение — раз в сутки.
+    /// Кто вырвался вперёд, того другой и догоняет: служба свежее —
+    /// приложение скачивает себя; приложение свежее — просит службу
+    /// проверить сейчас. Пароля не нужно ни там, ни там.
+    func syncWithHelper() {
+        guard isHelperInstalled, canInstallHelper, !appVersion.isEmpty else { return }
+        guard let installed = installedHelperVersion,
+              SelfUpdate.selfUpdates(helperVersion: installed) else {
+            // Служба старая и сама не умеет — последний раз с паролем.
+            updateHelperIfNeeded()
+            return
+        }
+        refreshHelperVersion()
+
+        if Versions.isNewer(appVersion, than: installed) {
+            // Не чаще раза в час: если у службы не выходит, каждая просьба
+            // стоила бы скачивания образа заново.
+            if helperRequestedAt.map({ Date().timeIntervalSince($0) >= 3600 }) ?? true {
+                requestHelperUpdate()
+            }
+        } else if Versions.isNewer(installed, than: appVersion), !updateBusy, !catchUpAttempted {
+            // Раз за запуск: если поставить не вышло, не скачиваем по кругу.
+            catchUpAttempted = true
+            updateVersion = installed
+            installUpdate()
+        }
+    }
+
+    /// Просит службу проверить обновление сейчас, а не в свой час.
+    func requestHelperUpdate() {
+        guard isHelperInstalled else { return }
+        helperRequestedAt = Date()
+        _ = FileManager.default.createFile(atPath: SelfUpdate.requestFile, contents: Data())
     }
 
     /// Обновляет службу сама, если приложение обновили, а её — нет.
@@ -408,7 +460,10 @@ final class AppModel: ObservableObject {
         let now = Date().timeIntervalSince1970
         if !force, now - config.lastUpdateCheck < UpdateCheck.checkInterval { return }
 
-        if force { updateNote = "Проверяю…" }
+        if force {
+            updateNote = "Проверяю…"
+            requestHelperUpdate()
+        }
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let latest = UpdateCheck.latestVersion()
             DispatchQueue.main.async {
@@ -510,7 +565,17 @@ final class AppModel: ObservableObject {
         var lines: [String] = []
         lines.append("QP VPN \(version) для Mac, macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
         lines.append("Состояние: \(stateText)")
-        lines.append("Служба: \(isHelperInstalled ? (isDaemonRunning ? "работает" : "не отвечает") : "не установлена")")
+        let serviceState = isHelperInstalled ? (isDaemonRunning ? "работает" : "не отвечает") : "не установлена"
+        let serviceVersion: String = installedHelperVersion.map { ", версия \($0)" } ?? ""
+        lines.append("Служба: \(serviceState)\(serviceVersion)")
+        // По этой строке видно, дошло ли исправление до Mac, а если нет —
+        // почему: без неё в отчёте 4 октября пришлось догадываться.
+        if let installed = installedHelperVersion, SelfUpdate.selfUpdates(helperVersion: installed) {
+            let last: String = SelfUpdate.readResult().map { "; последнее — \($0)" } ?? ""
+            lines.append("Обновление: служба ставит его сама\(last)")
+        } else {
+            lines.append("Обновление: служба старая, сама не обновляется — нужен пароль один раз")
+        }
         lines.append("Режим: через VPN только список — \(VpnServices.titles.joined(separator: ", "))")
         if !config.ownRules.isEmpty {
             lines.append("Своё через VPN: \(config.ownRules.map(\.value).joined(separator: ", "))")
