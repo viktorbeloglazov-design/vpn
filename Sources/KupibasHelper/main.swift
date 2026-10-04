@@ -63,6 +63,10 @@ let guardThread = Thread {
 guardThread.name = "kupibas.watchdog"
 guardThread.start()
 
+// Пульс: пока основной цикл занят подъёмом туннеля, приложение всё
+// равно видит, что служба жива, и не пишет «служба не отвечает».
+StatusHeartbeat.shared.start()
+
 let manager = TunnelManager(log: log, watchdog: watchdog)
 manager.recoverOnStartup()
 

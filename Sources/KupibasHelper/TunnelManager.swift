@@ -348,6 +348,7 @@ final class TunnelManager {
     // MARK: - Подъём туннеля
 
     private func bringUp(_ config: TunnelConfig) {
+        let began = Uptime.seconds()
         state = .connecting
         message = ""
         publishStatus(config: config)
@@ -457,15 +458,8 @@ final class TunnelManager {
         }
 
         // 5. Маршруты в туннель.
-        interfaceRoutes = []
-        for destination in WireGuardConfig.routeDestinations(for: allowedIPs) {
-            let result = NetworkTool.addRoute(destination, interfaceName: interfaceName)
-            if result.succeeded || result.failureText.contains("File exists") {
-                interfaceRoutes.insert(destination)
-            } else {
-                log.error("маршрут \(destination) -> \(interfaceName): \(result.failureText)")
-            }
-        }
+        interfaceRoutes = addTunnelRoutes(WireGuardConfig.routeDestinations(for: allowedIPs),
+                                          interfaceName: interfaceName)
 
         // 6. DNS туннеля.
         if includeDNS {
@@ -499,7 +493,7 @@ final class TunnelManager {
 
         state = .connecting
         message = ""
-        log.info("Туннель поднят (\(config.effectiveMode.rawValue), интерфейс \(realInterfaceName.isEmpty ? Paths.interfaceName : realInterfaceName), правил: \(resolved.count)).")
+        log.info("Туннель поднят (\(config.effectiveMode.rawValue), интерфейс \(realInterfaceName.isEmpty ? Paths.interfaceName : realInterfaceName), правил: \(resolved.count), маршрутов в туннель: \(interfaceRoutes.count), за \(Int(Uptime.seconds() - began)) с).")
 
         verifyAndTune(config, interfaceName: interfaceName)
     }
@@ -623,6 +617,7 @@ final class TunnelManager {
     // MARK: - Опускание туннеля
 
     private func bringDown() {
+        let began = Uptime.seconds()
         removeBulkBypass()
         for cidr in bypassRoutes {
             _ = NetworkTool.deleteRoute(cidr)
@@ -637,16 +632,14 @@ final class TunnelManager {
         connectedSince = 0
         appliedRestartSignature = ""
         appliedRulesSignature = ""
-        log.info("Туннель опущен.")
+        log.info("Туннель опущен за \(Int(Uptime.seconds() - began)) с.")
     }
 
     /// Снимает интерфейс и всё, что мы вокруг него поставили.
     private func tearDownInterface() {
         restoreDNS()
 
-        for destination in interfaceRoutes {
-            _ = NetworkTool.deleteRoute(destination)
-        }
+        deleteRoutes(Array(interfaceRoutes))
         interfaceRoutes = []
 
         if !endpointRoute.isEmpty {
@@ -810,19 +803,10 @@ final class TunnelManager {
                 return
             }
 
-            for cidr in toRemove {
-                _ = NetworkTool.deleteRoute(cidr)
-                tunnelRoutes.remove(cidr)
-            }
+            deleteRoutes(Array(toRemove))
+            tunnelRoutes.subtract(toRemove)
             let interfaceName = realInterfaceName.isEmpty ? Paths.interfaceName : realInterfaceName
-            for cidr in toAdd {
-                let add = NetworkTool.addRoute(cidr, interfaceName: interfaceName)
-                if add.succeeded || add.failureText.contains("File exists") {
-                    tunnelRoutes.insert(cidr)
-                } else {
-                    log.error("route add \(cidr) -> \(interfaceName): \(add.failureText)")
-                }
-            }
+            tunnelRoutes.formUnion(addTunnelRoutes(Array(toAdd), interfaceName: interfaceName))
             log.info("Маршруты в туннель обновлены: +\(toAdd.count) / -\(toRemove.count).")
         }
     }
@@ -1026,6 +1010,64 @@ final class TunnelManager {
 
     // MARK: - Публикация статуса
 
+    /// Прокладывает маршруты в туннель и возвращает те, что легли.
+    ///
+    /// Адреса IPv4 уходят одним сокетом за доли секунды. Что сокет не
+    /// принял, и адреса IPv6 прокладываются по-старому, программой route:
+    /// медленно, зато так, как работало всегда.
+    private func addTunnelRoutes(_ destinations: [String], interfaceName: String) -> Set<String> {
+        var done = Set<String>()
+        var byNet: [Ipv4Net: String] = [:]
+        var slow: [String] = []
+        for destination in destinations {
+            if !destination.contains(":"), let net = Cidr.parse(destination) {
+                byNet[net] = destination
+            } else {
+                slow.append(destination)
+            }
+        }
+
+        let fast = RouteSocket.addToInterface(Array(byNet.keys), interfaceName: interfaceName)
+        let failed = Set(fast.failed)
+        for (net, destination) in byNet where !failed.contains(net) {
+            done.insert(destination)
+        }
+        slow.append(contentsOf: fast.failed.compactMap { byNet[$0] })
+
+        for destination in slow {
+            let result = NetworkTool.addRoute(destination, interfaceName: interfaceName)
+            if result.succeeded || result.failureText.contains("File exists") {
+                done.insert(destination)
+            } else {
+                log.error("маршрут \(destination) -> \(interfaceName): \(result.failureText)")
+            }
+        }
+        if !fast.failed.isEmpty {
+            log.info("Маршруты в туннель: сокетом \(fast.outcome.handled), программой \(slow.count).")
+        }
+        return done
+    }
+
+    /// Убирает маршруты: IPv4 одним сокетом, остальное программой.
+    private func deleteRoutes(_ destinations: [String]) {
+        var nets: [Ipv4Net] = []
+        var byNet: [Ipv4Net: String] = [:]
+        var slow: [String] = []
+        for destination in destinations {
+            if !destination.contains(":"), let net = Cidr.parse(destination) {
+                nets.append(net)
+                byNet[net] = destination
+            } else {
+                slow.append(destination)
+            }
+        }
+        let fast = RouteSocket.deleteNets(nets)
+        slow.append(contentsOf: fast.failed.compactMap { byNet[$0] })
+        for destination in slow {
+            _ = NetworkTool.deleteRoute(destination)
+        }
+    }
+
     private func publishStatus(config: TunnelConfig) {
         var status = TunnelStatus()
         status.state = state
@@ -1057,7 +1099,7 @@ final class TunnelManager {
         }
 
         do {
-            try ConfigStore.saveStatus(status)
+            try StatusHeartbeat.shared.write(status)
             lastStatusWrite = Date()
         } catch {
             if Date().timeIntervalSince(lastStatusWrite) > 60 {

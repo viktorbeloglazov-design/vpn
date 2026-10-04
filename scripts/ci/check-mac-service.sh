@@ -127,9 +127,28 @@ config["server"].update({
 })
 json.dump(config, open(path, "w"), ensure_ascii=False, indent=2)
 PY
-sleep 60
+# Пока туннель поднимается, приложение не должно видеть тишину:
+# раньше подъём шёл полминуты, и всё это время «служба не отвечала».
+for second in $(seq 1 30); do
+    sleep 1
+    age="$(status_age)"
+    if [ "$age" -gt 10 ]; then
+        fail "на $second-й секунде подъёма туннеля служба молчит $age с — приложение напишет «не отвечает»"
+        break
+    fi
+done
+sleep 30
 alive "минута с включённым VPN"
 grep -q "utun" <(ifconfig -l) && ok "туннельный интерфейс поднят" || echo "(туннельного интерфейса нет — смотрим журнал)"
+UP_LINE="$(grep "Туннель поднят" "$LOG" | tail -1)"
+echo "$UP_LINE"
+ROUTES="$(echo "$UP_LINE" | sed -n 's/.*маршрутов в туннель: \([0-9]*\).*/\1/p')"
+TOOK="$(echo "$UP_LINE" | sed -n 's/.*за \([0-9]*\) с.*/\1/p')"
+[ "${ROUTES:-0}" -gt 20 ] && ok "маршрутов в туннель: $ROUTES" || fail "маршрутов в туннель мало: ${ROUTES:-нет записи}"
+IN_TABLE="$(netstat -rn -f inet | grep -c utun || true)"
+echo "В таблице маршрутов через utun: $IN_TABLE"
+[ "$IN_TABLE" -gt 20 ] && ok "маршруты действительно лежат в таблице" || fail "в таблице маршрутов через туннель всего $IN_TABLE"
+[ -n "$TOOK" ] && [ "$TOOK" -le 15 ] && ok "туннель поднялся за $TOOK с" || echo "туннель поднимался ${TOOK:-?} с — долго"
 sleep 120
 alive "три минуты с включённым VPN"
 [ "$(pid_of)" = "$FIRST_PID" ] || fail "с включённым VPN служба сменила pid: $FIRST_PID → $(pid_of)"
@@ -151,7 +170,19 @@ no_restarts "после выключения"
 route -n get default >/dev/null 2>&1 && ok "маршрут по умолчанию на месте" || fail "после выключения нет маршрута по умолчанию"
 
 echo "=== 4. Служба обновляется сама ==="
-PUBLISHED="$(curl -fsSL https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/mac-version.txt || true)"
+PUBLISHED="$(curl -fsSL --retry 3 https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/mac-version.txt || true)"
+if [ -z "$PUBLISHED" ]; then
+    {
+        echo "--- curl -v ---"
+        curl -v --max-time 20 https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/mac-version.txt 2>&1 | tail -25
+        echo "--- route get github.com ---"
+        route -n get github.com 2>&1
+        echo "--- маршруты utun ---"
+        netstat -rn -f inet | grep utun | head
+        echo "--- DNS ---"
+        scutil --dns | head -20
+    } | annotate "Сеть после выключения"
+fi
 echo "Выложена версия: ${PUBLISHED:-не узнать}"
 if [ -z "$PUBLISHED" ]; then
     fail "не узнать выложенную версию"

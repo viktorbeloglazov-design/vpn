@@ -251,39 +251,50 @@ final class Updater {
 
     // MARK: - Сеть
 
-    private func fetchText(_ url: URL) -> String? {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 20
-        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+    /// Скачивание идёт программой curl, а не URLSession: ей можно велеть
+    /// идти мимо туннеля.
+    ///
+    /// github.com в списке «через VPN» — ради Copilot. Пока сервер
+    /// отвечает, это не мешает. Но если туннель поднят, а сервер молчит,
+    /// служба не может скачать то самое обновление, которое её починит:
+    /// в CI так и вышло — «нет связи с хранилищем» при поднятом туннеле.
+    /// Поэтому при неудаче — вторая попытка, привязанная к физическому
+    /// интерфейсу (Wi-Fi или кабелю): такой запрос в туннель не попадает.
+    private func curl(_ arguments: [String], timeout: TimeInterval) -> (status: Int32, output: String) {
+        let common = ["-fsSL", "--retry", "2", "--connect-timeout", "15"]
+        let first = run("/usr/bin/curl", common + arguments, timeout: timeout)
+        guard first.status != 0, let physical = physicalInterface() else { return first }
+        log.info("Обновление: напрямую не вышло, пробую мимо туннеля через \(physical).")
+        return run("/usr/bin/curl", common + ["--interface", physical] + arguments, timeout: timeout)
+    }
 
-        let box = Box<String>()
-        let done = DispatchSemaphore(value: 0)
-        URLSession(configuration: .ephemeral).dataTask(with: request) { data, response, _ in
-            defer { done.signal() }
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                  let data, let text = String(data: data, encoding: .utf8) else { return }
-            box.value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        }.resume()
-        _ = done.wait(timeout: .now() + 30)
-        return box.value
+    /// Интерфейс, через который Mac выходит в интернет сам, без туннеля.
+    private func physicalInterface() -> String? {
+        let result = run("/sbin/route", ["-n", "get", "default"], timeout: 10)
+        guard result.status == 0 else { return nil }
+        for line in result.output.split(separator: "\n") {
+            let parts = line.split(separator: ":", maxSplits: 1).map {
+                $0.trimmingCharacters(in: .whitespaces)
+            }
+            if parts.count == 2, parts[0] == "interface", !parts[1].isEmpty,
+               !RouteGuard.isTunnel(interface: parts[1]) {
+                return parts[1]
+            }
+        }
+        return nil
+    }
+
+    private func fetchText(_ url: URL) -> String? {
+        let result = curl(["--max-time", "30", "-H", "Cache-Control: no-cache", url.absoluteString],
+                          timeout: 90)
+        guard result.status == 0 else { return nil }
+        return result.output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func download(_ url: URL, to path: String) -> Bool {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 120
-
-        let box = Box<Bool>()
-        let done = DispatchSemaphore(value: 0)
-        URLSession(configuration: .ephemeral).downloadTask(with: request) { location, response, _ in
-            defer { done.signal() }
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                  let location else { return }
-            try? FileManager.default.removeItem(atPath: path)
-            box.value = (try? FileManager.default.moveItem(at: location,
-                                                           to: URL(fileURLWithPath: path))) != nil
-        }.resume()
-        _ = done.wait(timeout: .now() + 600)
-        return box.value ?? false
+        try? FileManager.default.removeItem(atPath: path)
+        let result = curl(["--max-time", "600", "-o", path, url.absoluteString], timeout: 1300)
+        return result.status == 0 && FileManager.default.fileExists(atPath: path)
     }
 
     private final class Box<T> {
