@@ -23,7 +23,16 @@ HELPER_DIR="/usr/local/libexec/kupibas-vpn"
 LOG="/var/log/kupibas-vpn.log"
 FAILED=0
 
-fail() { echo "ПРОВАЛ: $*"; FAILED=1; }
+fail() { echo "ПРОВАЛ: $*"; echo "::error::$*"; FAILED=1; }
+
+# Журналы прогона из этой сессии не скачать, а заметки к проверке видны
+# везде. Поэтому самое нужное ещё и складываем в заметки: многострочный
+# текст кодируется так, как велит GitHub (%0A вместо перевода строки).
+annotate() {
+    local title="$1" text
+    text="$(cat | tail -n 60 | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')"
+    [ -n "$text" ] && echo "::notice title=$title::$text"
+}
 ok()   { echo "в порядке: $*"; }
 
 pid_of() {
@@ -74,7 +83,13 @@ dump() {
     launchctl print "system/$LABEL" 2>&1 | head -30 || true
     echo "::endgroup::"
 }
-trap dump EXIT
+notes() {
+    tail -n 60 "$LOG" 2>/dev/null | annotate "Журнал службы"
+    { cat "$STATE/perezapuski.txt" 2>/dev/null; cat "$STATE/obnovlenie.txt" 2>/dev/null; } | annotate "Перезапуски и обновление"
+    { tail -n 20 /var/log/kupibas-vpn.stderr.log 2>/dev/null; tail -n 20 /var/log/kupibas-vpn-install.log 2>/dev/null; } | annotate "stderr и установщик"
+    { cat "$STATE/status.json" 2>/dev/null; echo; launchctl print "system/$LABEL" 2>&1 | head -25; } | annotate "Состояние"
+}
+trap 'dump; notes' EXIT
 
 echo "=== 1. Установка ==="
 if ! "$APP/Contents/Resources/install-helper.sh"; then

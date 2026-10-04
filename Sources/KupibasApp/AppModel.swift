@@ -21,6 +21,17 @@ final class AppModel: ObservableObject {
     /// Служба осталась от прошлой версии приложения.
     @Published var helperNeedsUpdate = false
 
+    /// macOS не даёт службе работать: в «Объектах входа» выключено
+    /// «Разрешить в фоне».
+    ///
+    /// Служба при этом установлена, файлы на месте, но launchd её не
+    /// запускает. Раньше приложение показывало только «служба не отвечает»,
+    /// и единственным, что пробовал человек, была переустановка, — а она
+    /// этот переключатель не трогает.
+    @Published var helperBlockedBySystem = false
+    private var startedAt = Date()
+    private var approvalCheckedAt = Date.distantPast
+
     /// Свежая версия, если она вышла; пусто — обновлять нечего.
     @Published var updateVersion = ""
     @Published var updateBusy = false
@@ -187,6 +198,36 @@ final class AppModel: ObservableObject {
     private func refreshStatus() {
         let fresh = ConfigStore.loadStatus()
         if fresh != status { status = fresh }
+        refreshHelperApproval()
+    }
+
+    /// Спрашивает систему, разрешено ли службе работать в фоне.
+    ///
+    /// Только когда служба молчит и не чаще раза в десять секунд: вопрос
+    /// идёт к системе, а не к файлу. И не в первые секунды после запуска —
+    /// обращение к ServiceManagement на самом старте способно уронить
+    /// приложение без сертификата Apple.
+    private func refreshHelperApproval() {
+        guard isHelperInstalled, !isDaemonRunning else {
+            if helperBlockedBySystem { helperBlockedBySystem = false }
+            return
+        }
+        let now = Date()
+        guard now.timeIntervalSince(startedAt) > 5,
+              now.timeIntervalSince(approvalCheckedAt) > 10 else { return }
+        approvalCheckedAt = now
+
+        let plist = URL(fileURLWithPath: Paths.daemonPlist)
+        let blocked = SMAppService.statusForLegacyPlist(at: plist) == .requiresApproval
+        if blocked != helperBlockedBySystem {
+            helperBlockedBySystem = blocked
+            Diagnostics.log(blocked ? "служба запрещена в «Объектах входа»" : "служба разрешена")
+        }
+    }
+
+    /// Открывает «Объекты входа», где включается работа службы в фоне.
+    func openBackgroundSettings() {
+        SMAppService.openSystemSettingsLoginItems()
     }
 
     // MARK: - Проверка внешнего IP
@@ -565,7 +606,10 @@ final class AppModel: ObservableObject {
         var lines: [String] = []
         lines.append("QP VPN \(version) для Mac, macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
         lines.append("Состояние: \(stateText)")
-        let serviceState = isHelperInstalled ? (isDaemonRunning ? "работает" : "не отвечает") : "не установлена"
+        let serviceState = !isHelperInstalled ? "не установлена"
+            : isDaemonRunning ? "работает"
+            : helperBlockedBySystem ? "запрещена в «Объектах входа» (выключено «Разрешить в фоне»)"
+            : "не отвечает"
         let serviceVersion: String = installedHelperVersion.map { ", версия \($0)" } ?? ""
         lines.append("Служба: \(serviceState)\(serviceVersion)")
         // По этой строке видно, дошло ли исправление до Mac, а если нет —

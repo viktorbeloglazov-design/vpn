@@ -9,6 +9,8 @@ struct MainView: View {
         VStack(spacing: 0) {
             if !model.isHelperInstalled {
                 InstallBanner(text: "Служба QP VPN не установлена — без неё переключатель не сработает.")
+            } else if model.helperBlockedBySystem {
+                BackgroundBanner()
             } else if !model.updateVersion.isEmpty {
                 UpdateBanner()
             } else if model.helperNeedsUpdate {
@@ -233,6 +235,29 @@ struct UpdateBanner: View {
         }
         .padding(10)
         .background(Color.green.opacity(0.12))
+    }
+}
+
+/// macOS запретила службе работать в фоне.
+///
+/// Переустановка здесь не помогает: запрет висит на переключателе
+/// в настройках, и снять его может только человек. Поэтому кнопка
+/// ведёт прямо туда, а текст говорит, что там нажать.
+struct BackgroundBanner: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+            Text("macOS не даёт службе QP VPN работать. В открывшемся окне, в списке "
+                 + "«Разрешить в фоне», включите переключатель у QP VPN (или kupibasvpnd).")
+                .font(.callout)
+            Spacer()
+            Button("Открыть настройки") { model.openBackgroundSettings() }
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.12))
     }
 }
 
