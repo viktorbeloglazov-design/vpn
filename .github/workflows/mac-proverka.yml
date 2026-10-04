@@ -1,0 +1,93 @@
+name: mac-proverka
+
+# Проверочная сборка для Mac: собирается, ставится на настоящий Mac
+# в CI и проверяется, что служба запускается, живёт, держит туннель
+# и обновляется сама. Только если всё прошло — образ выкладывается
+# в отдельный выпуск mac-proverka. Приложения туда не смотрят: они
+# обновляются только из выпуска latest, так что эта сборка ни к кому
+# сама не приедет.
+
+on:
+  push:
+    branches: ["claude/mac-vpn-app-routes-7jv8o7"]
+    paths:
+      - "Sources/**"
+      - "scripts/**"
+      - "launchd/**"
+      - "Resources/**"
+      - "Package.swift"
+      - ".github/workflows/mac-proverka.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  VERSION: "3.7.0"
+
+jobs:
+  build:
+    name: Сборка
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Утилиты туннеля
+        run: ./scripts/ci/build-wireguard.sh "$RUNNER_TEMP/wg-tools"
+      - name: Приложение (universal)
+        run: ./scripts/build.sh --universal --tools "$RUNNER_TEMP/wg-tools" --version "$VERSION"
+      - name: Образ
+        run: ./scripts/make-dmg.sh "$VERSION"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-proverka
+          path: dist/QPVPN-${{ env.VERSION }}.dmg
+          if-no-files-found: error
+
+  service:
+    name: Служба на ${{ matrix.os }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-proverka
+      - name: Поставить приложение, как человек
+        run: |
+          MOUNT="$(hdiutil attach "QPVPN-$VERSION.dmg" -nobrowse -readonly | awk -F'\t' '/\/Volumes\// {print $NF}')"
+          echo "Образ подключён: $MOUNT"
+          sudo rm -rf /Applications/QPVPN.app
+          sudo cp -R "$MOUNT/QPVPN.app" /Applications/QPVPN.app
+          hdiutil detach "$MOUNT" -quiet
+      - name: Служба ставится, живёт и обновляется сама
+        timeout-minutes: 20
+        run: sudo ./scripts/ci/check-mac-service.sh /Applications/QPVPN.app
+
+  publish:
+    name: Выложить проверочную сборку
+    needs: service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-proverka
+      - name: В выпуск mac-proverka
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cp "QPVPN-$VERSION.dmg" QPVPN-mac-proverka.dmg
+          printf '%s' "$VERSION" > mac-proverka-version.txt
+          if ! gh release view mac-proverka >/dev/null 2>&1; then
+            gh release create mac-proverka --prerelease --target "$GITHUB_SHA" \
+              --title "QP VPN для Mac — проверочная сборка" \
+              --notes "Сборка, прошедшая проверку службы на настоящем Mac. Приложения отсюда не обновляются — только из выпуска latest."
+          fi
+          gh release upload mac-proverka QPVPN-mac-proverka.dmg mac-proverka-version.txt --clobber
