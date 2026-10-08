@@ -149,6 +149,23 @@ IN_TABLE="$(netstat -rn -f inet | grep -c utun || true)"
 echo "В таблице маршрутов через utun: $IN_TABLE"
 [ "$IN_TABLE" -gt 20 ] && ok "маршруты действительно лежат в таблице" || fail "в таблице маршрутов через туннель всего $IN_TABLE"
 [ -n "$TOOK" ] && [ "$TOOK" -le 15 ] && ok "туннель поднялся за $TOOK с" || echo "туннель поднимался ${TOOK:-?} с — долго"
+# Gmail живёт в сетях Google, которые идут в туннель, но сама должна
+# идти мимо: для её адресов служба кладёт точные маршруты.
+GMAIL_IP="$(dscacheutil -q host -a name mail.google.com | awk '/^ip_address:/ {print $2; exit}')"
+GMAIL_IF="$(route -n get "$GMAIL_IP" 2>/dev/null | awk '/interface:/ {print $2}')"
+YT_IP="$(dscacheutil -q host -a name www.youtube.com | awk '/^ip_address:/ {print $2; exit}')"
+YT_IF="$(route -n get "$YT_IP" 2>/dev/null | awk '/interface:/ {print $2}')"
+echo "Gmail $GMAIL_IP → $GMAIL_IF; YouTube $YT_IP → $YT_IF"
+grep "Gmail мимо VPN" "$LOG" | tail -1
+case "$GMAIL_IF" in
+    utun*|"") fail "Gmail ($GMAIL_IP) идёт через ${GMAIL_IF:-?}, а должна мимо VPN" ;;
+    *) ok "Gmail идёт мимо VPN ($GMAIL_IF)" ;;
+esac
+case "$YT_IF" in
+    utun*) ok "YouTube идёт через VPN ($YT_IF)" ;;
+    *) fail "YouTube ($YT_IP) идёт мимо VPN (${YT_IF:-?})" ;;
+esac
+
 sleep 120
 alive "три минуты с включённым VPN"
 [ "$(pid_of)" = "$FIRST_PID" ] || fail "с включённым VPN служба сменила pid: $FIRST_PID → $(pid_of)"
