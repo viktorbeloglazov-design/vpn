@@ -122,6 +122,45 @@ public enum VpnServices {
     /// Названия для показа в окне.
     public static var titles: [String] { services.map(\.title) }
 
+    // MARK: - Мимо VPN внутри сетей Google
+
+    /// Gmail — мимо VPN.
+    ///
+    /// Gmail стоит в тех же сетях Google, что YouTube и Gemini, а эти сети
+    /// целиком уходят в туннель. Поэтому почта шла через Казахстан, хотя
+    /// из России она открывается и так. Для её адресов служба кладёт
+    /// точные маршруты мимо туннеля: точный маршрут для системы важнее
+    /// широкой сети, и почта уходит напрямую, а YouTube остаётся в VPN.
+    ///
+    /// Вход в аккаунт (accounts.google.com) и общие картинки Google
+    /// (gstatic) — общие с YouTube, они остаются в VPN: почте это
+    /// не мешает.
+    public static let directTitle = "Gmail"
+    public static let directDomains = [
+        "mail.google.com", "gmail.com", "www.gmail.com", "inbox.google.com",
+        "imap.gmail.com", "smtp.gmail.com", "pop.gmail.com",
+        "mail-attachment.googleusercontent.com", "mail.googleusercontent.com",
+    ]
+
+    /// Какие адреса Gmail пускать мимо VPN.
+    ///
+    /// Google раздаёт с одного адреса многие свои сервисы, и DNS может
+    /// назвать для почты тот же адрес, что и для YouTube. Такой адрес
+    /// напрямую не пускаем: иначе вместе с почтой мимо VPN ушёл бы
+    /// YouTube. Почта на нём пойдёт через VPN — работать она будет.
+    ///
+    /// - gmailAddresses: что DNS ответил на имена Gmail.
+    /// - tunnelRoutes: что уже идёт в туннель по именам и сетям сервисов.
+    public static func directNets(gmailAddresses: [String], tunnelRoutes: Set<String>) -> [Ipv4Net] {
+        var result: [Ipv4Net] = []
+        for address in gmailAddresses where !address.contains(":") {
+            guard let net = Cidr.parse(address + "/32"), Cidr.isPublicAddress(net) else { continue }
+            if tunnelRoutes.contains(net.text) { continue }
+            if !result.contains(net) { result.append(net) }
+        }
+        return result
+    }
+
     /// Правила маршрутизации для зашитого списка.
     ///
     /// Сети — как есть, имена — через DNS: служба спрашивает адреса сама

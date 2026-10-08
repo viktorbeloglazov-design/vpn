@@ -29,6 +29,7 @@ public enum RouteProbe {
         ("Wildberries", "www.wildberries.ru"),
         ("Wildberries, картинки", "basket-01.wbbasket.ru"),
         ("Ozon", "ozon.ru"),
+        ("Gmail", "mail.google.com"),
     ]
 
     public struct Result: Sendable {

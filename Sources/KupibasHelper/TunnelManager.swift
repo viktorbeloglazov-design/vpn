@@ -27,6 +27,9 @@ final class TunnelManager {
     /// Крупный список обхода: российская зона. Хранится подсетями, а не
     /// строками, — его тысячи, и снимать его нужно так же быстро.
     private var bulkBypass: Set<Ipv4Net> = []
+    /// Адреса Gmail, проложенные мимо туннеля, и шлюз, которым проложены.
+    private var directRoutes: Set<Ipv4Net> = []
+    private var directGateway = ""
 
     /// Через какой шлюз проложен обход.
     ///
@@ -481,6 +484,7 @@ final class TunnelManager {
         case .include:
             // Маршруты для AllowedIPs уже проложены выше — фиксируем их как свои.
             tunnelRoutes = resolved
+            updateDirectRoutes(tunnel: resolved)
         case .exclude:
             // Правила пользователя по IPv6 — прежним путём, поштучно.
             installBypassRoutes(resolved.filter { $0.contains(":") })
@@ -619,6 +623,7 @@ final class TunnelManager {
     private func bringDown() {
         let began = Uptime.seconds()
         removeBulkBypass()
+        removeDirectRoutes()
         for cidr in bypassRoutes {
             _ = NetworkTool.deleteRoute(cidr)
         }
@@ -790,6 +795,10 @@ final class TunnelManager {
             }
 
         case .include:
+            // Адреса Gmail меняются так же, как адреса сервисов: сверяем
+            // их на каждом пересмотре, даже если в туннеле всё по-старому.
+            updateDirectRoutes(tunnel: desired)
+
             let toAdd = desired.subtracting(tunnelRoutes)
             let toRemove = tunnelRoutes.subtracting(desired)
             guard !toAdd.isEmpty || !toRemove.isEmpty else { return }
@@ -870,6 +879,53 @@ final class TunnelManager {
             log.error("Сокет маршрутизации не принял список — обход не работает.")
             message = "Обход российской зоны не работает: переподключитесь."
         }
+    }
+
+    /// Прокладывает адреса Gmail мимо туннеля и убирает устаревшие.
+    private func updateDirectRoutes(tunnel: Set<String>) {
+        var addresses: [String] = []
+        for host in VpnServices.directDomains {
+            addresses.append(contentsOf: Resolver.resolve(host))
+        }
+        let wanted = Set(VpnServices.directNets(gmailAddresses: addresses, tunnelRoutes: tunnel))
+
+        guard let via = savedDefaultRoute, !via.gateway.isEmpty else {
+            if !wanted.isEmpty {
+                log.error("\(VpnServices.directTitle): шлюз неизвестен — пойдёт через VPN.")
+            }
+            return
+        }
+        // Сеть сменилась — старые маршруты лежат через прежний шлюз.
+        if !directGateway.isEmpty && directGateway != via.gateway {
+            removeDirectRoutes()
+        }
+
+        let toRemove = directRoutes.subtracting(wanted)
+        let toAdd = wanted.subtracting(directRoutes)
+        guard !toAdd.isEmpty || !toRemove.isEmpty else { return }
+
+        if !toRemove.isEmpty {
+            _ = RouteSocket.delete(Array(toRemove), gateway: via.gateway)
+            directRoutes.subtract(toRemove)
+        }
+        if !toAdd.isEmpty {
+            let outcome = RouteSocket.add(Array(toAdd), gateway: via.gateway)
+            if outcome.handled > 0 { directRoutes.formUnion(toAdd) }
+            if outcome.failed > 0 {
+                log.error("\(VpnServices.directTitle): не легло маршрутов мимо VPN — \(outcome.failed).")
+            }
+        }
+        directGateway = via.gateway
+        log.info("\(VpnServices.directTitle) мимо VPN: адресов \(directRoutes.count) (+\(toAdd.count) / -\(toRemove.count)).")
+    }
+
+    private func removeDirectRoutes() {
+        defer {
+            directRoutes = []
+            directGateway = ""
+        }
+        guard !directRoutes.isEmpty, !directGateway.isEmpty else { return }
+        _ = RouteSocket.delete(Array(directRoutes), gateway: directGateway)
     }
 
     private func removeBulkBypass() {

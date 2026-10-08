@@ -624,7 +624,7 @@ final class AppModel: ObservableObject {
         if !config.ownRules.isEmpty {
             lines.append("Своё через VPN: \(config.ownRules.map(\.value).joined(separator: ", "))")
         }
-        lines.append("Всё остальное идёт напрямую, мимо VPN.")
+        lines.append("Всё остальное идёт напрямую, мимо VPN; \(VpnServices.directTitle) — тоже, хоть и живёт в сетях Google.")
         lines.append("Рабочие ресурсы: \(config.workFilter ? "через VPN" : "напрямую")")
         if server.endpoint.isEmpty {
             lines.append("Ключ: не загружен")
