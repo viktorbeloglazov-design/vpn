@@ -277,3 +277,62 @@ jobs:
 
       # Постоянная ссылка: имя файла без версии, выпуск с меткой latest.
       # Её печатают в инструкциях, и она всегда ведёт на свежую сборку.
+
+  # Проверка X-Ray на эмуляторе: свой сервер на этом же компьютере,
+  # ключ ссылкой, нажатие кнопки — и запрос с телефона должен дойти до
+  # сервера. Без неё «собралось» значило бы только «собралось».
+  emulator:
+    name: X-Ray на эмуляторе Android
+    needs: apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: QPVPN-*-apk
+          path: dist
+          merge-multiple: true
+
+      - name: Включить KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Сервер X-Ray для проверки
+        run: |
+          TAG="$(git ls-remote --refs --tags https://github.com/XTLS/Xray-core.git 'v2*' | awk -F/ '{print $3}' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          echo "xray $TAG"
+          curl -fsSL -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/$TAG/Xray-linux-64.zip"
+          mkdir -p /tmp/xray && unzip -q /tmp/xray.zip -d /tmp/xray
+          UUID="$(cat /proc/sys/kernel/random/uuid)"
+          echo "XRAY_UUID=$UUID" >> "$GITHUB_ENV"
+          echo "SERVER_LOG=/tmp/xray-server.log" >> "$GITHUB_ENV"
+          cat > /tmp/xray-server.json <<JSON
+          {
+            "log": {"loglevel": "info", "access": ""},
+            "inbounds": [{
+              "listen": "127.0.0.1", "port": 18443, "protocol": "vless",
+              "settings": {"clients": [{"id": "$UUID"}], "decryption": "none"},
+              "streamSettings": {"network": "tcp", "security": "none"}
+            }],
+            "outbounds": [{"protocol": "freedom"}]
+          }
+          JSON
+          nohup /tmp/xray/xray run -c /tmp/xray-server.json > /tmp/xray-server.log 2>&1 &
+          sleep 2
+          head -5 /tmp/xray-server.log
+
+      - name: Эмулятор и проверка
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash scripts/ci/check-android-xray.sh "$(ls dist/*-universal.apk | head -1)"
