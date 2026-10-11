@@ -6,6 +6,7 @@ on:
     paths:
       - "android/**"
       - "scripts/build-xray-android.sh"
+      - "scripts/ci/check-android-xray.sh"
       - "scripts/build-awg.sh"
       - ".github/workflows/android.yml"
   workflow_dispatch:
