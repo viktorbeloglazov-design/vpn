@@ -125,7 +125,9 @@ jobs:
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            VERSION="dev"
+            # Проверочная сборка: номер выше выложенного, чтобы приложение
+            # не предлагало «обновиться» до прежней версии и не стирало её.
+            VERSION="3.1.0"
           fi
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -206,6 +208,25 @@ jobs:
           name: QPVPN-${{ steps.version.outputs.value }}-apk
           path: dist/*.apk
           if-no-files-found: error
+
+      # Проверочная сборка — в отдельный выпуск android-proverka. Приложения
+      # оттуда не обновляются: они смотрят только в latest. Это ссылка,
+      # чтобы поставить сборку на свой телефон и проверить до выпуска.
+      - name: Выложить проверочную сборку
+        if: github.event_name == 'push' && github.ref_name == 'claude/mac-vpn-app-routes-7jv8o7'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cp "${{ steps.apk.outputs.path }}" dist/QPVPN-android-proverka.apk
+          printf '%s' "${{ steps.version.outputs.value }}" > dist/android-proverka-version.txt
+          if ! gh release view android-proverka >/dev/null 2>&1; then
+            gh release create android-proverka --prerelease --target "$GITHUB_SHA" \
+              --title "QP VPN для Android — проверочная сборка" \
+              --notes "Сборка из ветки разработки для проверки до выпуска. Приложения отсюда не обновляются — только из выпуска latest."
+          fi
+          gh release upload android-proverka dist/QPVPN-android-proverka.apk \
+            dist/android-proverka-version.txt --clobber
 
       - name: Обновить постоянную ссылку
         if: github.event_name == 'workflow_dispatch'
