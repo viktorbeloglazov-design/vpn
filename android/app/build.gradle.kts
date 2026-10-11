@@ -10,6 +10,9 @@ val appVersion: String = (project.findProperty("qpvpnVersion") as String?)
     ?.takeIf { it.firstOrNull()?.isDigit() == true }
     ?: "1.0.0"
 
+/** Сборка для проверки на эмуляторе: с x86_64, которого нет в сборке для людей. */
+val forEmulator: Boolean = project.findProperty("qpvpnEmulator") == "true"
+
 val versionParts: Triple<Int, Int, Int> = appVersion.split(".").let { parts ->
     Triple(
         parts.getOrNull(0)?.toIntOrNull() ?: 1,
@@ -100,7 +103,7 @@ android {
             // на x86-устройстве выбирала x86 — и не находила X-Ray: проверка
             // на эмуляторе упала на «libgojni.so not found». Без x86-набора
             // такие устройства берут ARM через встроенный переводчик.
-            excludes += setOf("lib/x86/**", "lib/x86_64/**")
+            if (!forEmulator) excludes += setOf("lib/x86/**", "lib/x86_64/**")
         }
     }
 }

@@ -278,6 +278,22 @@ jobs:
       # Постоянная ссылка: имя файла без версии, выпуск с меткой latest.
       # Её печатают в инструкциях, и она всегда ведёт на свежую сборку.
 
+      # Отдельная сборка для эмулятора: с x86_64-библиотеками, которые из
+      # сборки для людей исключены. Последней — она перезаписывает выход.
+      - name: Сборка для эмулятора
+        working-directory: android
+        run: |
+          gradle assembleRelease --no-daemon -PqpvpnEmulator=true \
+            -PqpvpnVersion="${{ steps.version.outputs.value }}"
+          mkdir -p ../dist-emulator
+          cp app/build/outputs/apk/release/app-universal-release.apk ../dist-emulator/QPVPN-emulator.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QPVPN-emulator-apk
+          path: dist-emulator/QPVPN-emulator.apk
+          if-no-files-found: error
+
   # Проверка X-Ray на эмуляторе: свой сервер на этом же компьютере,
   # ключ ссылкой, нажатие кнопки — и запрос с телефона должен дойти до
   # сервера. Без неё «собралось» значило бы только «собралось».
@@ -291,9 +307,8 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: QPVPN-*-apk
+          name: QPVPN-emulator-apk
           path: dist
-          merge-multiple: true
 
       - name: Включить KVM
         run: |
@@ -335,4 +350,4 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: bash scripts/ci/check-android-xray.sh "$(ls dist/*-universal.apk | head -1)"
+          script: bash scripts/ci/check-android-xray.sh dist/QPVPN-emulator.apk

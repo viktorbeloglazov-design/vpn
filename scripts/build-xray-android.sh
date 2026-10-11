@@ -51,7 +51,9 @@ echo "==> Сборка"
 # интерфейсы на Android) обращается к внутренностям пакета net, а свежий
 # Go такое запрещает при сборке. Так же собирают и официальные сборки
 # X-Ray для Android.
-gomobile bind -target=android/arm64,android/arm -androidapi 26 \
+# android/amd64 — только для проверки на эмуляторе: в APK для людей x86
+# не попадает (см. packaging в app/build.gradle.kts).
+gomobile bind -target=android/arm64,android/arm,android/amd64 -androidapi 26 \
     -trimpath -ldflags="-s -w -buildid= -checklinkname=0" -o "$OUT" .
 
 echo "Готово: $OUT ($(du -h "$OUT" | cut -f1))"

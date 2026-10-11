@@ -22,8 +22,9 @@ annotate() {
 }
 
 notes() {
-    adb logcat -d 2>/dev/null | grep -iE "qpvpn|xray|GoLog|tun2socks|AndroidRuntime|VpnService" | tail -n 60 \
-        | annotate "Журнал телефона"
+    adb logcat -d 2>/dev/null | grep -iE "qpvpn|xray|GoLog|tun2socks|VpnService|FATAL|Abort message|F DEBUG|F libc|panic|fatal error" \
+        | grep -v "uiautomator" | tail -n 60 | annotate "Журнал телефона"
+    adb logcat -d -b crash 2>/dev/null | tail -n 60 | annotate "Падения"
     tail -n 40 "$SERVER_LOG" | annotate "Журнал сервера X-Ray"
 }
 trap notes EXIT
