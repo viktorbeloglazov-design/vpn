@@ -76,9 +76,11 @@ enum XrayInterface {
         }
 
         let name = freeInterfaceName()
-        guard let tun = launch(tunPath, ["-device", name,
-                                         "-proxy", "socks5://127.0.0.1:\(XrayConfig.socksPort)",
-                                         "-loglevel", "warning"],
+        // Параметры — только в длинной форме: tun2socks разбирает «-loglevel»
+        // как связку коротких «-l -o -g…» и отказывается запускаться.
+        guard let tun = launch(tunPath, ["--device", name,
+                                         "--proxy", "socks5://127.0.0.1:\(XrayConfig.socksPort)",
+                                         "--loglevel", "warning"],
                                log: tunLog) else {
             core.terminate()
             return .failed("tun2socks не запустился: \(tail(tunLog))")
