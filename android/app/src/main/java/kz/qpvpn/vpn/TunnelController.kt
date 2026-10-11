@@ -148,7 +148,7 @@ class TunnelController(
     suspend fun connect() {
         val profileText = store.profileText()
         if (profileText.isNullOrBlank()) {
-            fail("Профиль не загружен. Откройте вкладку «Профиль» и выберите файл .conf.")
+            fail("Ключ не загружен. Откройте вкладку «Профиль» и загрузите ключ.")
             return
         }
         // Протокол выбирается по ключу: X-Ray — своя служба, прежние

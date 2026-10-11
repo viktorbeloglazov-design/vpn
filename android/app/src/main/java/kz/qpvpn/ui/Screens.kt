@@ -305,8 +305,8 @@ private fun HomeSection(state: ScreenState, actions: ScreenActions, onNavigate: 
                 SectionHeader("Сначала профиль", "Без него подключаться некуда")
                 InfoCard {
                     Text(
-                        "Загрузите файл .conf от вашего сервера — Amnezia, WireGuard или любой другой, " +
-                            "который выдаёт конфигурацию WireGuard.",
+                        "Загрузите ключ от вашего сервера — ссылку vless:// (X-Ray) или прежний " +
+                            "ключ vpn:// либо файл .conf.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Button(onClick = { onNavigate(Section.PROFILE) }, modifier = Modifier.fillMaxWidth()) {
@@ -695,7 +695,7 @@ private fun ProfileSection(state: ScreenState, actions: ScreenActions) {
         Button(onClick = actions.onScanQr, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Сканировать QR из Amnezia")
+            Text("Сканировать QR-код ключа")
         }
 
         OutlinedButton(onClick = actions.onPickQrImage, modifier = Modifier.fillMaxWidth()) {
@@ -703,7 +703,7 @@ private fun ProfileSection(state: ScreenState, actions: ScreenActions) {
         }
 
         OutlinedButton(onClick = { showLinkDialog = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("Вставить ссылку vpn://")
+            Text("Вставить ключ (vless:// или vpn://)")
         }
 
         OutlinedButton(onClick = actions.onPickProfile, modifier = Modifier.fillMaxWidth()) {
@@ -719,24 +719,24 @@ private fun ProfileSection(state: ScreenState, actions: ScreenActions) {
         }
 
         InfoCard {
-            Text("Как поделиться из Amnezia", style = MaterialTheme.typography.titleMedium)
+            Text("Какие ключи подходят", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Откройте Amnezia → нужный сервер → «Поделиться» → выберите протокол AmneziaWG " +
-                    "или WireGuard. Дальше любой способ на выбор:",
+                "Основной — ключ X-Ray: ссылка vless:// (а также vmess://, trojan://, ss://). " +
+                    "Прежние ключи AmneziaWG и WireGuard тоже работают. Любой способ на выбор:",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                "• если Amnezia на другом телефоне — «Сканировать QR»;\n" +
-                    "• если на этом же — сделайте снимок экрана с кодом и нажмите «QR со снимка»;\n" +
-                    "• либо скопируйте ссылку и нажмите «Вставить ссылку»;\n" +
-                    "• либо из Amnezia нажмите «Поделиться» и выберите QP VPN в списке программ.",
+                "• если QR-код на другом экране — «Сканировать QR-код ключа»;\n" +
+                    "• если на этом же телефоне — сделайте снимок экрана и нажмите «QR со снимка»;\n" +
+                    "• либо скопируйте ключ и нажмите «Вставить ключ»;\n" +
+                    "• либо нажмите на ключ-ссылку в письме или мессенджере и выберите QP VPN.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                "Маскировка AmneziaWG поддерживается: мусорные пакеты и подменённые заголовки " +
-                    "переносятся в туннель как есть.",
+                "Протокол выбирается сам по ключу: X-Ray с маскировкой Reality и TLS " +
+                    "или AmneziaWG с мусорными пакетами — переносится как есть.",
                 style = MaterialTheme.typography.bodySmall,
                 color = LocalAppColors.current.connected,
             )
@@ -745,18 +745,18 @@ private fun ProfileSection(state: ScreenState, actions: ScreenActions) {
         if (showLinkDialog) {
             AlertDialog(
                 onDismissRequest = { showLinkDialog = false },
-                title = { Text("Ссылка из Amnezia") },
+                title = { Text("Ключ") },
                 text = {
                     Column {
                         Text(
-                            "Вставьте ссылку vpn://… или сам текст настроек.",
+                            "Вставьте ключ: ссылку vless://…, vpn://… или текст настроек.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Spacer(Modifier.height(8.dp))
                         OutlinedTextField(
                             value = linkText,
                             onValueChange = { linkText = it },
-                            placeholder = { Text("vpn://…") },
+                            placeholder = { Text("vless://…") },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }

@@ -40,6 +40,21 @@ struct ServerView: View {
                         .foregroundColor(importFailed ? .red : .green)
                 }
 
+                if model.config.server.isXray {
+                    // У ключа X-Ray полей WireGuard нет: всё внутри одной
+                    // ссылки. Показываем то, по чему ключ можно узнать.
+                    Form {
+                        TextField("Название", text: $model.config.server.name)
+                        LabeledContent("Протокол") { Text(model.config.server.protocolName) }
+                        LabeledContent("Сервер") {
+                            Text(model.config.server.endpoint).font(.body.monospaced())
+                        }
+                        if let link = model.config.server.xray, !link.sni.isEmpty {
+                            LabeledContent("Маскировка под") { Text(link.sni).font(.body.monospaced()) }
+                        }
+                    }
+                    .formStyle(.grouped)
+                } else {
                 Form {
                     TextField("Название", text: $model.config.server.name)
                     TextField("Endpoint (host:port)", text: $model.config.server.endpoint)
@@ -75,11 +90,12 @@ struct ServerView: View {
                     }
                 }
                 .formStyle(.grouped)
+                }
 
                 Text("""
-                Эти данные выдаёт ваш сервер WireGuard в Казахстане. \
-                Если сервера ещё нет — разверните его скриптом server/install-wg-kz.sh на VPS \
-                у казахстанского хостера и вставьте сюда получившийся клиентский конфиг.
+                Ключ выдаёт ваш сервер в Казахстане. Основной — X-Ray: ссылка vless:// \
+                (подходят и vmess://, trojan://, ss://). Прежние ключи AmneziaWG и WireGuard \
+                тоже работают — протокол выбирается сам по ключу.
                 """)
                 .font(.caption)
                 .foregroundColor(.secondary)
