@@ -98,7 +98,17 @@ jobs:
 
       - name: Собираю библиотеку X-Ray
         if: steps.xray-cache.outputs.cache-hit != 'true'
-        run: ./scripts/build-xray-android.sh android/app/libs/xraylib.aar
+        run: |
+          # Конец журнала при ошибке — ещё и в заметку к прогону: её видно,
+          # не скачивая журнал целиком.
+          set -o pipefail
+          if ./scripts/build-xray-android.sh android/app/libs/xraylib.aar 2>&1 | tee /tmp/xraylib.log; then
+            exit 0
+          fi
+          TEXT="$(grep -vE '^(go: (downloading|finding|extracting)|  )' /tmp/xraylib.log | tail -n 40 \
+            | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+          echo "::error title=Библиотека X-Ray не собралась::$TEXT"
+          exit 1
 
       - name: Проверяю библиотеку X-Ray
         run: |
