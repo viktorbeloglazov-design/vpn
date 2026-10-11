@@ -25,8 +25,17 @@ fi
 echo "NDK: $ANDROID_NDK_HOME"
 
 echo "==> Движки"
-go get github.com/xtls/xray-core@latest
-go get github.com/xjasonlyu/tun2socks/v2@latest
+# xray — тот же выпуск, что вложен в приложение для Mac: свежий тег vNN.
+# Модулем Go он под таким номером не публикуется, поэтому берём его по
+# коммиту. tun2socks закреплён: в 2.7 и в следующих версиях разный
+# порядок запуска, а обёртка написана под 2.7.
+XRAY_TAG="$(git ls-remote --refs --tags https://github.com/XTLS/Xray-core.git 'v2*' \
+    | awk -F/ '{print $3}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+XRAY_SHA="$(git ls-remote https://github.com/XTLS/Xray-core.git "refs/tags/$XRAY_TAG^{}" | cut -f1)"
+[ -n "$XRAY_SHA" ] || XRAY_SHA="$(git ls-remote https://github.com/XTLS/Xray-core.git "refs/tags/$XRAY_TAG" | cut -f1)"
+echo "xray $XRAY_TAG ($XRAY_SHA)"
+go get "github.com/xtls/xray-core@$XRAY_SHA"
+go get github.com/xjasonlyu/tun2socks/v2@v2.7.0
 go get golang.org/x/mobile/bind@latest
 go mod tidy
 grep -E "xray-core|tun2socks|x/mobile" go.mod

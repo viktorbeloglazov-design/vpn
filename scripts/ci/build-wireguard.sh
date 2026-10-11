@@ -70,7 +70,8 @@ lipo -create -output "$OUT/xray" "$WORK/xray-arm64" "$WORK/xray-amd64"
 install -m 0644 LICENSE "$OUT/LICENSE-xray.txt"
 
 echo "==> tun2socks"
-T2S_TAG="$(latest_tag https://github.com/xjasonlyu/tun2socks.git)"
+# Закреплён: служба запускает tun2socks с параметрами версии 2.7.
+T2S_TAG="v2.7.0"
 echo "tun2socks $T2S_TAG"
 git clone --depth 1 --branch "$T2S_TAG" https://github.com/xjasonlyu/tun2socks.git "$WORK/tun2socks"
 cd "$WORK/tun2socks"

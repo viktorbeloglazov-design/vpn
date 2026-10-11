@@ -98,7 +98,7 @@ func StartTun(fd int64, socksPort int64, mtu int64) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if tunRunning {
-		_ = engine.Stop()
+		engine.Stop()
 		tunRunning = false
 	}
 	if fd <= 0 {
@@ -110,9 +110,10 @@ func StartTun(fd int64, socksPort int64, mtu int64) error {
 		MTU:      int(mtu),
 		LogLevel: "warning",
 	})
-	if err := engine.Start(); err != nil {
-		return err
-	}
+	// В tun2socks 2.7 ошибка запуска не возвращается, а роняет процесс.
+	// Поэтому всё, что может её вызвать, проверено выше: дескриптор есть,
+	// адрес socks-входа собран здесь же.
+	engine.Start()
 	tunRunning = true
 	return nil
 }
@@ -122,7 +123,7 @@ func StopTun() {
 	mu.Lock()
 	defer mu.Unlock()
 	if tunRunning {
-		_ = engine.Stop()
+		engine.Stop()
 		tunRunning = false
 	}
 }
