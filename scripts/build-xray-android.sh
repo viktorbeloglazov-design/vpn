@@ -47,8 +47,12 @@ export PATH="$(go env GOPATH)/bin:$PATH"
 gomobile init
 
 echo "==> Сборка"
-gomobile bind -v -target=android/arm64,android/arm -androidapi 26 \
-    -trimpath -ldflags="-s -w -buildid=" -o "$OUT" .
+# -checklinkname=0: библиотека wlynxg/anet (через неё xray узнаёт сетевые
+# интерфейсы на Android) обращается к внутренностям пакета net, а свежий
+# Go такое запрещает при сборке. Так же собирают и официальные сборки
+# X-Ray для Android.
+gomobile bind -target=android/arm64,android/arm -androidapi 26 \
+    -trimpath -ldflags="-s -w -buildid= -checklinkname=0" -o "$OUT" .
 
 echo "Готово: $OUT ($(du -h "$OUT" | cut -f1))"
 unzip -l "$OUT" | grep -E "\.so|classes" || true
