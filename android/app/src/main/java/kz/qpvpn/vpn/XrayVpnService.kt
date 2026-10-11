@@ -76,7 +76,8 @@ class XrayVpnService : VpnService() {
         fun coreVersion(): String = runCatching { Xraylib.version() }.getOrDefault("")
     }
 
-    private var tunnel: ParcelFileDescriptor? = null
+    /** Туннель поднят и его дескриптор отдан tun2socks. */
+    private var tunnelActive = false
 
     override fun onCreate() {
         super.onCreate()
@@ -110,6 +111,7 @@ class XrayVpnService : VpnService() {
         return START_NOT_STICKY
     }
 
+    @Synchronized
     private fun bringUp(request: Request) {
         shutdown()
 
@@ -149,17 +151,30 @@ class XrayVpnService : VpnService() {
 
         val established = builder.establish()
             ?: throw IllegalStateException("Система не дала поднять VPN: разрешение не выдано.")
-        tunnel = established
-        Xraylib.startTun(established.fd.toLong(), XrayLink.SOCKS_PORT.toLong(), request.mtu.toLong())
+
+        // Дескриптор туннеля отдаём tun2socks целиком: он сам закроет его,
+        // когда остановится. Раньше им владели оба — и Android, и tun2socks,
+        // — и он закрывался дважды. Android такое ловит и роняет приложение:
+        // проверка на эмуляторе упала на «fdsan: failed to exchange ownership
+        // of file descriptor».
+        val fd = established.detachFd()
+        try {
+            Xraylib.startTun(fd.toLong(), XrayLink.SOCKS_PORT.toLong(), request.mtu.toLong())
+        } catch (error: Exception) {
+            // tun2socks его не взял — закрываем сами, иначе туннель повиснет.
+            runCatching { ParcelFileDescriptor.adoptFd(fd).close() }
+            throw error
+        }
+        tunnelActive = true
         running = true
     }
 
     @Synchronized
     fun shutdown() {
-        runCatching { Xraylib.stopTun() }
+        // Дескриптор закрывает сам tun2socks — здесь его не трогаем.
+        if (tunnelActive) runCatching { Xraylib.stopTun() }
+        tunnelActive = false
         runCatching { Xraylib.stopXray() }
-        runCatching { tunnel?.close() }
-        tunnel = null
         running = false
     }
 
