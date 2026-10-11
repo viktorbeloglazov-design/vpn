@@ -75,6 +75,17 @@
                 <data android:scheme="vpn" />
             </intent-filter>
 
+            <!-- Ключи X-Ray: vless://, vmess://, trojan://, ss://. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="vless" />
+                <data android:scheme="vmess" />
+                <data android:scheme="trojan" />
+                <data android:scheme="ss" />
+            </intent-filter>
+
             <!-- «Поделиться» текстом или файлом настроек. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -110,5 +121,14 @@
                 <action android:name="kz.qpvpn.action.DISCONNECT" />
             </intent-filter>
         </receiver>
+        <!-- Туннель для ключей X-Ray. Прежние ключи поднимает служба AmneziaWG. -->
+        <service
+            android:name=".vpn.XrayVpnService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

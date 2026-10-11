@@ -151,6 +151,13 @@ class TunnelController(
             fail("Профиль не загружен. Откройте вкладку «Профиль» и выберите файл .conf.")
             return
         }
+        // Протокол выбирается по ключу: X-Ray — своя служба, прежние
+        // ключи AmneziaWG — прежняя библиотека, пока новые не выданы.
+        if (XrayLink.looksLikeLink(profileText)) {
+            connectXray(profileText)
+            return
+        }
+        XrayVpnService.stop(context)
 
         publish(_status.value.copy(state = ConnectionState.CONNECTING, message = ""))
 
@@ -187,7 +194,7 @@ class TunnelController(
 
         var lastError: Exception? = null
         for ((useRuZone, withIpv6, note) in attempts) {
-            val routes = routesFor(config, profile, useRuZone)
+            val routes = routesFor(config, profile.addresses.firstOrNull(), useRuZone)
 
             for ((index, endpoint) in endpoints.withIndex()) {
                 val viaBackup = index > 0
@@ -253,25 +260,28 @@ class TunnelController(
      * пока телефон сидит в туннеле — и человек не понимает, почему нет сети.
      */
     suspend fun syncState() {
-        val up = try {
+        val up = XrayVpnService.running || try {
             withContext(Dispatchers.IO) { backend.getState(tunnel) } == Tunnel.State.UP
         } catch (error: Exception) {
             false
         }
 
         if (up && _status.value.state != ConnectionState.CONNECTED) {
-            val profile = store.profileText()?.let { text ->
-                runCatching { WgProfile.parse(text) }.getOrNull()
+            val text = store.profileText().orEmpty()
+            val server = if (XrayLink.looksLikeLink(text)) {
+                runCatching { XrayLink.parse(text).host }.getOrNull()
+            } else {
+                runCatching { WgProfile.parse(text).endpointHost }.getOrNull()
             }
             publish(
                 TunnelStatus(
                     state = ConnectionState.CONNECTED,
                     connectedSince = System.currentTimeMillis(),
                     routeCount = appliedRoutes.size,
-                    serverName = profile?.endpointHost.orEmpty(),
+                    serverName = server.orEmpty(),
                 )
             )
-            startWatching()
+            if (XrayVpnService.running) startXrayWatching() else startWatching()
         } else if (!up && _status.value.state == ConnectionState.CONNECTED) {
             watchJob?.cancel()
             watchJob = null
@@ -282,6 +292,7 @@ class TunnelController(
     suspend fun disconnect() {
         watchJob?.cancel()
         watchJob = null
+        XrayVpnService.stop(context)
         try {
             withContext(Dispatchers.IO) {
                 backend.setState(tunnel, Tunnel.State.DOWN, null)
@@ -297,6 +308,10 @@ class TunnelController(
     suspend fun refreshRoutes() {
         if (_status.value.state != ConnectionState.CONNECTED) return
         val profileText = store.profileText() ?: return
+        if (XrayLink.looksLikeLink(profileText)) {
+            refreshXrayRoutes(profileText)
+            return
+        }
         val profile = try {
             WgProfile.parse(profileText)
         } catch (error: Exception) {
@@ -306,7 +321,7 @@ class TunnelController(
         val config = store.config.value
         val useRuZone = (config.mainFilter || config.options.bypassRuZone) &&
             config.effectiveMode == TunnelMode.EXCLUDE
-        val routes = routesFor(config, profile, useRuZone)
+        val routes = routesFor(config, profile.addresses.firstOrNull(), useRuZone)
         if (routes == appliedRoutes) return
 
         try {
@@ -365,7 +380,7 @@ class TunnelController(
     }
 
     /** Считает список подсетей, которые должны уходить в туннель. */
-    private suspend fun routesFor(config: AppConfig, profile: WgProfile, useRuZone: Boolean): List<String> {
+    private suspend fun routesFor(config: AppConfig, clientAddress: String?, useRuZone: Boolean): List<String> {
         val nets = resolveRules(config)
         val work = workNets()
 
@@ -382,7 +397,7 @@ class TunnelController(
                 if (included.isEmpty()) {
                     // Пустой список туннель не примет: оставляем адрес самого клиента,
                     // фактически в туннель не уходит ничего.
-                    listOf(profile.addresses.firstOrNull()?.substringBefore('/')?.plus("/32") ?: "0.0.0.0/32")
+                    listOf(clientAddress?.substringBefore('/')?.plus("/32") ?: "0.0.0.0/32")
                 } else {
                     Cidr.merge(included).map { it.toString() }
                 }
@@ -561,6 +576,189 @@ class TunnelController(
                 publish(_status.value.copy(rxBytes = rx, txBytes = tx, lastHandshake = handshake))
 
                 if (link.stalled(rx, tx, System.currentTimeMillis())) {
+                    publish(_status.value.copy(message = "Сервер молчит — переподключаюсь…"))
+                    connect()
+                    return@launch
+                }
+            }
+        }
+    }
+
+    // MARK: - X-Ray
+
+    /** Когда сервер X-Ray в последний раз ответил на проверку. */
+    @Volatile
+    private var xrayAnswerMillis = 0L
+
+    /** Ключ X-Ray, с которым поднят туннель, и вход, через который поднят. */
+    private var xrayEndpoint: String = ""
+
+    /**
+     * Поднимает туннель X-Ray.
+     *
+     * Всё вокруг — как у прежнего протокола: те же маршруты, та же
+     * российская зона мимо VPN, те же программы, которым туннель не
+     * показывается, тот же запасной вход. Отличается проверка связи:
+     * рукопожатия у X-Ray нет, поэтому спрашиваем через туннель маленькую
+     * страницу — ответила, значит сервер работает.
+     */
+    private suspend fun connectXray(profileText: String) {
+        val link = try {
+            XrayLink.parse(profileText)
+        } catch (error: Exception) {
+            fail(error.message ?: "Ключ X-Ray не читается.")
+            return
+        }
+
+        watchJob?.cancel()
+        watchJob = null
+        takeDown()
+        publish(_status.value.copy(state = ConnectionState.CONNECTING, message = "", serverName = link.host))
+
+        val config = store.config.value
+        val wantsRuZone = (config.mainFilter || config.options.bypassRuZone) &&
+            config.effectiveMode == TunnelMode.EXCLUDE
+        val withIpv6 = config.options.blockIpv6
+        val attempts = buildList {
+            add(wantsRuZone to "")
+            if (wantsRuZone) add(false to "Список адресов России телефон не принял — подключение без него.")
+        }
+        val endpoints = config.endpointsToTry(link.endpoint)
+        val dns = if (config.options.useTunnelDns && config.effectiveMode != TunnelMode.INCLUDE) {
+            listOf("1.1.1.1", "8.8.8.8")
+        } else {
+            emptyList()
+        }
+
+        var lastError = "Не удалось поднять туннель X-Ray."
+        for ((useRuZone, note) in attempts) {
+            val routes = routesFor(config, null, useRuZone)
+            for ((index, endpoint) in endpoints.withIndex()) {
+                val viaBackup = index > 0
+                val last = index == endpoints.lastIndex
+                val request = XrayVpnService.Request(
+                    configJson = link.withEndpoint(endpoint).toConfigJson(),
+                    routes = routes,
+                    ipv6 = withIpv6,
+                    dns = dns,
+                    disallowedApps = directApps(),
+                    mtu = if (config.options.mtu > 0) config.options.mtu else 1500,
+                )
+                publish(
+                    TunnelStatus(
+                        state = ConnectionState.CONNECTING,
+                        routeCount = routes.size,
+                        serverName = link.host,
+                        message = if (viaBackup) "Пробую запасной вход…" else "Устанавливаю связь с сервером…",
+                    )
+                )
+                val error = XrayVpnService.start(context, request)
+                if (error != null) {
+                    lastError = error
+                    break
+                }
+                appliedRoutes = routes
+                xrayEndpoint = endpoint
+
+                if (!awaitXrayAnswer(if (last) 20_000 else 12_000)) {
+                    XrayVpnService.stop(context)
+                    if (!last) continue
+                    fail(failureText(link.host, viaBackup))
+                    return
+                }
+
+                usedBackupEntry = viaBackup
+                activeMtu = request.mtu
+                publish(
+                    TunnelStatus(
+                        state = ConnectionState.CONNECTED,
+                        connectedSince = System.currentTimeMillis(),
+                        routeCount = routes.size,
+                        serverName = link.host,
+                        message = if (viaBackup) "Через запасной вход" else note,
+                        lastHandshake = xrayAnswerMillis,
+                    )
+                )
+                startXrayWatching()
+                return
+            }
+        }
+        fail(lastError)
+    }
+
+    /** Ждёт, пока сервер ответит на проверку через туннель. */
+    private suspend fun awaitXrayAnswer(timeoutMillis: Long): Boolean {
+        xrayAnswerMillis = 0
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            if (XrayProbe.answers()) {
+                xrayAnswerMillis = System.currentTimeMillis()
+                return true
+            }
+            delay(1_000)
+        }
+        return false
+    }
+
+    /** Правила изменились — туннель поднимается заново с новым списком. */
+    private suspend fun refreshXrayRoutes(profileText: String) {
+        val link = runCatching { XrayLink.parse(profileText) }.getOrNull() ?: return
+        val config = store.config.value
+        val useRuZone = (config.mainFilter || config.options.bypassRuZone) &&
+            config.effectiveMode == TunnelMode.EXCLUDE
+        val routes = routesFor(config, null, useRuZone)
+        if (routes == appliedRoutes) return
+        val dns = if (config.options.useTunnelDns && config.effectiveMode != TunnelMode.INCLUDE) {
+            listOf("1.1.1.1", "8.8.8.8")
+        } else {
+            emptyList()
+        }
+        val error = XrayVpnService.start(
+            context,
+            XrayVpnService.Request(
+                configJson = link.withEndpoint(xrayEndpoint.ifEmpty { link.endpoint }).toConfigJson(),
+                routes = routes,
+                ipv6 = config.options.blockIpv6,
+                dns = dns,
+                disallowedApps = directApps(),
+                mtu = if (config.options.mtu > 0) config.options.mtu else 1500,
+            )
+        )
+        if (error == null) {
+            appliedRoutes = routes
+            publish(_status.value.copy(routeCount = routes.size))
+        } else {
+            _status.value = _status.value.copy(message = "Маршруты не обновились: $error")
+        }
+    }
+
+    /**
+     * Пока туннель X-Ray поднят: счётчики раз в две секунды, проверка
+     * сервера раз в пятнадцать. Минута без ответа — переподключение.
+     */
+    private fun startXrayWatching() {
+        watchJob?.cancel()
+        val uid = android.os.Process.myUid()
+        watchJob = scope.launch {
+            var lastProbe = 0L
+            while (isActive) {
+                delay(2_000)
+                if (!XrayVpnService.running) {
+                    publish(TunnelStatus(state = ConnectionState.DISCONNECTED))
+                    return@launch
+                }
+                val now = System.currentTimeMillis()
+                if (now - lastProbe >= 15_000) {
+                    lastProbe = now
+                    if (XrayProbe.answers()) xrayAnswerMillis = System.currentTimeMillis()
+                }
+                // Счётчики — всего, что прошло через приложение: соединение
+                // xray с сервером идёт от его имени.
+                val rx = android.net.TrafficStats.getUidRxBytes(uid).coerceAtLeast(0)
+                val tx = android.net.TrafficStats.getUidTxBytes(uid).coerceAtLeast(0)
+                publish(_status.value.copy(rxBytes = rx, txBytes = tx, lastHandshake = xrayAnswerMillis))
+
+                if (xrayAnswerMillis > 0 && now - xrayAnswerMillis > 60_000) {
                     publish(_status.value.copy(message = "Сервер молчит — переподключаюсь…"))
                     connect()
                     return@launch
@@ -780,7 +978,7 @@ class TunnelController(
         append(if (viaBackup) "Запасной вход $host тоже молчит. " else "Сервер $host не ответил. ")
         append(
             "Обычно это значит одно из трёх: ключ выдан для другого протокола " +
-                "(нужен AmneziaWG или WireGuard), сервер недоступен, или эта сеть не выпускает " +
+                "(нужен X-Ray, AmneziaWG или WireGuard), сервер недоступен, или эта сеть не выпускает " +
                 "наружу ничего, кроме разрешённых адресов — так бывает при отключении " +
                 "мобильного интернета, и тогда помогает только Wi-Fi."
         )

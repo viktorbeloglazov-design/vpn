@@ -96,6 +96,9 @@ dependencies {
     // Библиотека AmneziaWG: тот же WireGuard, но понимает параметры маскировки.
     // Собирается из исходников скриптом scripts/build-awg.sh.
     implementation(files("libs/awg-tunnel.aar"))
+    // Библиотека X-Ray: xray и tun2socks одной обёрткой. Собирается
+    // скриптом scripts/build-xray-android.sh из android/xraylib.
+    implementation(files("libs/xraylib.aar"))
     implementation("androidx.annotation:annotation:1.9.1")
     implementation("androidx.collection:collection:1.4.5")
 

@@ -41,6 +41,8 @@ import kz.qpvpn.ui.ScreenActions
 import kz.qpvpn.ui.ScreenState
 import kz.qpvpn.vpn.AmneziaLink
 import kz.qpvpn.vpn.WgProfile
+import kz.qpvpn.vpn.XrayLink
+import kz.qpvpn.vpn.XrayVpnService
 
 class MainActivity : ComponentActivity() {
 
@@ -321,7 +323,8 @@ class MainActivity : ComponentActivity() {
         }
 
         when {
-            !fromLink.isNullOrBlank() && fromLink.startsWith("vpn://") -> importFromText(fromLink)
+            !fromLink.isNullOrBlank() && (fromLink.startsWith("vpn://") || XrayLink.looksLikeLink(fromLink)) ->
+                importFromText(fromLink)
             !fromText.isNullOrBlank() -> importFromText(fromText)
             fromFile != null -> importProfile(fromFile)
             intent.action == Intent.ACTION_VIEW && intent.data != null -> importProfile(intent.data!!)
@@ -330,15 +333,31 @@ class MainActivity : ComponentActivity() {
 
     /** Общий путь для ссылки, QR-кода и вставленного текста. */
     private fun importFromText(text: String) {
+        // Сначала ключ X-Ray: на нём теперь работает сервер.
+        if (XrayLink.looksLikeLink(text)) {
+            try {
+                val link = XrayLink.parse(text)
+                app.store.saveProfile(XrayLink.find(text) ?: text.trim())
+                profileVersion++
+                android.widget.Toast.makeText(
+                    this,
+                    "Ключ ${link.title} загружен: ${link.host}",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            } catch (error: Exception) {
+                showProfileError(error.message ?: "Ключ X-Ray не подошёл.")
+            }
+            return
+        }
         val config = AmneziaLink.extractConfig(text)
         if (config == null) {
             val protocol = AmneziaLink.describeProtocol(text)
             showProfileError(
                 if (protocol != null) {
-                    "В ссылке протокол $protocol. Программа поднимает туннель только " +
-                        "по WireGuard и AmneziaWG — в Amnezia выберите один из них при экспорте."
+                    "В ссылке протокол $protocol. Программа поднимает туннель " +
+                        "по X-Ray, WireGuard и AmneziaWG — в Amnezia выберите один из них при экспорте."
                 } else {
-                    "В этом тексте нет настроек WireGuard или AmneziaWG."
+                    "В этом тексте нет ключа: нужна ссылка vless:// (X-Ray), vpn:// или файл .conf."
                 }
             )
             return
@@ -364,6 +383,10 @@ class MainActivity : ComponentActivity() {
                 runCatching {
                     val raw = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                         ?: throw IllegalStateException("Файл не открылся.")
+                    if (XrayLink.looksLikeLink(raw)) {
+                        XrayLink.parse(raw)
+                        return@runCatching XrayLink.find(raw) ?: raw.trim()
+                    }
                     val text = AmneziaLink.extractConfig(raw)
                         ?: throw IllegalStateException("В файле нет настроек WireGuard.")
                     WgProfile.parse(text)
@@ -402,8 +425,16 @@ class MainActivity : ComponentActivity() {
      */
     private fun diagnostics(status: kz.qpvpn.model.TunnelStatus): String {
         val config = app.store.config.value
-        val profile = app.store.profileText()?.let { text ->
-            runCatching { WgProfile.parse(text) }.getOrNull()
+        val profileText = app.store.profileText().orEmpty()
+        val xray = if (XrayLink.looksLikeLink(profileText)) {
+            runCatching { XrayLink.parse(profileText) }.getOrNull()
+        } else {
+            null
+        }
+        val profile = if (xray == null && profileText.isNotBlank()) {
+            runCatching { WgProfile.parse(profileText) }.getOrNull()
+        } else {
+            null
         }
 
         val handshake = if (status.lastHandshake > 0) {
@@ -423,7 +454,12 @@ class MainActivity : ComponentActivity() {
             appendLine("Рабочие ресурсы: ${if (config.workFilter) "через VPN" else "напрямую"}")
             val direct = app.tunnel.directAppNames()
             appendLine("Мимо VPN целиком: ${if (direct.isEmpty()) "нет таких программ" else direct.joinToString(", ")}")
-            if (profile != null) {
+            if (xray != null) {
+                appendLine("Сервер: ${xray.endpoint}")
+                appendLine("Протокол: ${xray.title}" +
+                    (XrayVpnService.coreVersion().takeIf { it.isNotEmpty() }?.let { ", xray $it" } ?: ""))
+                appendLine("DNS: ${if (config.options.useTunnelDns) "1.1.1.1 через VPN" else "сети"}")
+            } else if (profile != null) {
                 appendLine("Сервер: ${profile.endpoint}")
                 appendLine("Протокол: ${profile.protocolName}, параметров маскировки: ${profile.amneziaParams.size}")
                 appendLine("DNS из ключа: ${profile.dns.joinToString(", ").ifEmpty { "нет, подставляем 1.1.1.1" }}")
@@ -443,7 +479,7 @@ class MainActivity : ComponentActivity() {
                 appendLine("Запасной вход: ${config.backupEndpoint}")
             }
             appendLine("Маршрутов в туннеле: ${status.routeCount}")
-            appendLine("Рукопожатие: $handshake")
+            appendLine("${if (xray != null) "Сервер отвечал" else "Рукопожатие"}: $handshake")
             append("Принято/отправлено: ${Format.bytes(status.rxBytes)} / ${Format.bytes(status.txBytes)}")
         }
     }
@@ -514,11 +550,28 @@ class MainActivity : ComponentActivity() {
 
     private fun profileProtocol(): String {
         val text = app.store.profileText() ?: return ""
+        if (XrayLink.looksLikeLink(text)) {
+            return runCatching { XrayLink.parse(text).title }.getOrDefault("X-Ray")
+        }
         return runCatching { WgProfile.parse(text).protocolName }.getOrDefault("WireGuard")
     }
 
     private fun summarizeProfile(): String {
         val text = app.store.profileText() ?: return ""
+        if (XrayLink.looksLikeLink(text)) {
+            return try {
+                val link = XrayLink.parse(text)
+                buildString {
+                    append("протокол ${link.title}\n")
+                    append("сервер ${link.endpoint}")
+                    if (link.sni.isNotEmpty()) append("\nмаскировка под ${link.sni}")
+                    val core = XrayVpnService.coreVersion()
+                    if (core.isNotEmpty()) append("\nxray $core")
+                }
+            } catch (error: Exception) {
+                error.message ?: "Ключ X-Ray повреждён."
+            }
+        }
         return try {
             val profile = WgProfile.parse(text)
             buildString {

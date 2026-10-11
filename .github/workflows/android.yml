@@ -76,6 +76,37 @@ jobs:
           echo "--- содержимое ---"
           unzip -l "$AAR" | grep -E "classes|\.so" | head -10 || true
 
+      # ── X-Ray ────────────────────────────────────────────────────────
+      # Своя обёртка (android/xraylib): xray и tun2socks одной библиотекой.
+      # Ключ кэша — версии движков и сама обёртка: поменялось что-то из
+      # этого — библиотека собирается заново.
+      - name: Версии X-Ray
+        id: xray
+        run: |
+          XRAY="$(git ls-remote --refs --tags https://github.com/XTLS/Xray-core.git 'v1.*' | awk -F/ '{print $3}' | sort -V | tail -1)"
+          T2S="$(git ls-remote --refs --tags https://github.com/xjasonlyu/tun2socks.git 'v2.*' | awk -F/ '{print $3}' | sort -V | tail -1)"
+          WRAP="$(cat android/xraylib/xraylib.go android/xraylib/go.mod scripts/build-xray-android.sh | sha256sum | cut -c1-12)"
+          echo "key=$XRAY-$T2S-$WRAP" >> "$GITHUB_OUTPUT"
+          echo "xray $XRAY, tun2socks $T2S, обёртка $WRAP"
+
+      - name: Библиотека X-Ray из кэша
+        id: xray-cache
+        uses: actions/cache@v4
+        with:
+          path: android/app/libs/xraylib.aar
+          key: xraylib-${{ steps.xray.outputs.key }}
+
+      - name: Собираю библиотеку X-Ray
+        if: steps.xray-cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-xray-android.sh android/app/libs/xraylib.aar
+
+      - name: Проверяю библиотеку X-Ray
+        run: |
+          AAR="android/app/libs/xraylib.aar"
+          test -f "$AAR" || { echo "Библиотека X-Ray не появилась" >&2; exit 1; }
+          ls -lh "$AAR"
+          unzip -l "$AAR" | grep -E "\.so|classes" | head
+
       - name: Определить версию
         id: version
         run: |

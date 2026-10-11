@@ -295,7 +295,9 @@ public struct XrayLink: Hashable, Sendable {
     }
 
     private static func decode(_ value: String) -> String {
-        (value.replacingOccurrences(of: "+", with: "%20").removingPercentEncoding ?? value)
+        // «+» оставляем плюсом: в паролях Trojan и Shadowsocks он бывает,
+        // а пробелом его считают только формы браузера.
+        (value.removingPercentEncoding ?? value)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
