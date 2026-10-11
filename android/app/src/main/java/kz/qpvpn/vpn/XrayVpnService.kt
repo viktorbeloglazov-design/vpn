@@ -61,9 +61,15 @@ class XrayVpnService : VpnService() {
             pending = request
             outcome = done
             context.startService(Intent(context, XrayVpnService::class.java).setAction(ACTION_START))
-            return kotlinx.coroutines.withTimeoutOrNull(30_000) { done.await() }
-                ?: "Туннель X-Ray не поднялся за 30 секунд."
+            // Успех здесь — null, а withTimeoutOrNull тоже даёт null, когда
+            // время вышло. Раньше успех принимался за тайм-аут: туннель
+            // работал, а на экране было «не поднялся за 30 секунд».
+            val finished = kotlinx.coroutines.withTimeoutOrNull(30_000) { Result(done.await()) }
+                ?: return "Туннель X-Ray не поднялся за 30 секунд."
+            return finished.error
         }
+
+        private class Result(val error: String?)
 
         fun stop(context: Context) {
             instance?.shutdown()
