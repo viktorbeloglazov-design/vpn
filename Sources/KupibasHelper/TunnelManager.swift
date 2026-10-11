@@ -419,7 +419,7 @@ final class TunnelManager {
             }
             runningXray = true
             realInterfaceName = interfaceName
-            log.info("X-Ray (\(xray.title)): интерфейс \(interfaceName), сервер \(xray.endpoint).")
+            log.info("\(xray.title): интерфейс \(interfaceName), сервер \(xray.endpoint).")
         } else {
             runningXray = false
             let text = WireGuardConfig.render(server: config.server,

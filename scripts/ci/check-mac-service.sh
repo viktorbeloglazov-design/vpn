@@ -228,7 +228,7 @@ for _ in $(seq 1 60); do
     [ "$STATE_NOW" = "connected" ] && break
     sleep 1
 done
-grep "X-Ray (" "$LOG" | tail -1
+grep "X-Ray (.*): интерфейс" "$LOG" | tail -1
 [ "$STATE_NOW" = "connected" ] && ok "X-Ray: сервер ответил, VPN включён" \
     || fail "X-Ray: за минуту не подключился (состояние: ${STATE_NOW:-нет})"
 
