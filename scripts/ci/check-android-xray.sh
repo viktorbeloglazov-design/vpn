@@ -78,16 +78,24 @@ if [ -z "$POINT" ]; then
 fi
 adb shell input tap $POINT
 
+# «Подключён» приложение пишет только после того, как проверочный
+# запрос сходил через сервер и вернулся.
+screen_has() {
+    adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+    adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+    grep -q "text=\"$1\"" /tmp/ui.xml
+}
 CONNECTED=""
-for _ in $(seq 1 60); do
-    if grep -q "www.gstatic.com\|cp.cloudflare.com" "$SERVER_LOG" 2>/dev/null; then
-        CONNECTED=1
-        break
-    fi
-    sleep 1
+for _ in $(seq 1 20); do
+    if screen_has "Подключён"; then CONNECTED=1; break; fi
+    sleep 3
 done
-[ -n "$CONNECTED" ] && ok "приложение проверило связь через сервер X-Ray" \
-    || fail "за минуту приложение не проверило связь через сервер"
+if [ -n "$CONNECTED" ]; then
+    ok "приложение пишет «Подключён»: сервер ответил на проверку"
+else
+    fail "за минуту приложение не подключилось"
+    grep -o 'text="[^"]*"' /tmp/ui.xml | grep -v 'text=""' | head -30 | annotate "Что на экране"
+fi
 
 TUN="$(adb shell ip -o addr show 2>/dev/null | grep 172.19.0.1 | awk '{print $2}')"
 [ -n "$TUN" ] && ok "туннель системы поднят ($TUN)" || fail "туннеля 172.19.0.1 на телефоне нет"
@@ -102,8 +110,13 @@ case "$REPLY" in
     *) fail "сайт с телефона не открылся: $REPLY" ;;
 esac
 sleep 2
-grep -q "example.com:80" "$SERVER_LOG" && ok "запрос прошёл через сервер X-Ray" \
-    || fail "в журнале сервера запроса к example.com нет — трафик шёл мимо туннеля"
+# Адрес телефон узнаёт сам (через тот же туннель), поэтому сервер видит
+# не имя, а адрес — ищем соединение на порт 80.
+if grep -E "accepted tcp:[^ ]+:80( |$)" "$SERVER_LOG" >/dev/null; then
+    ok "запрос прошёл через сервер X-Ray ($(grep -oE "accepted tcp:[^ ]+:80" "$SERVER_LOG" | tail -1))"
+else
+    fail "в журнале сервера нет соединения на порт 80 — трафик шёл мимо туннеля"
+fi
 
 echo
 if [ "$FAILED" -ne 0 ]; then
