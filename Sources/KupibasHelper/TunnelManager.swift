@@ -44,7 +44,11 @@ final class TunnelManager {
 
     /// Маршрут до сервера через настоящий канал: без него зашифрованные
     /// пакеты пошли бы в туннель, который их же и несёт.
-    private var endpointRoute = ""
+    /// Маршруты до самого сервера мимо туннеля. У X-Ray сервер бывает
+    /// задан именем, и адресов у имени может быть несколько.
+    private var endpointRoutes: [String] = []
+    /// Какой «двигатель» поднял нынешний туннель.
+    private var runningXray = false
 
     /// DNS сетевых служб до нашего вмешательства — их надо вернуть.
     private var savedDNS: [String: String] = [:]
@@ -118,6 +122,7 @@ final class TunnelManager {
         // И всё, что осталось от предыдущих запусков службы. Такие туннели
         // продолжают держать свои utun и мешают поднять новый.
         WireGuardInterface.cleanUpOrphans(logicalName: Paths.interfaceName)
+        XrayInterface.cleanUpOrphans()
     }
 
     func shutdown() {
@@ -259,6 +264,9 @@ final class TunnelManager {
         if let existing = WireGuardInterface.existingInterface(logicalName: Paths.interfaceName) {
             names.insert(existing)
         }
+        if let existing = XrayInterface.existingInterface() {
+            names.insert(existing)
+        }
         return names
     }
 
@@ -356,13 +364,20 @@ final class TunnelManager {
         message = ""
         publishStatus(config: config)
 
-        guard Shell.which("wg") != nil else {
+        let xray = config.server.xray
+        if config.server.isXray && xray == nil {
+            state = .error
+            message = config.server.validationError ?? "Ключ X-Ray не читается."
+            log.error(message)
+            return
+        }
+        guard xray != nil || Shell.which("wg") != nil else {
             state = .error
             message = "Не найдена утилита wg — переустановите службу из приложения."
             log.error(message)
             return
         }
-        guard Shell.which("amneziawg-go") != nil || Shell.which("wireguard-go") != nil else {
+        guard xray != nil || Shell.which("amneziawg-go") != nil || Shell.which("wireguard-go") != nil else {
             state = .error
             message = "Не найден amneziawg-go — переустановите службу из приложения."
             log.error(message)
@@ -388,72 +403,90 @@ final class TunnelManager {
         let includeDNS = config.options.useTunnelDNS
             && !config.server.dns.isEmpty
             && config.effectiveMode != .include
-        let text = WireGuardConfig.render(server: config.server,
-                                          allowedIPs: allowedIPs,
-                                          includeDNS: includeDNS,
-                                          mtuOverride: config.options.mtu)
-
-        do {
-            try FileManager.default.createDirectory(atPath: Paths.runtimeDir,
-                                                    withIntermediateDirectories: true,
-                                                    attributes: [.posixPermissions: NSNumber(value: Int16(0o700))])
-            try ConfigStore.writeAtomically(data: Data(text.utf8),
-                                            to: Paths.wgConfigFile,
-                                            permissions: 0o600)
-        } catch {
-            state = .error
-            message = "Не удалось подготовить конфиг WireGuard: \(error.localizedDescription)"
-            log.error(message)
-            return
-        }
-
-        // 1. Создаём интерфейс. Имя utun выдаёт система, оно заранее неизвестно.
         let interfaceName: String
-        switch WireGuardInterface.start(logicalName: Paths.interfaceName) {
-        case .started(let name):
-            interfaceName = name
-        case .failed(let reason):
-            state = .error
-            message = reason
-            log.error(message)
-            WireGuardInterface.stop(interface: nil, logicalName: Paths.interfaceName)
-            return
-        }
-        realInterfaceName = interfaceName
-        log.info("Интерфейс \(Paths.interfaceName) — это \(interfaceName).")
-
-        // 2. Ключи и список AllowedIPs.
-        let setconf = WireGuardInterface.setConfig(
-            interface: interfaceName,
-            text: WireGuardConfig.renderForSetConf(server: config.server, allowedIPs: allowedIPs)
-        )
-        guard setconf.succeeded else {
-            state = .error
-            message = "Настройки туннеля не приняты: \(setconf.failureText)"
-            log.error(message)
-            tearDownInterface()
-            return
-        }
-
-        // 3. Адрес клиента и размер пакета.
-        for address in config.server.addresses {
-            let result = WireGuardInterface.addAddress(interface: interfaceName, address: address)
-            if !result.succeeded {
-                log.error("ifconfig \(interfaceName) \(address): \(result.failureText)")
+        if let xray {
+            // X-Ray: ключей, адресов и размера пакета у интерфейса нет —
+            // всё это забота xray. Интерфейс только отдаёт трафик в него.
+            switch XrayInterface.start(link: xray, mtu: 1500) {
+            case .started(let name):
+                interfaceName = name
+            case .failed(let reason):
+                state = .error
+                message = reason
+                log.error(message)
+                XrayInterface.stop()
+                return
             }
+            runningXray = true
+            realInterfaceName = interfaceName
+            log.info("X-Ray (\(xray.title)): интерфейс \(interfaceName), сервер \(xray.endpoint).")
+        } else {
+            runningXray = false
+            let text = WireGuardConfig.render(server: config.server,
+                                              allowedIPs: allowedIPs,
+                                              includeDNS: includeDNS,
+                                              mtuOverride: config.options.mtu)
+
+            do {
+                try FileManager.default.createDirectory(atPath: Paths.runtimeDir,
+                                                        withIntermediateDirectories: true,
+                                                        attributes: [.posixPermissions: NSNumber(value: Int16(0o700))])
+                try ConfigStore.writeAtomically(data: Data(text.utf8),
+                                                to: Paths.wgConfigFile,
+                                                permissions: 0o600)
+            } catch {
+                state = .error
+                message = "Не удалось подготовить конфиг WireGuard: \(error.localizedDescription)"
+                log.error(message)
+                return
+            }
+
+            // 1. Создаём интерфейс. Имя utun выдаёт система, оно заранее неизвестно.
+            switch WireGuardInterface.start(logicalName: Paths.interfaceName) {
+            case .started(let name):
+                interfaceName = name
+            case .failed(let reason):
+                state = .error
+                message = reason
+                log.error(message)
+                WireGuardInterface.stop(interface: nil, logicalName: Paths.interfaceName)
+                return
+            }
+            realInterfaceName = interfaceName
+            log.info("Интерфейс \(Paths.interfaceName) — это \(interfaceName).")
+
+            // 2. Ключи и список AllowedIPs.
+            let setconf = WireGuardInterface.setConfig(
+                interface: interfaceName,
+                text: WireGuardConfig.renderForSetConf(server: config.server, allowedIPs: allowedIPs)
+            )
+            guard setconf.succeeded else {
+                state = .error
+                message = "Настройки туннеля не приняты: \(setconf.failureText)"
+                log.error(message)
+                tearDownInterface()
+                return
+            }
+
+            // 3. Адрес клиента и размер пакета.
+            for address in config.server.addresses {
+                let result = WireGuardInterface.addAddress(interface: interfaceName, address: address)
+                if !result.succeeded {
+                    log.error("ifconfig \(interfaceName) \(address): \(result.failureText)")
+                }
+            }
+            let mtu = config.options.mtu > 0 ? config.options.mtu : config.server.mtu
+            WireGuardInterface.setMTU(interface: interfaceName, mtu: mtu)
+            WireGuardInterface.bringUp(interface: interfaceName)
         }
-        let mtu = config.options.mtu > 0 ? config.options.mtu : config.server.mtu
-        WireGuardInterface.setMTU(interface: interfaceName, mtu: mtu)
-        WireGuardInterface.bringUp(interface: interfaceName)
 
         // 4. Маршрут до самого сервера — мимо туннеля, иначе он замкнётся сам на себя.
         if let via = savedDefaultRoute {
-            let host = config.server.endpointHost
-            if !host.isEmpty, !host.contains(":") {
-                let destination = host + "/32"
+            endpointRoutes = []
+            for destination in serverRouteTargets(config.server.endpointHost) {
                 let result = NetworkTool.addRoute(destination, via: via)
                 if result.succeeded || result.failureText.contains("File exists") {
-                    endpointRoute = destination
+                    endpointRoutes.append(destination)
                 } else {
                     log.error("маршрут до сервера \(destination): \(result.failureText)")
                 }
@@ -528,6 +561,10 @@ final class TunnelManager {
     /// порции данных, и если нет — уменьшаем размер пакета. Всё это делается
     /// на живом интерфейсе: ни маршруты, ни адреса пересоздавать не нужно.
     private func verifyAndTune(_ config: TunnelConfig, interfaceName: String) {
+        if runningXray {
+            verifyXray(config)
+            return
+        }
         let entries = config.endpointsToTry()
 
         if !waitForHandshake(seconds: entries.count > 1 ? 12 : 20) {
@@ -559,6 +596,60 @@ final class TunnelManager {
             return
         }
         tuneMTU(config, interfaceName: interfaceName)
+    }
+
+    /// X-Ray: ждём, пока запрос через сервер вернётся.
+    ///
+    /// Рукопожатия, как у WireGuard, тут нет — проверяем делом. Размер
+    /// пакета не подбираем: до сервера идёт обычное соединение, и его
+    /// размер подбирает сама система.
+    private func verifyXray(_ config: TunnelConfig) {
+        activeMtu = 1500
+        usedBackupEntry = false
+        guard let xray = config.server.xray else { return }
+        let entries = config.endpointsToTry()
+
+        if waitForXrayAnswer(seconds: entries.count > 1 ? 12 : 20) { return }
+        guard entries.count > 1 else {
+            message = "Сервер \(config.server.endpointHost) не отвечает."
+            log.error(message)
+            return
+        }
+        let backup = entries[1]
+        log.info("Сервер молчит — пробую запасной вход \(backup).")
+        message = "Пробую запасной вход…"
+        guard XrayInterface.switchEndpoint(link: xray, endpoint: backup),
+              waitForXrayAnswer(seconds: 20) else {
+            message = "Ни сервер, ни запасной вход не отвечают."
+            log.error(message)
+            return
+        }
+        usedBackupEntry = true
+        message = "Через запасной вход"
+        log.info("Связь через запасной вход \(backup).")
+    }
+
+    private func waitForXrayAnswer(seconds: Int) -> Bool {
+        let deadline = Date().addingTimeInterval(TimeInterval(seconds))
+        while Date() < deadline {
+            if XrayInterface.lastAnswer > 0 { return true }
+            Thread.sleep(forTimeInterval: 1)
+        }
+        return false
+    }
+
+    /// Адреса, до которых нужен маршрут мимо туннеля: сам сервер.
+    ///
+    /// У прежних ключей сервер всегда был адресом. У X-Ray он бывает и
+    /// именем — тогда спрашиваем адреса у DNS: xray будет ходить по ним же.
+    private func serverRouteTargets(_ host: String) -> [String] {
+        guard !host.isEmpty, !host.contains(":") else { return [] }
+        let addresses = Cidr.parseAddress(host) != nil
+            ? [host]
+            : Resolver.resolve(host).filter { !$0.contains(":") }
+        // Адрес самого компьютера в обход не ведём: маршрут на 127.0.0.1
+        // через шлюз сломал бы всё, что ходит внутри компьютера.
+        return addresses.filter { !$0.hasPrefix("127.") && !$0.hasPrefix("0.") }.map { $0 + "/32" }
     }
 
     /// Подбирает размер пакета, пока не пойдут большие порции данных.
@@ -647,12 +738,17 @@ final class TunnelManager {
         deleteRoutes(Array(interfaceRoutes))
         interfaceRoutes = []
 
-        if !endpointRoute.isEmpty {
-            _ = NetworkTool.deleteRoute(endpointRoute)
-            endpointRoute = ""
+        for destination in endpointRoutes {
+            _ = NetworkTool.deleteRoute(destination)
         }
+        endpointRoutes = []
 
-        WireGuardInterface.stop(interface: realInterfaceName, logicalName: Paths.interfaceName)
+        if runningXray {
+            XrayInterface.stop()
+            runningXray = false
+        } else {
+            WireGuardInterface.stop(interface: realInterfaceName, logicalName: Paths.interfaceName)
+        }
         realInterfaceName = ""
     }
 
@@ -803,13 +899,15 @@ final class TunnelManager {
             let toRemove = tunnelRoutes.subtracting(desired)
             guard !toAdd.isEmpty || !toRemove.isEmpty else { return }
 
-            let allowed = allowedIPsFor(config: config, resolved: desired)
-            let result = NetworkTool.setAllowedIPs(interface: realInterfaceName,
-                                                   peerKey: config.server.publicKey,
-                                                   allowedIPs: allowed)
-            if !result.succeeded {
-                log.error("wg set allowed-ips: \(result.failureText)")
-                return
+            if !runningXray {
+                let allowed = allowedIPsFor(config: config, resolved: desired)
+                let result = NetworkTool.setAllowedIPs(interface: realInterfaceName,
+                                                       peerKey: config.server.publicKey,
+                                                       allowedIPs: allowed)
+                if !result.succeeded {
+                    log.error("wg set allowed-ips: \(result.failureText)")
+                    return
+                }
             }
 
             deleteRoutes(Array(toRemove))
@@ -968,6 +1066,17 @@ final class TunnelManager {
     /// Состояние туннеля: один опрос на круг.
     private func peerStats() -> NetworkTool.PeerStats? {
         if let ready = statsThisTick { return ready }
+        if runningXray {
+            // У X-Ray «рукопожатие» — последний ответ сервера на проверку,
+            // а счётчики берём у интерфейса. Остальная логика — та же.
+            guard XrayInterface.isRunning, !realInterfaceName.isEmpty,
+                  let bytes = XrayInterface.bytes(interface: realInterfaceName) else { return nil }
+            let fresh = NetworkTool.PeerStats(lastHandshake: XrayInterface.lastAnswer,
+                                              rxBytes: bytes.rx, txBytes: bytes.tx,
+                                              endpoint: "")
+            statsThisTick = fresh
+            return fresh
+        }
         guard !realInterfaceName.isEmpty,
               let fresh = NetworkTool.peerStats(interface: realInterfaceName) else { return nil }
         statsThisTick = fresh

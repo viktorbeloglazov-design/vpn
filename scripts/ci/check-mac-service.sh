@@ -186,6 +186,88 @@ alive "после выключения"
 no_restarts "после выключения"
 route -n get default >/dev/null 2>&1 && ok "маршрут по умолчанию на месте" || fail "после выключения нет маршрута по умолчанию"
 
+echo "=== 3б. X-Ray: настоящий трафик через свой сервер ==="
+# Сервер X-Ray поднимаем здесь же, на этом Mac: ключ одноразовый,
+# UUID выдуман на лету. Свой выход сервер привязывает к физическому
+# интерфейсу — иначе его же запросы к Telegram ушли бы обратно в туннель.
+XRAY="$APP/Contents/Library/Helpers/xray"
+XRAY_UUID="$(uuidgen | tr 'A-Z' 'a-z')"
+PHYS_IF="$(route -n get default | awk '/interface:/ {print $2}')"
+SERVER_DIR="$(mktemp -d)"
+cat > "$SERVER_DIR/server.json" <<JSON
+{
+  "log": {"loglevel": "warning"},
+  "inbounds": [{
+    "listen": "127.0.0.1", "port": 18443, "protocol": "vless",
+    "settings": {"clients": [{"id": "$XRAY_UUID"}], "decryption": "none"},
+    "streamSettings": {"network": "tcp", "security": "none"}
+  }],
+  "outbounds": [{"protocol": "freedom", "streamSettings": {"sockopt": {"interface": "$PHYS_IF"}}}]
+}
+JSON
+"$XRAY" run -c "$SERVER_DIR/server.json" > "$SERVER_DIR/server.log" 2>&1 &
+XRAY_SERVER_PID=$!
+sleep 2
+kill -0 "$XRAY_SERVER_PID" 2>/dev/null && ok "сервер X-Ray для проверки запущен" \
+    || { fail "сервер X-Ray для проверки не запустился"; cat "$SERVER_DIR/server.log"; }
+
+XRAY_LINK="vless://$XRAY_UUID@127.0.0.1:18443?type=tcp&security=none&encryption=none#CI-XRay"
+XRAY_LINK="$XRAY_LINK" STATE="$STATE" python3 - <<'PY2'
+import json, os
+path = os.path.join(os.environ["STATE"], "config.json")
+config = json.load(open(path))
+config["enabled"] = True
+config["server"].update({"name": "CI-XRay", "endpoint": "127.0.0.1:18443",
+                         "xrayLink": os.environ["XRAY_LINK"]})
+json.dump(config, open(path, "w"), ensure_ascii=False, indent=2)
+PY2
+
+STATE_NOW=""
+for _ in $(seq 1 60); do
+    STATE_NOW="$(python3 -c "import json;print(json.load(open('$STATE/status.json')).get('state',''))" 2>/dev/null)"
+    [ "$STATE_NOW" = "connected" ] && break
+    sleep 1
+done
+grep "X-Ray (" "$LOG" | tail -1
+[ "$STATE_NOW" = "connected" ] && ok "X-Ray: сервер ответил, VPN включён" \
+    || fail "X-Ray: за минуту не подключился (состояние: ${STATE_NOW:-нет})"
+
+TG_IP="149.154.167.220"
+TG_IF="$(route -n get "$TG_IP" 2>/dev/null | awk '/interface:/ {print $2}')"
+case "$TG_IF" in
+    utun*) ok "Telegram идёт в туннель X-Ray ($TG_IF)" ;;
+    *) fail "Telegram идёт мимо туннеля (${TG_IF:-?})" ;;
+esac
+RX_BEFORE="$(python3 -c "import json;print(json.load(open('$STATE/status.json')).get('rxBytes',0))")"
+TG_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://api.telegram.org/ || true)"
+sleep 3
+RX_AFTER="$(python3 -c "import json;print(json.load(open('$STATE/status.json')).get('rxBytes',0))")"
+echo "Telegram ответил кодом $TG_CODE; принято через туннель: $RX_BEFORE → $RX_AFTER байт"
+[ "$TG_CODE" != "000" ] && [ -n "$TG_CODE" ] && ok "Telegram открылся через X-Ray" \
+    || fail "Telegram через X-Ray не открылся"
+[ "${RX_AFTER:-0}" -gt "${RX_BEFORE:-0}" ] && ok "ответ пришёл через туннель" \
+    || fail "через туннель ничего не пришло"
+alive "с X-Ray"
+no_restarts "с X-Ray"
+
+STATE="$STATE" python3 - <<'PY2'
+import json, os
+path = os.path.join(os.environ["STATE"], "config.json")
+config = json.load(open(path))
+config["enabled"] = False
+json.dump(config, open(path, "w"), ensure_ascii=False, indent=2)
+PY2
+sleep 15
+if pgrep -f "/usr/local/libexec/kupibas-vpn/xray" >/dev/null || pgrep -f "kupibas-vpn/tun2socks" >/dev/null; then
+    fail "после выключения xray или tun2socks остались работать"
+else
+    ok "после выключения xray и tun2socks остановлены"
+fi
+{ tail -n 30 /var/run/kupibas-vpn/xray.log 2>/dev/null; tail -n 30 /var/run/kupibas-vpn/tun2socks.log 2>/dev/null;
+  tail -n 20 "$SERVER_DIR/server.log"; } | annotate "Журналы X-Ray"
+kill "$XRAY_SERVER_PID" 2>/dev/null || true
+route -n get default >/dev/null 2>&1 && ok "маршрут по умолчанию на месте" || fail "после X-Ray нет маршрута по умолчанию"
+
 echo "=== 4. Служба обновляется сама ==="
 PUBLISHED="$(curl -fsSL --retry 3 https://github.com/viktorbeloglazov-design/vpn/releases/download/latest/mac-version.txt || true)"
 if [ -z "$PUBLISHED" ]; then

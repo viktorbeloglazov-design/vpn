@@ -47,9 +47,41 @@ cp "$OUT/amneziawg-go" "$OUT/wireguard-go"
 cp "$OUT/awg" "$OUT/wg"
 chmod 0755 "$OUT/wireguard-go" "$OUT/wg"
 
+# ── X-Ray ─────────────────────────────────────────────────────────────
+# Сервер перешёл на X-Ray. На Mac он работает связкой из двух программ:
+# xray держит соединение с сервером и слушает socks-вход на самом
+# компьютере, tun2socks заводит туннельный интерфейс и передаёт в этот
+# вход всё, что система решила вести через VPN. Обе на Go — собираются
+# так же, как amneziawg-go, сразу под оба процессора.
+
+latest_tag() {
+    git ls-remote --refs --tags "$1" 'v*' | awk -F/ '{print $3}' \
+        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1
+}
+
+echo "==> xray"
+XRAY_TAG="$(latest_tag https://github.com/XTLS/Xray-core.git)"
+echo "Xray-core $XRAY_TAG"
+git clone --depth 1 --branch "$XRAY_TAG" https://github.com/XTLS/Xray-core.git "$WORK/xray"
+cd "$WORK/xray"
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -buildid=" -o "$WORK/xray-arm64" ./main
+CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w -buildid=" -o "$WORK/xray-amd64" ./main
+lipo -create -output "$OUT/xray" "$WORK/xray-arm64" "$WORK/xray-amd64"
+install -m 0644 LICENSE "$OUT/LICENSE-xray.txt"
+
+echo "==> tun2socks"
+T2S_TAG="$(latest_tag https://github.com/xjasonlyu/tun2socks.git)"
+echo "tun2socks $T2S_TAG"
+git clone --depth 1 --branch "$T2S_TAG" https://github.com/xjasonlyu/tun2socks.git "$WORK/tun2socks"
+cd "$WORK/tun2socks"
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -buildid=" -o "$WORK/t2s-arm64" .
+CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w -buildid=" -o "$WORK/t2s-amd64" .
+lipo -create -output "$OUT/tun2socks" "$WORK/t2s-arm64" "$WORK/t2s-amd64"
+install -m 0644 LICENSE "$OUT/LICENSE-tun2socks.txt"
+
 echo
 echo "Готово:"
-for tool in amneziawg-go awg wireguard-go wg; do
+for tool in amneziawg-go awg wireguard-go wg xray tun2socks; do
     printf "  %-14s %s\n" "$tool" "$(lipo -archs "$OUT/$tool" 2>/dev/null || echo 'скрипт')"
 done
 

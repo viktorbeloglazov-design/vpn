@@ -80,7 +80,7 @@ launchctl bootout "system/$LABEL" 2>/dev/null || true
 echo "Ставлю файлы службы"
 install -d -m 0755 "$HELPER_DIR"
 install -m 0755 "$HELPERS/kupibasvpnd" "$HELPER_DIR/kupibasvpnd"
-for tool in amneziawg-go awg wireguard-go wg; do
+for tool in amneziawg-go awg wireguard-go wg xray tun2socks; do
     if [ -f "$HELPERS/$tool" ]; then
         install -m 0755 "$HELPERS/$tool" "$HELPER_DIR/$tool"
     fi
@@ -124,6 +124,9 @@ done
 
 # Ключи с маскировкой поднимает только форк Amnezia. Если рядом лежит он —
 # всё в порядке; если нет, обычные ключи работать будут, а AmneziaWG нет.
+if [ -x "$HELPER_DIR/xray" ] && [ -x "$HELPER_DIR/tun2socks" ]; then
+    echo "Туннель: X-Ray (ключи vless:// и подобные поддерживаются)"
+fi
 if [ -x "$HELPER_DIR/amneziawg-go" ]; then
     echo "Туннель: AmneziaWG (ключи с маскировкой поддерживаются)"
 else

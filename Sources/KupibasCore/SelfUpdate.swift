@@ -56,7 +56,8 @@ public enum SelfUpdate {
 
     /// Файлы службы внутри приложения. kupibasvpnd обязателен,
     /// остальные — утилиты туннеля, которые ставятся рядом.
-    public static let helperFiles = ["kupibasvpnd", "amneziawg-go", "awg", "wireguard-go", "wg"]
+    public static let helperFiles = ["kupibasvpnd", "amneziawg-go", "awg", "wireguard-go", "wg",
+                                     "xray", "tun2socks"]
 
     /// Пора ли проверять.
     ///

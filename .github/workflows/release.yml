@@ -72,7 +72,7 @@ jobs:
           fi
 
           test -f "$APP/Contents/Resources/com.kupibas.vpn.helper.plist"
-          for tool in kupibasvpnd amneziawg-go awg wireguard-go wg; do
+          for tool in kupibasvpnd amneziawg-go awg wireguard-go wg xray tun2socks; do
             test -x "$APP/Contents/Library/Helpers/$tool"
           done
           echo "Архитектуры приложения: $(lipo -archs "$APP/Contents/MacOS/QPVPN")"
