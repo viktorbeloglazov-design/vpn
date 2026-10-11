@@ -5,6 +5,8 @@ on:
     branches: ["**"]
     paths:
       - "android/**"
+      - "scripts/build-xray-android.sh"
+      - "scripts/build-awg.sh"
       - ".github/workflows/android.yml"
   workflow_dispatch:
     inputs:
