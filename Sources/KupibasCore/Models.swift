@@ -94,6 +94,19 @@ public struct ServerConfig: Codable, Hashable, Sendable {
     /// заголовки. Потеряется хоть один — сервер не ответит на рукопожатие.
     public var amneziaParams: [String: String]
 
+    /// Ключ X-Ray — ссылка vless://, vmess://, trojan:// или ss://.
+    ///
+    /// Пусто — ключ прежний, WireGuard или AmneziaWG. Протокол выбирается
+    /// по ключу: обновление не должно оставить без связи тех, кому новый
+    /// ключ ещё не выдали.
+    public var xrayLink: String
+
+    /// Ключ под X-Ray.
+    public var isXray: Bool { !xrayLink.isEmpty }
+
+    /// Разобранный ключ X-Ray, если он есть и читается.
+    public var xray: XrayLink? { isXray ? try? XrayLink.parse(xrayLink) : nil }
+
     /// Имена параметров так, как их ждёт туннель.
     public static let amneziaFields: [(key: String, name: String)] = [
         ("jc", "Jc"), ("jmin", "Jmin"), ("jmax", "Jmax"),
@@ -114,7 +127,10 @@ public struct ServerConfig: Codable, Hashable, Sendable {
     /// Ключ сделан под AmneziaWG — обычный WireGuard-сервер его не примет.
     public var isAmnezia: Bool { !amneziaParams.isEmpty }
 
-    public var protocolName: String { isAmnezia ? "AmneziaWG" : "WireGuard" }
+    public var protocolName: String {
+        if isXray { return xray?.title ?? "X-Ray" }
+        return isAmnezia ? "AmneziaWG" : "WireGuard"
+    }
 
     public init(name: String = "KZ",
                 endpoint: String = "",
@@ -125,7 +141,8 @@ public struct ServerConfig: Codable, Hashable, Sendable {
                 dns: [String] = [],
                 mtu: Int = 1420,
                 persistentKeepalive: Int = 25,
-                amneziaParams: [String: String] = [:]) {
+                amneziaParams: [String: String] = [:],
+                xrayLink: String = "") {
         self.name = name
         self.endpoint = endpoint
         self.publicKey = publicKey
@@ -136,6 +153,15 @@ public struct ServerConfig: Codable, Hashable, Sendable {
         self.mtu = mtu
         self.persistentKeepalive = persistentKeepalive
         self.amneziaParams = amneziaParams
+        self.xrayLink = xrayLink
+    }
+
+    /// Сервер из ключа X-Ray.
+    public init(xray link: XrayLink, raw: String, name: String = "KZ") {
+        self.init(name: link.name.isEmpty ? name : link.name,
+                  endpoint: link.endpoint,
+                  mtu: 1500,
+                  xrayLink: raw.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     public init(from decoder: Decoder) throws {
@@ -150,6 +176,7 @@ public struct ServerConfig: Codable, Hashable, Sendable {
         self.mtu = (try? c.decode(Int.self, forKey: .mtu)) ?? 1420
         self.persistentKeepalive = (try? c.decode(Int.self, forKey: .persistentKeepalive)) ?? 25
         self.amneziaParams = (try? c.decode([String: String].self, forKey: .amneziaParams)) ?? [:]
+        self.xrayLink = (try? c.decode(String.self, forKey: .xrayLink)) ?? ""
     }
 
     /// Хост endpoint'а без порта (нужен для обходного маршрута).
@@ -163,6 +190,14 @@ public struct ServerConfig: Codable, Hashable, Sendable {
 
     /// Причина, по которой конфигурация не готова к запуску, либо nil.
     public var validationError: String? {
+        if isXray {
+            do {
+                _ = try XrayLink.parse(xrayLink)
+                return nil
+            } catch {
+                return error.localizedDescription
+            }
+        }
         if privateKey.isEmpty { return "Не задан приватный ключ клиента." }
         if !Validation.isWireGuardKey(privateKey) { return "Приватный ключ клиента имеет неверный формат." }
         if publicKey.isEmpty { return "Не задан публичный ключ сервера." }
@@ -388,6 +423,7 @@ public struct TunnelConfig: Codable, Hashable, Sendable {
         parts.append(String(options.mtu > 0 ? options.mtu : server.mtu))
         parts.append(backupEndpoint)
         parts.append(String(server.persistentKeepalive))
+        parts.append(server.xrayLink)
         parts.append(server.amneziaParams.sorted { $0.key < $1.key }
             .map { "\($0.key)=\($0.value)" }
             .joined(separator: ";"))

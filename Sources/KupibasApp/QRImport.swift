@@ -47,6 +47,7 @@ enum QRImport {
     /// Текст конфигурации из QR-кода на картинке.
     static func config(at url: URL) -> String? {
         for payload in payloads(at: url) {
+            if XrayLink.looksLikeLink(payload) { return XrayLink.find(in: payload) }
             if let config = SharedLink.extractConfig(payload) { return config }
         }
         return nil

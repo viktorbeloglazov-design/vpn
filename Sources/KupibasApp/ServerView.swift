@@ -162,8 +162,7 @@ struct ServerView: View {
 
         do {
             let text = try readText(at: url)
-            let config = SharedLink.extractConfig(text) ?? text
-            let server = try WireGuardConfig.parse(config, name: serverName(for: url))
+            let server = try KeyImport.parse(text, name: serverName(for: url))
             model.applyServer(server)
             importNote = "Загружено из «\(url.lastPathComponent)»."
             importFailed = false
@@ -194,7 +193,7 @@ struct ServerView: View {
 
         let text = NSPasteboard.general.string(forType: .string) ?? ""
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            importNote = "В буфере обмена пусто — скопируйте QR-код, ссылку vpn:// или текст конфига."
+            importNote = "В буфере обмена пусто — скопируйте QR-код или ключ (ссылку vless:// или vpn://)."
             importFailed = true
             return
         }
@@ -204,9 +203,9 @@ struct ServerView: View {
     /// Общий путь для всего, чем делятся: ссылка, QR-код, готовый конфиг.
     private func apply(payloads: [String], source: String) {
         for payload in payloads {
-            guard let config = SharedLink.extractConfig(payload) else { continue }
+            guard KeyImport.looksLikeKey(payload) else { continue }
             do {
-                let server = try WireGuardConfig.parse(config, name: model.config.server.name)
+                let server = try KeyImport.parse(payload, name: model.config.server.name)
                 model.applyServer(server)
                 importNote = "Загружено из \(source)."
                 importFailed = false
@@ -220,8 +219,8 @@ struct ServerView: View {
 
         let link = payloads.contains { SharedLink.looksLikeLink($0) }
         importNote = link
-            ? "\(source): это ссылка Amnezia не с WireGuard — программа понимает WireGuard и AmneziaWG."
-            : "\(source): настройки WireGuard не нашлись."
+            ? "\(source): это ссылка Amnezia не с WireGuard — программа понимает X-Ray, WireGuard и AmneziaWG."
+            : "\(source): ключ не нашёлся — нужна ссылка vless:// (X-Ray), vpn:// или файл .conf."
         importFailed = true
     }
 
@@ -299,7 +298,7 @@ struct ImportConfigSheet: View {
 
     private func importConfig() {
         do {
-            let server = try WireGuardConfig.parse(SharedLink.extractConfig(text) ?? text)
+            let server = try KeyImport.parse(text)
             error = nil
             onImport(server)
         } catch {
