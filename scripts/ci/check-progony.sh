@@ -15,6 +15,16 @@ set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+# В неполной копии истории самый старый коммит выглядит как правка всех
+# файлов сразу — проверка приняла бы его за «код менялся после прогона».
+# Если догрузить историю не вышло, честно говорим, что проверить нельзя.
+if [ "$(git -C "$root" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+    git -C "$root" fetch -q --unshallow 2>/dev/null || {
+        echo "История git неполная и не догружается — проверить нельзя."
+        exit 2
+    }
+fi
+
 python3 - "$root" <<'PY'
 import json, subprocess, sys, urllib.request
 
